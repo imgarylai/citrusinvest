@@ -50,7 +50,14 @@ fn sweeps_variants_and_ranks_them() {
             r#"{"op":"Data","name":"missing"}"#.to_string(),
         ), // unknown series -> error
     ];
-    let board = run_sweep(&dir, &variants, 20240102, 20240104, 0.0, SortKey::Sharpe);
+    let board = run_sweep(
+        &dir,
+        &variants,
+        20240102,
+        20240104,
+        &Default::default(),
+        SortKey::Sharpe,
+    );
 
     assert_eq!(board.len(), 3);
     assert!(board[0].ok); // a successful run ranks first
@@ -68,7 +75,7 @@ fn lists_symbols_and_runs_a_single_backtest() {
 
     // is_largest(close, 1), rebalanced — always holds one name; just assert it runs + shapes.
     let spec = r#"{"op":"IsLargest","of":{"op":"Data","name":"close"},"n":1}"#;
-    let report = run_single(&dir, spec, 20240102, 20240104, 0.0).unwrap();
+    let report = run_single(&dir, spec, 20240102, 20240104, &Default::default()).unwrap();
     assert_eq!(report.equity.len(), 3);
     assert!(report.metrics.total_return.is_finite());
 }

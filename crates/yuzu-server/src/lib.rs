@@ -50,7 +50,7 @@ impl DataDirs {
 }
 
 /// One backtest request. `spec` is the strategy `Expr` JSON tree (object).
-#[derive(Deserialize)]
+#[derive(Deserialize, Default)]
 pub struct BacktestRequest {
     pub spec: Value,
     pub symbols: Vec<String>,
@@ -62,6 +62,20 @@ pub struct BacktestRequest {
     pub position_limit: f64,
     #[serde(default = "default_price_key")]
     pub price_key: String,
+    #[serde(default)]
+    pub slippage_ratio: f64,
+    #[serde(default)]
+    pub initial_capital: f64,
+    #[serde(default)]
+    pub max_participation: f64,
+    #[serde(default)]
+    pub delist_after: usize,
+    #[serde(default)]
+    pub delist_haircut: f64,
+    /// Symbol to load (close prices) as the benchmark, e.g. "SPY". Loaded into
+    /// a dedicated "benchmark" panel — it does not need to be in `symbols`.
+    #[serde(default)]
+    pub benchmark_symbol: Option<String>,
 }
 
 fn default_price_key() -> String {
@@ -140,6 +154,10 @@ pub fn handle_backtest<S: ObjectSource + Sync>(
                                          // and the engine degrades that trade's mae/mfe to None.
     names.insert("high".to_string());
     names.insert("low".to_string());
+    // The liquidity cap needs dollar volume.
+    if req.max_participation > 0.0 && req.initial_capital > 0.0 {
+        names.insert("volume".to_string());
+    }
 
     let mut panels: HashMap<String, _> = HashMap::new();
     for name in &names {
@@ -198,10 +216,33 @@ pub fn handle_backtest<S: ObjectSource + Sync>(
         );
     }
 
+    // Benchmark: one extra close panel for the named symbol, under the
+    // reserved "benchmark" key (independent of the strategy universe).
+    let mut benchmark_key = None;
+    if let Some(sym) = &req.benchmark_symbol {
+        let p = load_panel(
+            source,
+            std::slice::from_ref(sym),
+            Field::AdjClose,
+            req.from,
+            req.to,
+            &dirs.prices,
+        )
+        .map_err(|e| e.to_string())?;
+        panels.insert("benchmark".to_string(), p);
+        benchmark_key = Some("benchmark".to_string());
+    }
+
     let ctx = EvalContext::new(panels);
     let cfg = BacktestConfig {
         fee_ratio: req.fee_ratio,
         position_limit: req.position_limit,
+        slippage_ratio: req.slippage_ratio,
+        initial_capital: req.initial_capital,
+        max_participation: req.max_participation,
+        delist_after: req.delist_after,
+        delist_haircut: req.delist_haircut,
+        benchmark_key,
         ..Default::default()
     };
     run_backtest(&req.spec.to_string(), &ctx, &req.price_key, &cfg).map_err(|e| e.to_string())
@@ -283,6 +324,7 @@ mod tests {
             fee_ratio: 0.0,
             position_limit: 0.0,
             price_key: "close".into(),
+            ..Default::default()
         };
 
         let report = handle_backtest(&source, &req, &DataDirs::default()).unwrap();
@@ -291,6 +333,23 @@ mod tests {
             !report.equity.is_empty(),
             "equity curve should be non-empty"
         );
+
+        // Same request with a benchmark symbol: the report grows a rebased
+        // benchmark curve + relative metrics (BBB rises 20→22 = +10%).
+        let req_b = BacktestRequest {
+            benchmark_symbol: Some("BBB".into()),
+            spec: req.spec.clone(),
+            symbols: req.symbols.clone(),
+            from: req.from,
+            to: req.to,
+            price_key: "close".into(),
+            ..Default::default()
+        };
+        let with_bench = handle_backtest(&source, &req_b, &DataDirs::default()).unwrap();
+        let curve = with_bench.benchmark.as_ref().unwrap();
+        assert_eq!(curve.len(), with_bench.dates.len());
+        assert!((curve.last().unwrap() - 1.1).abs() < 1e-9);
+        assert!(with_bench.metrics.beta.is_some());
     }
 
     #[test]
@@ -342,6 +401,7 @@ mod tests {
             fee_ratio: 0.0,
             position_limit: 0.0,
             price_key: "close".into(),
+            ..Default::default()
         };
 
         let report = handle_backtest(&source, &req, &DataDirs::default()).unwrap();
@@ -397,6 +457,7 @@ mod tests {
             fee_ratio: 0.0,
             position_limit: 0.0,
             price_key: "close".into(),
+            ..Default::default()
         };
 
         let report = handle_backtest(&source, &req, &DataDirs::default()).unwrap();
@@ -459,6 +520,7 @@ mod tests {
             fee_ratio: 0.0,
             position_limit: 0.0,
             price_key: "close".into(),
+            ..Default::default()
         };
         let report = handle_backtest(&source, &req, &DataDirs::default()).unwrap();
         assert!(

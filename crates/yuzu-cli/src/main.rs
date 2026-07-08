@@ -51,6 +51,24 @@ enum Cmd {
         to: i32,
         #[arg(long, default_value_t = 0.0)]
         fee_ratio: f64,
+        /// Slippage per unit of turnover (e.g. 0.0005 = 5 bps per leg).
+        #[arg(long, default_value_t = 0.0)]
+        slippage_ratio: f64,
+        /// Book size in dollars for the liquidity cap (0 = cap off).
+        #[arg(long, default_value_t = 0.0)]
+        initial_capital: f64,
+        /// Max fraction of a symbol's daily dollar volume the book may hold.
+        #[arg(long, default_value_t = 0.0)]
+        max_participation: f64,
+        /// Treat a symbol as delisted after N consecutive missing-price days (0 = off).
+        #[arg(long, default_value_t = 0)]
+        delist_after: usize,
+        /// Fraction of a delisted position written off (0 = exit at last price, 1 = total loss).
+        #[arg(long, default_value_t = 0.0)]
+        delist_haircut: f64,
+        /// Benchmark symbol (its closes are loaded and compared), e.g. SPY.
+        #[arg(long)]
+        benchmark: Option<String>,
         /// Output file (default: stdout).
         #[arg(long)]
         out: Option<PathBuf>,
@@ -69,6 +87,24 @@ enum Cmd {
         to: i32,
         #[arg(long, default_value_t = 0.0)]
         fee_ratio: f64,
+        /// Slippage per unit of turnover (e.g. 0.0005 = 5 bps per leg).
+        #[arg(long, default_value_t = 0.0)]
+        slippage_ratio: f64,
+        /// Book size in dollars for the liquidity cap (0 = cap off).
+        #[arg(long, default_value_t = 0.0)]
+        initial_capital: f64,
+        /// Max fraction of a symbol's daily dollar volume the book may hold.
+        #[arg(long, default_value_t = 0.0)]
+        max_participation: f64,
+        /// Treat a symbol as delisted after N consecutive missing-price days (0 = off).
+        #[arg(long, default_value_t = 0)]
+        delist_after: usize,
+        /// Fraction of a delisted position written off (0 = exit at last price, 1 = total loss).
+        #[arg(long, default_value_t = 0.0)]
+        delist_haircut: f64,
+        /// Benchmark symbol (its closes are loaded and compared), e.g. SPY.
+        #[arg(long)]
+        benchmark: Option<String>,
         /// Metric to rank by.
         #[arg(long, value_enum, default_value_t = SortArg::Sharpe)]
         sort: SortArg,
@@ -89,10 +125,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             from,
             to,
             fee_ratio,
+            slippage_ratio,
+            initial_capital,
+            max_participation,
+            delist_after,
+            delist_haircut,
+            benchmark,
             out,
         } => {
+            let cfg = yuzu_core::backtest::BacktestConfig {
+                fee_ratio,
+                slippage_ratio,
+                initial_capital,
+                max_participation,
+                delist_after,
+                delist_haircut,
+                benchmark_key: benchmark,
+                ..Default::default()
+            };
             let spec_json = std::fs::read_to_string(&spec)?;
-            let report = yuzu_cli::run_single(&data, &spec_json, from, to, fee_ratio)?;
+            let report = yuzu_cli::run_single(&data, &spec_json, from, to, &cfg)?;
             let json = serde_json::to_string_pretty(&report)?;
             match out {
                 Some(p) => std::fs::write(p, json)?,
@@ -105,10 +157,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             from,
             to,
             fee_ratio,
+            slippage_ratio,
+            initial_capital,
+            max_participation,
+            delist_after,
+            delist_haircut,
+            benchmark,
             sort,
             top,
             out,
         } => {
+            let cfg = yuzu_core::backtest::BacktestConfig {
+                fee_ratio,
+                slippage_ratio,
+                initial_capital,
+                max_participation,
+                delist_after,
+                delist_haircut,
+                benchmark_key: benchmark,
+                ..Default::default()
+            };
             let raw = std::fs::read_to_string(&specs)?;
             let parsed: Vec<Variant> = serde_json::from_str(&raw)?;
             let variants: Vec<(String, String)> = parsed
@@ -119,7 +187,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 })
                 .collect::<Result<_, serde_json::Error>>()?;
 
-            let mut board = yuzu_cli::run_sweep(&data, &variants, from, to, fee_ratio, sort.into());
+            let mut board = yuzu_cli::run_sweep(&data, &variants, from, to, &cfg, sort.into());
             if let Some(n) = top {
                 board.truncate(n);
             }
