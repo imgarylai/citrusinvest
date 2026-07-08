@@ -6,14 +6,14 @@
 
 use crate::csv_io::{parse_series, Field};
 use crate::error::DataError;
+use crate::format::CANDIDATE_EXTS;
 use crate::fundamentals::{parse_fundamentals, FUNDAMENTAL_FIELDS, REPORT_EVENT_FIELD};
 use crate::source::{ObjectSink, ObjectSource};
-use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use ndarray::Array2;
 use std::collections::{BTreeSet, HashMap};
-use std::io::{Read, Write};
+use std::io::Write;
 use yuzu_core::panel::Panel;
 
 /// Default object-key directory for combined per-field panel files.
@@ -55,9 +55,11 @@ pub fn write_combined_panel(panel: &Panel) -> Result<Vec<u8>, DataError> {
     enc.finish().map_err(|e| DataError::Io(e.to_string()))
 }
 
-/// Read `{dir}/{name}.csv.gz` and assemble a Panel for `symbols` (in the given
-/// order; a symbol absent from the file gets a NaN column) over `[from, to]`
-/// inclusive. `Ok(None)` if the combined file does not exist.
+/// Read the combined `{dir}/{name}` file (probing `.csv.gz`/`.parquet`/`.csv`)
+/// and assemble a Panel for `symbols` (in the given order; a symbol absent from
+/// the file gets a NaN column) over `[from, to]` inclusive. The format is
+/// detected from content. `Ok(None)` if the combined file does not exist in any
+/// supported format.
 pub fn load_combined_panel<S: ObjectSource>(
     source: &S,
     name: &str,
@@ -66,15 +68,23 @@ pub fn load_combined_panel<S: ObjectSource>(
     to: i32,
     dir: &str,
 ) -> Result<Option<Panel>, DataError> {
-    let key = format!("{dir}/{name}.csv.gz");
-    let Some(gz) = source.get(&key)? else {
+    let mut bytes = None;
+    for ext in CANDIDATE_EXTS {
+        if let Some(b) = source.get(&format!("{dir}/{name}{ext}"))? {
+            bytes = Some(b);
+            break;
+        }
+    }
+    let Some(bytes) = bytes else {
         return Ok(None);
     };
-    let mut text = String::new();
-    GzDecoder::new(&gz[..])
-        .read_to_string(&mut text)
-        .map_err(|e| DataError::Io(e.to_string()))?;
 
+    #[cfg(feature = "parquet")]
+    if crate::format::Format::detect(&bytes) == crate::format::Format::Parquet {
+        return load_combined_parquet(&bytes, symbols, from, to).map(Some);
+    }
+
+    let text = crate::format::read_csv_text(&bytes)?;
     let mut lines = text.lines();
     let header = lines.next().unwrap_or("");
     // file column index (>=1; col 0 is "day") for every symbol in the file
@@ -126,6 +136,27 @@ pub fn load_combined_panel<S: ObjectSource>(
     Ok(Some(panel))
 }
 
+/// Assemble a Panel from a wide combined-panel Parquet buffer: one column per
+/// symbol (absent symbol ⇒ NaN column), windowed to `[from, to]` inclusive.
+#[cfg(feature = "parquet")]
+fn load_combined_parquet(
+    bytes: &[u8],
+    symbols: &[String],
+    from: i32,
+    to: i32,
+) -> Result<Panel, DataError> {
+    let (all_dates, all_rows) = crate::parquet_io::read_wide(bytes, symbols)?;
+    let mut dates = Vec::new();
+    let mut rows = Vec::new();
+    for (day, row) in all_dates.into_iter().zip(all_rows) {
+        if day >= from && day <= to {
+            dates.push(day);
+            rows.push(row);
+        }
+    }
+    Panel::from_rows(dates, symbols.to_vec(), rows).map_err(|e| DataError::Parse(e.to_string()))
+}
+
 /// What a rebuild wrote: number of series files and the max day-count across them.
 pub struct RebuildSummary {
     pub fields: usize,
@@ -146,12 +177,9 @@ pub fn rebuild_combined_panels<S: ObjectSource + ObjectSink + Sync>(
     let mut fields = 0usize;
     let mut max_days = 0usize;
 
-    // --- OHLCV: read every prices/{sym}.csv.gz once, transpose per field ---
-    let price_keys: Vec<String> = symbols
-        .iter()
-        .map(|s| format!("{prices_dir}/{s}.csv.gz"))
-        .collect();
-    let price_bytes = crate::parallel::fetch_raw(source, &price_keys)?;
+    // --- OHLCV: read every per-symbol price file once, transpose per field.
+    // Probes .csv.gz/.parquet/.csv so a mirror in any supported format rebuilds. ---
+    let price_bytes = crate::parallel::fetch_symbols(source, prices_dir, symbols)?;
     let price_series: &[(&str, Field)] = &[
         ("open", Field::AdjOpen),
         ("high", Field::AdjHigh),
@@ -178,12 +206,8 @@ pub fn rebuild_combined_panels<S: ObjectSource + ObjectSink + Sync>(
 
     drop(price_bytes); // free the price bytes before holding the fundamentals bytes (halves peak RAM)
 
-    // --- Fundamentals: read every fundamentals/{sym}.csv.gz once, transpose ---
-    let fund_keys: Vec<String> = symbols
-        .iter()
-        .map(|s| format!("{fundamentals_dir}/{s}.csv.gz"))
-        .collect();
-    let fund_bytes = crate::parallel::fetch_raw(source, &fund_keys)?;
+    // --- Fundamentals: read every per-symbol fundamentals file once, transpose ---
+    let fund_bytes = crate::parallel::fetch_symbols(source, fundamentals_dir, symbols)?;
     for name in FUNDAMENTAL_FIELDS
         .iter()
         .chain(std::iter::once(&REPORT_EVENT_FIELD))
@@ -308,6 +332,51 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(pe.data[[0, 0]], 8.0); // AAA pe
+    }
+
+    #[cfg(feature = "parquet")]
+    #[test]
+    fn loads_a_wide_parquet_combined_panel() {
+        use arrow_array::{ArrayRef, Float64Array, Int32Array, RecordBatch};
+        use arrow_schema::{DataType, Field as AField, Schema};
+        use parquet::arrow::ArrowWriter;
+        use std::sync::Arc;
+
+        let schema = Arc::new(Schema::new(vec![
+            AField::new("day", DataType::Int32, false),
+            AField::new("AAA", DataType::Float64, true),
+            AField::new("BBB", DataType::Float64, true),
+        ]));
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(Int32Array::from(vec![20240102, 20240103, 20240104])) as ArrayRef,
+                Arc::new(Float64Array::from(vec![Some(10.0), Some(11.0), Some(12.0)])) as ArrayRef,
+                Arc::new(Float64Array::from(vec![None, Some(20.0), Some(21.0)])) as ArrayRef,
+            ],
+        )
+        .unwrap();
+        let mut buf = Vec::new();
+        let mut w = ArrowWriter::try_new(&mut buf, schema, None).unwrap();
+        w.write(&batch).unwrap();
+        w.close().unwrap();
+
+        let dir = std::env::temp_dir().join("yuzu_combined_parquet");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("panels")).unwrap();
+        fs::write(dir.join("panels/close.parquet"), buf).unwrap();
+        let src = LocalSource::new(&dir);
+
+        // reorder + windowing + absent symbol, same contract as the CSV path
+        let syms = vec!["BBB".to_string(), "AAA".to_string(), "ZZZ".to_string()];
+        let p = load_combined_panel(&src, "close", &syms, 20240103, 20240104, PANELS_DIR)
+            .unwrap()
+            .unwrap();
+        assert_eq!(p.dates, vec![20240103, 20240104]);
+        assert_eq!(p.symbols, syms);
+        assert_eq!(p.data[[0, 0]], 20.0); // BBB 0103
+        assert_eq!(p.data[[0, 1]], 11.0); // AAA 0103
+        assert!(p.data[[0, 2]].is_nan()); // ZZZ absent column
     }
 
     #[test]

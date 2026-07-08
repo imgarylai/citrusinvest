@@ -8,12 +8,11 @@
 
 use crate::error::DataError;
 use crate::source::ObjectSource;
-use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use ndarray::Array2;
 use std::collections::{BTreeSet, HashMap};
-use std::io::{Read, Write};
+use std::io::Write;
 use yuzu_core::panel::Panel;
 
 /// Fundamental field column names, in CSV order (column 0 is `day`).
@@ -102,16 +101,24 @@ fn i32_to_date(d: i32) -> String {
     format!("{:04}-{:02}-{:02}", d / 10000, d / 100 % 100, d % 100)
 }
 
-/// gunzip + parse the fundamentals CSV, extracting `(YYYYMMDD, value)` for
-/// `field` (one of [`FUNDAMENTAL_FIELDS`]). Empty / `NaN` cells parse to `NaN`.
-pub fn parse_fundamentals(gz: &[u8], field: &str) -> Result<Vec<(i32, f64)>, DataError> {
+/// Parse fundamentals for `field` (one of [`FUNDAMENTAL_FIELDS`] or
+/// [`REPORT_EVENT_FIELD`]) into `(YYYYMMDD, value)` rows. The buffer's format is
+/// detected from its content: gzip CSV, plain CSV, or — with the `parquet`
+/// feature — Apache Parquet. Empty / `NaN` cells parse to `NaN`.
+pub fn parse_fundamentals(bytes: &[u8], field: &str) -> Result<Vec<(i32, f64)>, DataError> {
     // Resolve the column first so an unknown field fails before any I/O.
     let col = field_col(field)
         .ok_or_else(|| DataError::Parse(format!("unknown fundamental field '{field}'")))?;
-    let mut text = String::new();
-    GzDecoder::new(gz)
-        .read_to_string(&mut text)
-        .map_err(|e| DataError::Io(e.to_string()))?;
+    #[cfg(feature = "parquet")]
+    if crate::format::Format::detect(bytes) == crate::format::Format::Parquet {
+        return crate::parquet_io::read_series(bytes, field);
+    }
+    let text = crate::format::read_csv_text(bytes)?;
+    parse_fundamentals_csv(&text, col)
+}
+
+/// Extract column `col` (0 = `day`) from decoded fundamentals CSV text.
+fn parse_fundamentals_csv(text: &str, col: usize) -> Result<Vec<(i32, f64)>, DataError> {
     let mut out = Vec::new();
     for line in text.lines() {
         let line = line.trim();
