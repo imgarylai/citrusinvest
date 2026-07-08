@@ -534,4 +534,98 @@ mod tests {
             "equity curve should be non-empty"
         );
     }
+
+    #[test]
+    fn loads_the_volume_panel_when_the_liquidity_cap_is_active() {
+        let dir = fixture("yuzu_server_volume_test");
+        let days = [20240102, 20240103, 20240104];
+        for (sym, base, pe) in [("VOLA", 10.0, 8.0), ("VOLB", 20.0, 15.0)] {
+            let prices: Vec<_> = days
+                .iter()
+                .enumerate()
+                .map(|(i, d)| ohlcv(*d, base + i as f64))
+                .collect();
+            let funds: Vec<_> = days.iter().map(|d| frow(*d, pe, 0.0)).collect();
+            write_symbol(&dir, sym, &prices, &funds);
+        }
+        let source = LocalSource::new(&dir);
+        // initial_capital + max_participation both > 0 → the volume series is added
+        // to the load set and the cap is applied.
+        let req = BacktestRequest {
+            spec: serde_json::json!({ "op": "IsSmallest", "of": { "op": "Data", "name": "pe" }, "n": 1 }),
+            symbols: vec!["VOLA".into(), "VOLB".into()],
+            from: 20240102,
+            to: 20240104,
+            price_key: "close".into(),
+            initial_capital: 1_000_000.0,
+            max_participation: 0.05,
+            ..Default::default()
+        };
+        let report = handle_backtest(&source, &req, &DataDirs::default()).unwrap();
+        assert!(!report.equity.is_empty());
+    }
+
+    #[test]
+    fn collect_series_walks_objects_and_arrays() {
+        // A spec value that nests Data nodes inside a JSON array exercises the
+        // Array arm of the walker; duplicates collapse into the set.
+        let spec = serde_json::json!({
+            "op": "SomeListOp",
+            "of": [
+                { "op": "Data", "name": "close" },
+                { "op": "Data", "name": "pe" },
+                { "op": "Data", "name": "close" }
+            ]
+        });
+        let mut names = BTreeSet::new();
+        collect_series(&spec, &mut names);
+        assert_eq!(
+            names,
+            ["close", "pe"].iter().map(|s| s.to_string()).collect()
+        );
+    }
+
+    #[test]
+    fn backtest_request_defaults_price_key_to_close() {
+        // A request JSON without `price_key` deserializes with the serde default.
+        let req: BacktestRequest = serde_json::from_str(
+            r#"{"spec":{"op":"Data","name":"close"},"symbols":[],"from":0,"to":0}"#,
+        )
+        .unwrap();
+        assert_eq!(req.price_key, "close");
+    }
+
+    #[test]
+    fn data_dirs_from_env_overrides_then_defaults() {
+        // These YUZU_* vars are read by no other test in this crate.
+        for k in [
+            "YUZU_PRICES_DIR",
+            "YUZU_FUNDAMENTALS_DIR",
+            "YUZU_PANELS_DIR",
+        ] {
+            std::env::remove_var(k);
+        }
+        // Unset → the constants.
+        let d = DataDirs::from_env();
+        assert_eq!(d.prices, PRICES_DIR);
+        assert_eq!(d.fundamentals, FUNDAMENTALS_DIR);
+        assert_eq!(d.panels, PANELS_DIR);
+
+        // Set → the override wins.
+        std::env::set_var("YUZU_PRICES_DIR", "custom/prices");
+        std::env::set_var("YUZU_FUNDAMENTALS_DIR", "custom/funds");
+        std::env::set_var("YUZU_PANELS_DIR", "custom/panels");
+        let d = DataDirs::from_env();
+        assert_eq!(d.prices, "custom/prices");
+        assert_eq!(d.fundamentals, "custom/funds");
+        assert_eq!(d.panels, "custom/panels");
+
+        for k in [
+            "YUZU_PRICES_DIR",
+            "YUZU_FUNDAMENTALS_DIR",
+            "YUZU_PANELS_DIR",
+        ] {
+            std::env::remove_var(k);
+        }
+    }
 }

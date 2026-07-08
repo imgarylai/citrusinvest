@@ -176,4 +176,71 @@ mod tests {
         let src = S3Source::new(&endpoint, "bucket", "ak", "sk", "auto").unwrap();
         src.put("panels/close.csv.gz", b"gzip-bytes").unwrap();
     }
+
+    #[test]
+    fn new_rejects_a_malformed_endpoint() {
+        let err = match S3Source::new("not a url", "bucket", "ak", "sk", "auto") {
+            Err(e) => e,
+            Ok(_) => panic!("expected a malformed-endpoint error"),
+        };
+        assert!(matches!(err, DataError::Io(_)));
+    }
+
+    /// A bound-then-closed port: connections are refused, so both GET and PUT hit
+    /// the non-404 error arms (transport error, not a status code).
+    fn dead_endpoint() -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        drop(listener); // free the port so connects are refused
+        format!("http://{addr}")
+    }
+
+    #[test]
+    fn get_and_put_surface_transport_errors() {
+        let src = S3Source::new(&dead_endpoint(), "bucket", "ak", "sk", "auto").unwrap();
+        assert!(matches!(
+            src.get("prices/AAA.csv.gz"),
+            Err(DataError::Io(_))
+        ));
+        assert!(matches!(
+            src.put("panels/close.csv.gz", b"x"),
+            Err(DataError::Io(_))
+        ));
+    }
+
+    #[test]
+    fn from_env_reads_vars_and_reports_missing() {
+        // These S3_* vars are used by no other test in this crate, so mutating the
+        // process environment here is safe within this test binary.
+        for k in [
+            "S3_ENDPOINT",
+            "S3_BUCKET",
+            "S3_ACCESS_KEY_ID",
+            "S3_SECRET_ACCESS_KEY",
+            "S3_REGION",
+        ] {
+            std::env::remove_var(k);
+        }
+        // Missing required var → Err naming the var.
+        assert!(matches!(
+            S3Source::from_env(),
+            Err(DataError::Io(ref m)) if m.contains("S3_ENDPOINT")
+        ));
+
+        std::env::set_var("S3_ENDPOINT", "https://example.r2.cloudflarestorage.com");
+        std::env::set_var("S3_BUCKET", "bucket");
+        std::env::set_var("S3_ACCESS_KEY_ID", "ak");
+        std::env::set_var("S3_SECRET_ACCESS_KEY", "sk");
+        // S3_REGION left unset → defaults to "auto".
+        S3Source::from_env().expect("from_env builds when all required vars are present");
+
+        for k in [
+            "S3_ENDPOINT",
+            "S3_BUCKET",
+            "S3_ACCESS_KEY_ID",
+            "S3_SECRET_ACCESS_KEY",
+        ] {
+            std::env::remove_var(k);
+        }
+    }
 }
