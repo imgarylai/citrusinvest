@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1](https://github.com/imgarylai/citrusinvest/compare/lemon-lang-v0.1.0...lemon-lang-v0.1.1) - 2026-07-08
+
+### Other
+
+- add per-crate READMEs and crates.io badges
+- release v0.1.0
+
 ## [0.1.0](https://github.com/imgarylai/citrusinvest/releases/tag/lemon-lang-v0.1.0) - 2026-07-08
 
 ### Other

@@ -637,7 +637,7 @@ dependencies = [
 
 [[package]]
 name = "lemon-lang"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -645,7 +645,7 @@ dependencies = [
 
 [[package]]
 name = "lemon-wasm"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "lemon-lang",
  "serde_json",
@@ -1410,7 +1410,7 @@ dependencies = [
 
 [[package]]
 name = "yuzu-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "clap",
  "rayon",
@@ -1422,7 +1422,7 @@ dependencies = [
 
 [[package]]
 name = "yuzu-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "lemon-lang",
@@ -1433,7 +1433,7 @@ dependencies = [
 
 [[package]]
 name = "yuzu-data"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "flate2",
  "ndarray",
@@ -1443,7 +1443,7 @@ dependencies = [
 
 [[package]]
 name = "yuzu-server"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "ndarray",
  "serde",
@@ -1456,7 +1456,7 @@ dependencies = [
 
 [[package]]
 name = "yuzu-source-s3"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "flate2",
  "rusty-s3",
@@ -1466,7 +1466,7 @@ dependencies = [
 
 [[package]]
 name = "yuzu-wasm"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "ndarray",
  "serde",

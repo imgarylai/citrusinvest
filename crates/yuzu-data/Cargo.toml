@@ -8,7 +8,7 @@ readme.workspace = true
 description = "Native I/O layer: reads gzip CSV price and fundamental files into yuzu-core panels."
 
 [dependencies]
-yuzu-core = { path = "../yuzu-core", version = "0.1.0" }
+yuzu-core = { path = "../yuzu-core", version = "0.1.1" }
 ndarray.workspace = true
 flate2.workspace = true
 rayon.workspace = true
