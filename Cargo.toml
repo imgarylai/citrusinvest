@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/yuzu-core", "crates/yuzu-data", "crates/yuzu-wasm", "crates/yuzu-cli", "crates/yuzu-source-s3", "crates/yuzu-server", "crates/lemon", "crates/lemon-wasm", "crates/lemon-lsp"]
 
 [workspace.package]
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.86"
 license = "MIT"

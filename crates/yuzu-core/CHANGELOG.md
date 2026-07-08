@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/imgarylai/citrusinvest/compare/yuzu-core-v0.1.1...yuzu-core-v0.2.0) - 2026-07-08
+
+### Added
+
+- *(lemon)* editor language services, LSP server, and VS Code extension
+- *(yuzu-core)* YE (year-end) rebalance frequency
+- normalize_row op — explicit portfolio weights from a raw signal
+- *(lemon)* `not` prefix operator
+- *(yuzu-core)* block-bootstrap confidence bands for Sharpe/CAGR/MDD
+- *(yuzu-core)* monthly/yearly return tables and rolling metrics in Report
+- *(yuzu-core)* Panel::slice_dates for windowed backtests
+- *(yuzu-core)* benchmark comparison — alpha/beta/IR and rebased curve
+- *(yuzu-core)* delisting detection with forced exit and haircut
+- *(yuzu-core)* volume-participation liquidity cap on weights
+- *(yuzu-core)* slippage cost on turnover and trade returns
+
+### Other
+
+- *(yuzu-core)* add runnable basic_backtest example
+- crates.io keywords/categories, MSRV 1.86, CI + docs badges
+
 ## [0.1.1](https://github.com/imgarylai/citrusinvest/compare/yuzu-core-v0.1.0...yuzu-core-v0.1.1) - 2026-07-08
 
 ### Other
