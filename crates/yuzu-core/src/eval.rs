@@ -317,7 +317,10 @@ pub fn run_backtest(
         .ok_or_else(|| EngineError::Eval(format!("unknown price series '{price_key}'")))?;
     let high = ctx.panels.get("high");
     let low = ctx.panels.get("low");
-    Ok(build_report(run(&positions, prices, high, low, cfg)))
+    let volume = ctx.panels.get("volume");
+    Ok(build_report(run(
+        &positions, prices, high, low, volume, cfg,
+    )))
 }
 
 #[cfg(test)]

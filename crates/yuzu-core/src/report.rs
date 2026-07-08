@@ -97,7 +97,7 @@ mod tests {
             vec![vec![10.0], vec![11.0], vec![12.0]],
         )
         .unwrap();
-        let report = build_report(run(&pos, &px, None, None, &BacktestConfig::default()));
+        let report = build_report(run(&pos, &px, None, None, None, &BacktestConfig::default()));
         assert_eq!(report.equity.len(), 3);
         assert_eq!(report.drawdown.len(), 3);
         assert!((report.metrics.total_return - 0.2).abs() < 1e-9);
