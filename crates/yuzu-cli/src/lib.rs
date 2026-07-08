@@ -300,13 +300,61 @@ fn slice_ctx(ctx: &EvalContext, from: i32, to: i32) -> EvalContext {
     }
 }
 
-fn metric_of(report: &Report, key: SortKey) -> f64 {
+fn metric_from_curve(dates: &[i32], equity: &[f64], key: SortKey) -> f64 {
     match key {
-        SortKey::Sharpe => report.metrics.sharpe,
-        SortKey::TotalReturn => report.metrics.total_return,
-        SortKey::Cagr => report.metrics.cagr,
-        SortKey::Calmar => report.metrics.calmar,
+        SortKey::Sharpe => yuzu_core::metrics::sharpe(equity),
+        SortKey::TotalReturn => yuzu_core::metrics::total_return(equity),
+        SortKey::Cagr => yuzu_core::metrics::cagr(equity, dates),
+        SortKey::Calmar => yuzu_core::metrics::calmar(equity, dates),
     }
+}
+
+/// Largest window argument anywhere in a spec tree (the `n` / `nwindow` / `d`
+/// fields) — the auto value for walk-forward warmup.
+pub fn max_lookback(spec: &serde_json::Value) -> usize {
+    match spec {
+        serde_json::Value::Object(map) => map
+            .iter()
+            .map(|(k, v)| {
+                let own = if matches!(k.as_str(), "n" | "nwindow" | "d") {
+                    v.as_u64().unwrap_or(0) as usize
+                } else {
+                    0
+                };
+                own.max(max_lookback(v))
+            })
+            .max()
+            .unwrap_or(0),
+        serde_json::Value::Array(arr) => arr.iter().map(max_lookback).max().unwrap_or(0),
+        _ => 0,
+    }
+}
+
+/// Evaluate `spec` over `[eval_from, to]` but run the NAV loop only over
+/// `[nav_from, to]`: indicators warm up on the earlier rows, P&L does not
+/// include them. Returns the NAV range's (dates, equity).
+fn run_windowed(
+    ctx: &EvalContext,
+    spec: &str,
+    cfg: &BacktestConfig,
+    eval_from: i32,
+    nav_from: i32,
+    to: i32,
+) -> Result<(Vec<i32>, Vec<f64>), String> {
+    let eval_ctx = slice_ctx(ctx, eval_from, to);
+    let positions = yuzu_core::run_strategy(spec, &eval_ctx).map_err(|e| e.to_string())?;
+    let positions = positions.slice_dates(nav_from, to);
+    let prices = eval_ctx
+        .panels
+        .get("close")
+        .ok_or("no close panel")?
+        .slice_dates(nav_from, to);
+    let volume = eval_ctx
+        .panels
+        .get("volume")
+        .map(|p| p.slice_dates(nav_from, to));
+    let run = yuzu_core::backtest::run(&positions, &prices, None, None, volume.as_ref(), cfg);
+    Ok((run.dates, run.equity))
 }
 
 /// Window/selection settings for [`run_walkforward`].
@@ -319,6 +367,9 @@ pub struct WalkForwardParams {
     pub test_days: usize,
     /// Metric used to pick the in-sample winner.
     pub sort_by: SortKey,
+    /// Indicator warmup rows carried into each window from before its start.
+    /// `None` = auto: the largest window argument found in any variant's spec.
+    pub warmup_days: Option<usize>,
 }
 
 /// Walk-forward analysis: roll a `train_days`/`test_days` window (in trading
@@ -326,9 +377,11 @@ pub struct WalkForwardParams {
 /// the train slice, pick the best by `sort_by`, run it on the test slice, and
 /// chain the out-of-sample equity segments into one curve.
 ///
-/// Indicators start cold at each window boundary (no warmup carry-over) —
-/// identical handicap for every variant, but absolute levels differ from a
-/// full-range backtest.
+/// Indicators **warm up on the rows before each window** (`warmup_days`,
+/// auto = the largest window argument in any variant) while P&L is counted
+/// only inside the window, and each test segment also prices the boundary-day
+/// return from the previous window's last close. The first train window has
+/// no earlier data, so it still starts cold.
 pub fn run_walkforward(
     root: &Path,
     variants: &[(String, String)],
@@ -341,6 +394,7 @@ pub fn run_walkforward(
         train_days,
         test_days,
         sort_by,
+        warmup_days,
     } = *params;
     if variants.is_empty() {
         return Err("no variants to select from".into());
@@ -348,6 +402,15 @@ pub fn run_walkforward(
     if train_days == 0 || test_days == 0 {
         return Err("train_days and test_days must be > 0".into());
     }
+    let warmup = match warmup_days {
+        Some(n) => n,
+        None => variants
+            .iter()
+            .filter_map(|(_, spec)| serde_json::from_str(spec).ok())
+            .map(|v: serde_json::Value| max_lookback(&v))
+            .max()
+            .unwrap_or(0),
+    };
     let ctx = load_ctx(root, from, to, cfg)?;
     let dates = ctx
         .panels
@@ -376,15 +439,16 @@ pub fn run_walkforward(
         let test_from = dates[test_start];
         let test_to = dates[test_end - 1];
 
-        // in-sample: run every variant on the train slice in parallel
-        let train_ctx = slice_ctx(&ctx, train_from, train_to);
+        // in-sample: every variant in parallel; signals warm up on the rows
+        // before the train window, P&L is counted inside it only.
+        let train_eval_from = dates[start.saturating_sub(warmup)];
         let scored: Vec<(usize, f64)> = variants
             .par_iter()
             .enumerate()
             .filter_map(|(i, (_, spec))| {
-                run_backtest(spec, &train_ctx, "close", cfg)
+                run_windowed(&ctx, spec, cfg, train_eval_from, train_from, train_to)
                     .ok()
-                    .map(|r| (i, metric_of(&r, sort_by)))
+                    .map(|(d, e)| (i, metric_from_curve(&d, &e, sort_by)))
                     .filter(|(_, m)| !m.is_nan())
             })
             .collect();
@@ -393,10 +457,20 @@ pub fn run_walkforward(
             .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
             .ok_or_else(|| format!("window {train_from}..{train_to}: every variant failed"))?;
 
-        // out-of-sample: run the winner on the test slice
-        let test_ctx = slice_ctx(&ctx, test_from, test_to);
-        let report =
-            run_backtest(&variants[best].1, &test_ctx, "close", cfg).map_err(|e| e.to_string())?;
+        // out-of-sample: the winner, warmed up through the train window. The
+        // NAV starts one row early (the train window's last close) so the
+        // boundary-day return is priced; that extra row is dropped when
+        // stitching (its date belongs to the previous segment).
+        let test_eval_from = dates[test_start.saturating_sub(warmup)];
+        let nav_from = dates[test_start - 1];
+        let (seg_dates, seg_equity) = run_windowed(
+            &ctx,
+            &variants[best].1,
+            cfg,
+            test_eval_from,
+            nav_from,
+            test_to,
+        )?;
         windows.push(WalkForwardWindow {
             train_from,
             train_to,
@@ -404,10 +478,13 @@ pub fn run_walkforward(
             test_to,
             chosen: variants[best].0.clone(),
             in_sample_metric,
-            oos_return: report.metrics.total_return,
+            // vs a flat 1.0 base: includes the entry cost and the boundary day
+            oos_return: seg_equity.last().unwrap() - 1.0,
         });
-        // chain: each segment starts at ~1.0 (including its day-0 entry cost)
-        for (d, e) in report.dates.iter().zip(&report.equity) {
+        for (d, e) in seg_dates.iter().zip(&seg_equity) {
+            if *d < test_from {
+                continue; // the warmup/boundary row belongs to the previous segment
+            }
             oos_dates.push(*d);
             oos_equity.push(scale * e);
         }

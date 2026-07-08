@@ -526,12 +526,18 @@ it. A grid file is a spec template plus value lists — any JSON string equal to
   the cartesian product (variant names like `"n=20"`) and emit a ranked
   leaderboard (same output as `sweep`).
 - `yuzu-cli walkforward --data D --grid g.json --train-days 504 --test-days 126
-  [--sort sharpe]` — roll an in-sample/out-of-sample window over the trading-day
-  axis: pick the best variant on each train slice, run it on the following test
-  slice, and chain the out-of-sample equity into one curve. Output: per-window
-  selection table (`chosen`, `in_sample_metric`, `oos_return`) plus the stitched
-  OOS `equity`/`dates` and summary metrics. Each window starts cold (no
-  indicator warmup carry-over) — an identical handicap for every variant.
+  [--warmup-days N] [--sort sharpe]` — roll an in-sample/out-of-sample window
+  over the trading-day axis: pick the best variant on each train slice, run it
+  on the following test slice, and chain the out-of-sample equity into one
+  curve. Output: per-window selection table (`chosen`, `in_sample_metric`,
+  `oos_return`) plus the stitched OOS `equity`/`dates` and summary metrics.
+  Indicators **warm up on the rows before each window** (default `--warmup-days`
+  auto = the largest window argument in any variant) while P&L is counted only
+  inside the window, and each test segment prices the boundary-day return from
+  the previous window's last close — so long-lookback variants aren't
+  handicapped in selection and the stitched curve doesn't drop returns at
+  window seams. The very first train window has no earlier data and still
+  starts cold.
 
 All `BacktestConfig` flags (fees, slippage, liquidity cap, delisting,
 benchmark, bootstrap) apply to these commands too.
@@ -543,9 +549,9 @@ These items are explicit scope cuts, not gaps:
 - **Advanced cost semantics** (`touched_exit` / `retain_cost_when_rebalance` / `stop_trading_next_period`) — the engine currently uses the simplified model described above.
 - **Volume-aware slippage** — `slippage_ratio` is a flat per-leg haircut; an impact model that scales with participation is future work.
 - **Portfolio optimization** (mean-variance, risk parity, etc.).
-- **Walk-forward warmup carry-over** — `yuzu-cli walkforward` starts each
-  window cold (indicators re-warm inside the slice) and the chained OOS curve
-  skips the one-day gap return at each window boundary.
+- **Walk-forward position continuity** — each window still enters from flat
+  (paying entry cost) even when the previous window's winner held the same
+  names; holdings don't carry across the seam.
 
 Per-trade **MAE / MFE** (maximum adverse / favorable excursion) and factor
 **neutralization** (`neutralize` / `neutralize_industry` / `industry_rank` /
