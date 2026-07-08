@@ -151,12 +151,14 @@ fn walkforward_picks_in_sample_winner_and_chains_oos_equity() {
     let report = yuzu_cli::run_walkforward(
         &dir,
         &variants,
-        20240102,
-        20240113,
-        4, // train
-        3, // test
+        &yuzu_cli::WalkForwardParams {
+            from: 20240102,
+            to: 20240113,
+            train_days: 4,
+            test_days: 3,
+            sort_by: SortKey::TotalReturn,
+        },
         &Default::default(),
-        SortKey::TotalReturn,
     )
     .unwrap();
 
@@ -174,12 +176,14 @@ fn walkforward_picks_in_sample_winner_and_chains_oos_equity() {
     assert!(yuzu_cli::run_walkforward(
         &dir,
         &variants,
-        20240102,
-        20240113,
-        50,
-        3,
+        &yuzu_cli::WalkForwardParams {
+            from: 20240102,
+            to: 20240113,
+            train_days: 50,
+            test_days: 3,
+            sort_by: SortKey::Sharpe,
+        },
         &Default::default(),
-        SortKey::Sharpe
     )
     .is_err());
 }

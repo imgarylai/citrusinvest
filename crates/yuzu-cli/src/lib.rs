@@ -309,6 +309,18 @@ fn metric_of(report: &Report, key: SortKey) -> f64 {
     }
 }
 
+/// Window/selection settings for [`run_walkforward`].
+pub struct WalkForwardParams {
+    pub from: i32,
+    pub to: i32,
+    /// In-sample window length in trading days.
+    pub train_days: usize,
+    /// Out-of-sample window length in trading days.
+    pub test_days: usize,
+    /// Metric used to pick the in-sample winner.
+    pub sort_by: SortKey,
+}
+
 /// Walk-forward analysis: roll a `train_days`/`test_days` window (in trading
 /// days) over the close panel's date axis; in each window run every variant on
 /// the train slice, pick the best by `sort_by`, run it on the test slice, and
@@ -320,13 +332,16 @@ fn metric_of(report: &Report, key: SortKey) -> f64 {
 pub fn run_walkforward(
     root: &Path,
     variants: &[(String, String)],
-    from: i32,
-    to: i32,
-    train_days: usize,
-    test_days: usize,
+    params: &WalkForwardParams,
     cfg: &BacktestConfig,
-    sort_by: SortKey,
 ) -> Result<WalkForwardReport, String> {
+    let WalkForwardParams {
+        from,
+        to,
+        train_days,
+        test_days,
+        sort_by,
+    } = *params;
     if variants.is_empty() {
         return Err("no variants to select from".into());
     }
