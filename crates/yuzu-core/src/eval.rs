@@ -302,7 +302,7 @@ pub fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
 }
 
 use crate::backtest::{run, BacktestConfig};
-use crate::report::{build_report, Report};
+use crate::report::{benchmark_equity, build_report_with_benchmark, Report};
 
 pub fn run_backtest(
     spec_json: &str,
@@ -318,9 +318,25 @@ pub fn run_backtest(
     let high = ctx.panels.get("high");
     let low = ctx.panels.get("low");
     let volume = ctx.panels.get("volume");
-    Ok(build_report(run(
-        &positions, prices, high, low, volume, cfg,
-    )))
+    let out = run(&positions, prices, high, low, volume, cfg);
+    let benchmark = match &cfg.benchmark_key {
+        Some(key) => {
+            let p = ctx
+                .panels
+                .get(key)
+                .ok_or_else(|| EngineError::Eval(format!("unknown benchmark series '{key}'")))?;
+            if p.ncols() == 0 {
+                return Err(EngineError::Eval(format!(
+                    "benchmark series '{key}' has no symbols"
+                )));
+            }
+            // first column is the benchmark instrument
+            let col: Vec<f64> = (0..p.nrows()).map(|r| p.data[[r, 0]]).collect();
+            Some(benchmark_equity(&out.dates, &p.dates, &col))
+        }
+        None => None,
+    };
+    Ok(build_report_with_benchmark(out, benchmark))
 }
 
 #[cfg(test)]
@@ -336,6 +352,46 @@ mod tests {
         )
         .unwrap();
         EvalContext::new(HashMap::from([("close".to_string(), close)]))
+    }
+
+    #[test]
+    fn run_backtest_with_benchmark_key_reports_relative_metrics() {
+        let close = Panel::new(
+            vec![20240102, 20240103, 20240104],
+            vec!["A".into()],
+            array![[10.0], [11.0], [12.0]],
+        )
+        .unwrap();
+        let spy = Panel::new(
+            vec![20240102, 20240103, 20240104],
+            vec!["SPY".into()],
+            array![[100.0], [101.0], [102.0]],
+        )
+        .unwrap();
+        let ctx = EvalContext::new(HashMap::from([
+            ("close".to_string(), close),
+            ("benchmark".to_string(), spy),
+        ]));
+        let spec = r#"{"op":"Gt","l":{"op":"Data","name":"close"},"r":{"op":"Const","value":0.0}}"#;
+        let cfg = BacktestConfig {
+            benchmark_key: Some("benchmark".to_string()),
+            ..Default::default()
+        };
+        let report = run_backtest(spec, &ctx, "close", &cfg).unwrap();
+        let bench = report.benchmark.as_ref().unwrap();
+        assert_eq!(bench.len(), 3);
+        assert!((bench[2] - 1.02).abs() < 1e-12);
+        let m = &report.metrics;
+        assert!((m.benchmark_return.unwrap() - 0.02).abs() < 1e-12);
+        assert!((m.excess_return.unwrap() - (0.2 - 0.02)).abs() < 1e-9);
+        assert!(m.beta.is_some() && m.alpha.is_some());
+
+        // Unknown benchmark key errors instead of silently dropping it.
+        let bad = BacktestConfig {
+            benchmark_key: Some("nope".to_string()),
+            ..Default::default()
+        };
+        assert!(run_backtest(spec, &ctx, "close", &bad).is_err());
     }
 
     #[test]
