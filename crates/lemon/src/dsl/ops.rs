@@ -28,6 +28,28 @@ pub fn field_name(f: &Field) -> &'static str {
     }
 }
 
+/// JSON-schema kind for a field: `expr` (an `Expr` subtree), `number`, `string`,
+/// `bool`, or `list` (a list of `Expr`) / `list-string`.
+pub fn field_kind(f: &Field) -> &'static str {
+    match f {
+        Field::Expr(_) | Field::ExprOpt(_) => "expr",
+        Field::ExprList(_) => "list",
+        Field::Num(_) | Field::NumOpt(_) => "number",
+        Field::BoolOpt(_) => "bool",
+        Field::Str(_) | Field::StrOpt(_) => "string",
+        Field::StrListOpt(_) => "list-string",
+    }
+}
+
+/// Whether the parser requires this field (required scalar/Expr/list) or accepts
+/// it as optional (`*Opt` variants).
+pub fn field_required(f: &Field) -> bool {
+    matches!(
+        f,
+        Field::Expr(_) | Field::Num(_) | Field::Str(_) | Field::ExprList(_)
+    )
+}
+
 pub struct OpSig {
     pub tag: &'static str,
     pub fields: &'static [Field],
@@ -36,9 +58,14 @@ pub struct OpSig {
 /// One row per function-style op. `names[0]` is the canonical DSL name (used by the
 /// printer); the rest are accepted aliases. Operator-style ops (Gt/And/Add/Neg/…)
 /// are NOT here — see `binop_tag`/`prefix_tag`.
+///
+/// `desc` is a one-line, machine-readable description consumed by the schema
+/// generator (`cargo run -p lemon-lang --example gen-schema`); keep it terse and
+/// in sync with the `Expr` doc-comment in `spec.rs`.
 struct Row {
     names: &'static [&'static str],
     sig: OpSig,
+    desc: &'static str,
 }
 
 use Field::*;
@@ -50,6 +77,7 @@ static ROWS: &[Row] = &[
             tag: "Average",
             fields: &[Expr("of"), Num("n")],
         },
+        desc: "Simple moving average of `of` over `n` days.",
     },
     Row {
         names: &["ema"],
@@ -57,6 +85,7 @@ static ROWS: &[Row] = &[
             tag: "Ema",
             fields: &[Expr("of"), Num("n")],
         },
+        desc: "Exponential moving average of `of` over `n` days.",
     },
     Row {
         names: &["std"],
@@ -64,6 +93,7 @@ static ROWS: &[Row] = &[
             tag: "Std",
             fields: &[Expr("of"), Num("n")],
         },
+        desc: "Rolling standard deviation of `of` over `n` days.",
     },
     Row {
         names: &["rsi"],
@@ -71,6 +101,7 @@ static ROWS: &[Row] = &[
             tag: "Rsi",
             fields: &[Expr("of"), Num("n")],
         },
+        desc: "Relative Strength Index of `of` over `n` days.",
     },
     Row {
         names: &["pct_change"],
@@ -78,6 +109,7 @@ static ROWS: &[Row] = &[
             tag: "PctChange",
             fields: &[Expr("of"), Num("n")],
         },
+        desc: "Percentage change of `of` over `n` days.",
     },
     Row {
         names: &["rise"],
@@ -85,6 +117,7 @@ static ROWS: &[Row] = &[
             tag: "Rise",
             fields: &[Expr("of"), Num("n")],
         },
+        desc: "1 where `of` rose for `n` consecutive days, else 0.",
     },
     Row {
         names: &["fall"],
@@ -92,6 +125,7 @@ static ROWS: &[Row] = &[
             tag: "Fall",
             fields: &[Expr("of"), Num("n")],
         },
+        desc: "1 where `of` fell for `n` consecutive days, else 0.",
     },
     Row {
         names: &["shift"],
@@ -99,6 +133,7 @@ static ROWS: &[Row] = &[
             tag: "Shift",
             fields: &[Expr("of"), Num("n")],
         },
+        desc: "`of` lagged forward by `n` days.",
     },
     Row {
         names: &["rolling_max"],
@@ -106,6 +141,7 @@ static ROWS: &[Row] = &[
             tag: "RollingMax",
             fields: &[Expr("of"), Num("n")],
         },
+        desc: "Rolling maximum of `of` over `n` days.",
     },
     Row {
         names: &["atr"],
@@ -113,6 +149,7 @@ static ROWS: &[Row] = &[
             tag: "Atr",
             fields: &[Expr("high"), Expr("low"), Expr("close"), Num("n")],
         },
+        desc: "Average True Range over `n` days from high/low/close.",
     },
     Row {
         names: &["natr"],
@@ -120,6 +157,7 @@ static ROWS: &[Row] = &[
             tag: "Natr",
             fields: &[Expr("high"), Expr("low"), Expr("close"), Num("n")],
         },
+        desc: "Normalized ATR (percent) over `n` days.",
     },
     Row {
         names: &["willr"],
@@ -127,6 +165,7 @@ static ROWS: &[Row] = &[
             tag: "WillR",
             fields: &[Expr("high"), Expr("low"), Expr("close"), Num("n")],
         },
+        desc: "Williams %R over `n` days.",
     },
     Row {
         names: &["cci"],
@@ -134,6 +173,7 @@ static ROWS: &[Row] = &[
             tag: "Cci",
             fields: &[Expr("high"), Expr("low"), Expr("close"), Num("n")],
         },
+        desc: "Commodity Channel Index over `n` days.",
     },
     Row {
         names: &["stoch_k"],
@@ -141,6 +181,7 @@ static ROWS: &[Row] = &[
             tag: "StochK",
             fields: &[Expr("high"), Expr("low"), Expr("close"), Num("n")],
         },
+        desc: "Stochastic %K over `n` days.",
     },
     Row {
         names: &["stoch_d"],
@@ -154,6 +195,7 @@ static ROWS: &[Row] = &[
                 NumOpt("d"),
             ],
         },
+        desc: "Stochastic %D: `d`-day average of %K over `n` days (d defaults to 3).",
     },
     Row {
         names: &["aroon_up"],
@@ -161,6 +203,7 @@ static ROWS: &[Row] = &[
             tag: "AroonUp",
             fields: &[Expr("high"), Num("n")],
         },
+        desc: "Aroon Up over `n` days from high.",
     },
     Row {
         names: &["aroon_down"],
@@ -168,6 +211,7 @@ static ROWS: &[Row] = &[
             tag: "AroonDown",
             fields: &[Expr("low"), Num("n")],
         },
+        desc: "Aroon Down over `n` days from low.",
     },
     Row {
         names: &["adx"],
@@ -175,6 +219,7 @@ static ROWS: &[Row] = &[
             tag: "Adx",
             fields: &[Expr("high"), Expr("low"), Expr("close"), Num("n")],
         },
+        desc: "Average Directional Index over `n` days.",
     },
     Row {
         names: &["plus_di"],
@@ -182,6 +227,7 @@ static ROWS: &[Row] = &[
             tag: "PlusDi",
             fields: &[Expr("high"), Expr("low"), Expr("close"), Num("n")],
         },
+        desc: "Plus Directional Indicator (+DI) over `n` days.",
     },
     Row {
         names: &["minus_di"],
@@ -189,6 +235,7 @@ static ROWS: &[Row] = &[
             tag: "MinusDi",
             fields: &[Expr("high"), Expr("low"), Expr("close"), Num("n")],
         },
+        desc: "Minus Directional Indicator (-DI) over `n` days.",
     },
     Row {
         names: &["obv"],
@@ -196,6 +243,7 @@ static ROWS: &[Row] = &[
             tag: "Obv",
             fields: &[Expr("close"), Expr("volume")],
         },
+        desc: "On-Balance Volume from close and volume.",
     },
     Row {
         names: &["mfi"],
@@ -209,6 +257,7 @@ static ROWS: &[Row] = &[
                 Num("n"),
             ],
         },
+        desc: "Money Flow Index over `n` days.",
     },
     Row {
         names: &["vwap"],
@@ -222,6 +271,7 @@ static ROWS: &[Row] = &[
                 Num("n"),
             ],
         },
+        desc: "Volume-Weighted Average Price over `n` days from high/low/close/volume.",
     },
     Row {
         names: &["is_largest"],
@@ -229,6 +279,7 @@ static ROWS: &[Row] = &[
             tag: "IsLargest",
             fields: &[Expr("of"), Num("n")],
         },
+        desc: "1 for the `n` highest values per row (cross-section), else 0.",
     },
     Row {
         names: &["is_smallest"],
@@ -236,6 +287,7 @@ static ROWS: &[Row] = &[
             tag: "IsSmallest",
             fields: &[Expr("of"), Num("n")],
         },
+        desc: "1 for the `n` lowest values per row (cross-section), else 0.",
     },
     Row {
         names: &["sustain"],
@@ -243,6 +295,7 @@ static ROWS: &[Row] = &[
             tag: "Sustain",
             fields: &[Expr("of"), Num("nwindow"), NumOpt("nsatisfy")],
         },
+        desc: "1 where `of` held true at least `nsatisfy` times within the last `nwindow` rows.",
     },
     Row {
         names: &["is_entry"],
@@ -250,6 +303,7 @@ static ROWS: &[Row] = &[
             tag: "IsEntry",
             fields: &[Expr("of")],
         },
+        desc: "1 on the row where `of` turns false->true (rising edge).",
     },
     Row {
         names: &["is_exit"],
@@ -257,6 +311,7 @@ static ROWS: &[Row] = &[
             tag: "IsExit",
             fields: &[Expr("of")],
         },
+        desc: "1 on the row where `of` turns true->false (falling edge).",
     },
     Row {
         names: &["ceil"],
@@ -264,6 +319,7 @@ static ROWS: &[Row] = &[
             tag: "Ceil",
             fields: &[Expr("of")],
         },
+        desc: "Ceiling of `of`.",
     },
     Row {
         names: &["rank"],
@@ -271,6 +327,7 @@ static ROWS: &[Row] = &[
             tag: "Rank",
             fields: &[Expr("of"), BoolOpt("pct"), BoolOpt("ascending")],
         },
+        desc: "Cross-sectional rank of `of` per row; `pct` for 0..1 percentile (default true), `ascending` sets direction (default true).",
     },
     Row {
         names: &["mask"],
@@ -278,6 +335,7 @@ static ROWS: &[Row] = &[
             tag: "Mask",
             fields: &[Expr("of"), Expr("by")],
         },
+        desc: "`of` kept only where `by` is true; elsewhere dropped.",
     },
     Row {
         names: &["hold_until"],
@@ -294,6 +352,7 @@ static ROWS: &[Row] = &[
                 NumOpt("trail_stop_activation"),
             ],
         },
+        desc: "Stateful rotation: enter on `entry`, exit on `exit`, hold up to `nstocks_limit` (prioritised by `rank`), with optional stop_loss/take_profit/trail_stop/trail_stop_activation.",
     },
     Row {
         names: &["rebalance"],
@@ -301,6 +360,7 @@ static ROWS: &[Row] = &[
             tag: "Rebalance",
             fields: &[Expr("of"), StrOpt("freq"), ExprOpt("on")],
         },
+        desc: "Hold `of`, refreshing on calendar `freq` (W/ME/QE) or on dates where `on` is true.",
     },
     Row {
         names: &["neutralize"],
@@ -308,6 +368,7 @@ static ROWS: &[Row] = &[
             tag: "Neutralize",
             fields: &[Expr("of"), ExprList("by"), BoolOpt("add_const")],
         },
+        desc: "Cross-sectionally regress `of` against the `by` factors, optionally adding a constant (default true).",
     },
     Row {
         names: &["neutralize_industry"],
@@ -315,6 +376,7 @@ static ROWS: &[Row] = &[
             tag: "NeutralizeIndustry",
             fields: &[Expr("of"), BoolOpt("add_const")],
         },
+        desc: "Neutralize `of` within each industry/sector (add_const defaults to true).",
     },
     Row {
         names: &["industry_rank"],
@@ -322,6 +384,7 @@ static ROWS: &[Row] = &[
             tag: "IndustryRank",
             fields: &[Expr("of"), StrListOpt("categories")],
         },
+        desc: "Rank `of` within each industry, optionally limited to `categories`.",
     },
     Row {
         names: &["groupby_category"],
@@ -329,8 +392,82 @@ static ROWS: &[Row] = &[
             tag: "GroupbyCategory",
             fields: &[Expr("of"), Str("agg")],
         },
+        desc: "Aggregate `of` within each industry using `agg` (e.g. mean).",
     },
 ];
+
+// ---------------------------------------------------------------------------
+// Public catalog API — the single source of truth consumed by the schema
+// generator (`cargo run -p lemon-lang --example gen-schema`). Everything below
+// is derived from `ROWS`, `BINOPS`, and `prefix_tag`, so the emitted JSON
+// artifacts can never drift from the parser.
+// ---------------------------------------------------------------------------
+
+/// A field's serde default, when it has one. `serde(default)` on an `Option`
+/// field means "absent" (no default value to emit); those return `None` here.
+/// Kept co-located with the field declarations so it stays in sync with
+/// `spec.rs`.
+pub fn field_default(tag: &str, field_name: &str) -> Option<serde_json::Value> {
+    use serde_json::json;
+    match (tag, field_name) {
+        ("StochD", "d") => Some(json!(3)),
+        ("Rank", "pct") => Some(json!(true)),
+        ("Rank", "ascending") => Some(json!(true)),
+        ("Neutralize", "add_const") => Some(json!(true)),
+        ("NeutralizeIndustry", "add_const") => Some(json!(true)),
+        _ => None,
+    }
+}
+
+/// One field of a callable op, in schema-friendly form.
+pub struct FieldInfo {
+    pub name: &'static str,
+    /// One of: `expr`, `number`, `string`, `bool`, `list`, `list-string`.
+    pub kind: &'static str,
+    pub required: bool,
+    pub default: Option<serde_json::Value>,
+}
+
+/// One callable op: its canonical name, aliases, op tag, ordered fields, and a
+/// one-line description.
+pub struct OpInfo {
+    pub name: &'static str,
+    pub aliases: &'static [&'static str],
+    pub tag: &'static str,
+    pub description: &'static str,
+    pub fields: Vec<FieldInfo>,
+}
+
+/// Every function-style op in `ROWS`, in declaration order.
+pub fn function_ops() -> Vec<OpInfo> {
+    ROWS.iter()
+        .map(|r| OpInfo {
+            name: r.names[0],
+            aliases: &r.names[1..],
+            tag: r.sig.tag,
+            description: r.desc,
+            fields: r
+                .sig
+                .fields
+                .iter()
+                .map(|f| {
+                    let name = field_name(f);
+                    FieldInfo {
+                        name,
+                        kind: field_kind(f),
+                        required: field_required(f),
+                        default: field_default(r.sig.tag, name),
+                    }
+                })
+                .collect(),
+        })
+        .collect()
+}
+
+/// The binary operator ops: `(symbol, op tag)`. Both operands are `l`/`r` exprs.
+pub fn binary_operators() -> &'static [(&'static str, &'static str)] {
+    BINOPS
+}
 
 pub fn op_by_name(name: &str) -> Option<&'static OpSig> {
     ROWS.iter()

@@ -1,0 +1,1220 @@
+{
+  "$defs": {
+    "Expr": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "description": "A raw input series by name.",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "op": {
+              "const": "Data"
+            }
+          },
+          "required": [
+            "op",
+            "name"
+          ],
+          "title": "Data",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A constant scalar value, broadcast across the panel.",
+          "properties": {
+            "op": {
+              "const": "Const"
+            },
+            "value": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "op",
+            "value"
+          ],
+          "title": "Const",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Simple moving average of `of` over `n` days.",
+          "properties": {
+            "n": {
+              "type": "number"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "Average"
+            }
+          },
+          "required": [
+            "op",
+            "of",
+            "n"
+          ],
+          "title": "Average",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Exponential moving average of `of` over `n` days.",
+          "properties": {
+            "n": {
+              "type": "number"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "Ema"
+            }
+          },
+          "required": [
+            "op",
+            "of",
+            "n"
+          ],
+          "title": "Ema",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Rolling standard deviation of `of` over `n` days.",
+          "properties": {
+            "n": {
+              "type": "number"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "Std"
+            }
+          },
+          "required": [
+            "op",
+            "of",
+            "n"
+          ],
+          "title": "Std",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Relative Strength Index of `of` over `n` days.",
+          "properties": {
+            "n": {
+              "type": "number"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "Rsi"
+            }
+          },
+          "required": [
+            "op",
+            "of",
+            "n"
+          ],
+          "title": "Rsi",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Percentage change of `of` over `n` days.",
+          "properties": {
+            "n": {
+              "type": "number"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "PctChange"
+            }
+          },
+          "required": [
+            "op",
+            "of",
+            "n"
+          ],
+          "title": "PctChange",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "1 where `of` rose for `n` consecutive days, else 0.",
+          "properties": {
+            "n": {
+              "type": "number"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "Rise"
+            }
+          },
+          "required": [
+            "op",
+            "of",
+            "n"
+          ],
+          "title": "Rise",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "1 where `of` fell for `n` consecutive days, else 0.",
+          "properties": {
+            "n": {
+              "type": "number"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "Fall"
+            }
+          },
+          "required": [
+            "op",
+            "of",
+            "n"
+          ],
+          "title": "Fall",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "`of` lagged forward by `n` days.",
+          "properties": {
+            "n": {
+              "type": "number"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "Shift"
+            }
+          },
+          "required": [
+            "op",
+            "of",
+            "n"
+          ],
+          "title": "Shift",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Rolling maximum of `of` over `n` days.",
+          "properties": {
+            "n": {
+              "type": "number"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "RollingMax"
+            }
+          },
+          "required": [
+            "op",
+            "of",
+            "n"
+          ],
+          "title": "RollingMax",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Average True Range over `n` days from high/low/close.",
+          "properties": {
+            "close": {
+              "$ref": "#/$defs/Expr"
+            },
+            "high": {
+              "$ref": "#/$defs/Expr"
+            },
+            "low": {
+              "$ref": "#/$defs/Expr"
+            },
+            "n": {
+              "type": "number"
+            },
+            "op": {
+              "const": "Atr"
+            }
+          },
+          "required": [
+            "op",
+            "high",
+            "low",
+            "close",
+            "n"
+          ],
+          "title": "Atr",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Normalized ATR (percent) over `n` days.",
+          "properties": {
+            "close": {
+              "$ref": "#/$defs/Expr"
+            },
+            "high": {
+              "$ref": "#/$defs/Expr"
+            },
+            "low": {
+              "$ref": "#/$defs/Expr"
+            },
+            "n": {
+              "type": "number"
+            },
+            "op": {
+              "const": "Natr"
+            }
+          },
+          "required": [
+            "op",
+            "high",
+            "low",
+            "close",
+            "n"
+          ],
+          "title": "Natr",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Williams %R over `n` days.",
+          "properties": {
+            "close": {
+              "$ref": "#/$defs/Expr"
+            },
+            "high": {
+              "$ref": "#/$defs/Expr"
+            },
+            "low": {
+              "$ref": "#/$defs/Expr"
+            },
+            "n": {
+              "type": "number"
+            },
+            "op": {
+              "const": "WillR"
+            }
+          },
+          "required": [
+            "op",
+            "high",
+            "low",
+            "close",
+            "n"
+          ],
+          "title": "WillR",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Commodity Channel Index over `n` days.",
+          "properties": {
+            "close": {
+              "$ref": "#/$defs/Expr"
+            },
+            "high": {
+              "$ref": "#/$defs/Expr"
+            },
+            "low": {
+              "$ref": "#/$defs/Expr"
+            },
+            "n": {
+              "type": "number"
+            },
+            "op": {
+              "const": "Cci"
+            }
+          },
+          "required": [
+            "op",
+            "high",
+            "low",
+            "close",
+            "n"
+          ],
+          "title": "Cci",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Stochastic %K over `n` days.",
+          "properties": {
+            "close": {
+              "$ref": "#/$defs/Expr"
+            },
+            "high": {
+              "$ref": "#/$defs/Expr"
+            },
+            "low": {
+              "$ref": "#/$defs/Expr"
+            },
+            "n": {
+              "type": "number"
+            },
+            "op": {
+              "const": "StochK"
+            }
+          },
+          "required": [
+            "op",
+            "high",
+            "low",
+            "close",
+            "n"
+          ],
+          "title": "StochK",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Stochastic %D: `d`-day average of %K over `n` days (d defaults to 3).",
+          "properties": {
+            "close": {
+              "$ref": "#/$defs/Expr"
+            },
+            "d": {
+              "type": "number"
+            },
+            "high": {
+              "$ref": "#/$defs/Expr"
+            },
+            "low": {
+              "$ref": "#/$defs/Expr"
+            },
+            "n": {
+              "type": "number"
+            },
+            "op": {
+              "const": "StochD"
+            }
+          },
+          "required": [
+            "op",
+            "high",
+            "low",
+            "close",
+            "n"
+          ],
+          "title": "StochD",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Aroon Up over `n` days from high.",
+          "properties": {
+            "high": {
+              "$ref": "#/$defs/Expr"
+            },
+            "n": {
+              "type": "number"
+            },
+            "op": {
+              "const": "AroonUp"
+            }
+          },
+          "required": [
+            "op",
+            "high",
+            "n"
+          ],
+          "title": "AroonUp",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Aroon Down over `n` days from low.",
+          "properties": {
+            "low": {
+              "$ref": "#/$defs/Expr"
+            },
+            "n": {
+              "type": "number"
+            },
+            "op": {
+              "const": "AroonDown"
+            }
+          },
+          "required": [
+            "op",
+            "low",
+            "n"
+          ],
+          "title": "AroonDown",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Average Directional Index over `n` days.",
+          "properties": {
+            "close": {
+              "$ref": "#/$defs/Expr"
+            },
+            "high": {
+              "$ref": "#/$defs/Expr"
+            },
+            "low": {
+              "$ref": "#/$defs/Expr"
+            },
+            "n": {
+              "type": "number"
+            },
+            "op": {
+              "const": "Adx"
+            }
+          },
+          "required": [
+            "op",
+            "high",
+            "low",
+            "close",
+            "n"
+          ],
+          "title": "Adx",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Plus Directional Indicator (+DI) over `n` days.",
+          "properties": {
+            "close": {
+              "$ref": "#/$defs/Expr"
+            },
+            "high": {
+              "$ref": "#/$defs/Expr"
+            },
+            "low": {
+              "$ref": "#/$defs/Expr"
+            },
+            "n": {
+              "type": "number"
+            },
+            "op": {
+              "const": "PlusDi"
+            }
+          },
+          "required": [
+            "op",
+            "high",
+            "low",
+            "close",
+            "n"
+          ],
+          "title": "PlusDi",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Minus Directional Indicator (-DI) over `n` days.",
+          "properties": {
+            "close": {
+              "$ref": "#/$defs/Expr"
+            },
+            "high": {
+              "$ref": "#/$defs/Expr"
+            },
+            "low": {
+              "$ref": "#/$defs/Expr"
+            },
+            "n": {
+              "type": "number"
+            },
+            "op": {
+              "const": "MinusDi"
+            }
+          },
+          "required": [
+            "op",
+            "high",
+            "low",
+            "close",
+            "n"
+          ],
+          "title": "MinusDi",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "On-Balance Volume from close and volume.",
+          "properties": {
+            "close": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "Obv"
+            },
+            "volume": {
+              "$ref": "#/$defs/Expr"
+            }
+          },
+          "required": [
+            "op",
+            "close",
+            "volume"
+          ],
+          "title": "Obv",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Money Flow Index over `n` days.",
+          "properties": {
+            "close": {
+              "$ref": "#/$defs/Expr"
+            },
+            "high": {
+              "$ref": "#/$defs/Expr"
+            },
+            "low": {
+              "$ref": "#/$defs/Expr"
+            },
+            "n": {
+              "type": "number"
+            },
+            "op": {
+              "const": "Mfi"
+            },
+            "volume": {
+              "$ref": "#/$defs/Expr"
+            }
+          },
+          "required": [
+            "op",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "n"
+          ],
+          "title": "Mfi",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Volume-Weighted Average Price over `n` days from high/low/close/volume.",
+          "properties": {
+            "close": {
+              "$ref": "#/$defs/Expr"
+            },
+            "high": {
+              "$ref": "#/$defs/Expr"
+            },
+            "low": {
+              "$ref": "#/$defs/Expr"
+            },
+            "n": {
+              "type": "number"
+            },
+            "op": {
+              "const": "Vwap"
+            },
+            "volume": {
+              "$ref": "#/$defs/Expr"
+            }
+          },
+          "required": [
+            "op",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "n"
+          ],
+          "title": "Vwap",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "1 for the `n` highest values per row (cross-section), else 0.",
+          "properties": {
+            "n": {
+              "type": "number"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "IsLargest"
+            }
+          },
+          "required": [
+            "op",
+            "of",
+            "n"
+          ],
+          "title": "IsLargest",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "1 for the `n` lowest values per row (cross-section), else 0.",
+          "properties": {
+            "n": {
+              "type": "number"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "IsSmallest"
+            }
+          },
+          "required": [
+            "op",
+            "of",
+            "n"
+          ],
+          "title": "IsSmallest",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "1 where `of` held true at least `nsatisfy` times within the last `nwindow` rows.",
+          "properties": {
+            "nsatisfy": {
+              "type": "number"
+            },
+            "nwindow": {
+              "type": "number"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "Sustain"
+            }
+          },
+          "required": [
+            "op",
+            "of",
+            "nwindow"
+          ],
+          "title": "Sustain",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "1 on the row where `of` turns false->true (rising edge).",
+          "properties": {
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "IsEntry"
+            }
+          },
+          "required": [
+            "op",
+            "of"
+          ],
+          "title": "IsEntry",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "1 on the row where `of` turns true->false (falling edge).",
+          "properties": {
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "IsExit"
+            }
+          },
+          "required": [
+            "op",
+            "of"
+          ],
+          "title": "IsExit",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Ceiling of `of`.",
+          "properties": {
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "Ceil"
+            }
+          },
+          "required": [
+            "op",
+            "of"
+          ],
+          "title": "Ceil",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Cross-sectional rank of `of` per row; `pct` for 0..1 percentile (default true), `ascending` sets direction (default true).",
+          "properties": {
+            "ascending": {
+              "type": "boolean"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "Rank"
+            },
+            "pct": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "op",
+            "of"
+          ],
+          "title": "Rank",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "`of` kept only where `by` is true; elsewhere dropped.",
+          "properties": {
+            "by": {
+              "$ref": "#/$defs/Expr"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "Mask"
+            }
+          },
+          "required": [
+            "op",
+            "of",
+            "by"
+          ],
+          "title": "Mask",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Stateful rotation: enter on `entry`, exit on `exit`, hold up to `nstocks_limit` (prioritised by `rank`), with optional stop_loss/take_profit/trail_stop/trail_stop_activation.",
+          "properties": {
+            "entry": {
+              "$ref": "#/$defs/Expr"
+            },
+            "exit": {
+              "$ref": "#/$defs/Expr"
+            },
+            "nstocks_limit": {
+              "type": "number"
+            },
+            "op": {
+              "const": "HoldUntil"
+            },
+            "rank": {
+              "$ref": "#/$defs/Expr"
+            },
+            "stop_loss": {
+              "type": "number"
+            },
+            "take_profit": {
+              "type": "number"
+            },
+            "trail_stop": {
+              "type": "number"
+            },
+            "trail_stop_activation": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "op",
+            "entry",
+            "exit"
+          ],
+          "title": "HoldUntil",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Hold `of`, refreshing on calendar `freq` (W/ME/QE) or on dates where `on` is true.",
+          "properties": {
+            "freq": {
+              "type": "string"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "on": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "Rebalance"
+            }
+          },
+          "required": [
+            "op",
+            "of"
+          ],
+          "title": "Rebalance",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Cross-sectionally regress `of` against the `by` factors, optionally adding a constant (default true).",
+          "properties": {
+            "add_const": {
+              "type": "boolean"
+            },
+            "by": {
+              "items": {
+                "$ref": "#/$defs/Expr"
+              },
+              "type": "array"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "Neutralize"
+            }
+          },
+          "required": [
+            "op",
+            "of",
+            "by"
+          ],
+          "title": "Neutralize",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Neutralize `of` within each industry/sector (add_const defaults to true).",
+          "properties": {
+            "add_const": {
+              "type": "boolean"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "NeutralizeIndustry"
+            }
+          },
+          "required": [
+            "op",
+            "of"
+          ],
+          "title": "NeutralizeIndustry",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Rank `of` within each industry, optionally limited to `categories`.",
+          "properties": {
+            "categories": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "IndustryRank"
+            }
+          },
+          "required": [
+            "op",
+            "of"
+          ],
+          "title": "IndustryRank",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Aggregate `of` within each industry using `agg` (e.g. mean).",
+          "properties": {
+            "agg": {
+              "type": "string"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "GroupbyCategory"
+            }
+          },
+          "required": [
+            "op",
+            "of",
+            "agg"
+          ],
+          "title": "GroupbyCategory",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "1 where `l` is greater than `r`, else 0.",
+          "properties": {
+            "l": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "Gt"
+            },
+            "r": {
+              "$ref": "#/$defs/Expr"
+            }
+          },
+          "required": [
+            "op",
+            "l",
+            "r"
+          ],
+          "title": "Gt",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "1 where `l` is less than `r`, else 0.",
+          "properties": {
+            "l": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "Lt"
+            },
+            "r": {
+              "$ref": "#/$defs/Expr"
+            }
+          },
+          "required": [
+            "op",
+            "l",
+            "r"
+          ],
+          "title": "Lt",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "1 where `l` is greater than or equal to `r`, else 0.",
+          "properties": {
+            "l": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "Ge"
+            },
+            "r": {
+              "$ref": "#/$defs/Expr"
+            }
+          },
+          "required": [
+            "op",
+            "l",
+            "r"
+          ],
+          "title": "Ge",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "1 where `l` is less than or equal to `r`, else 0.",
+          "properties": {
+            "l": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "Le"
+            },
+            "r": {
+              "$ref": "#/$defs/Expr"
+            }
+          },
+          "required": [
+            "op",
+            "l",
+            "r"
+          ],
+          "title": "Le",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Logical AND of two boolean panels.",
+          "properties": {
+            "l": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "And"
+            },
+            "r": {
+              "$ref": "#/$defs/Expr"
+            }
+          },
+          "required": [
+            "op",
+            "l",
+            "r"
+          ],
+          "title": "And",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Logical OR of two boolean panels.",
+          "properties": {
+            "l": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "Or"
+            },
+            "r": {
+              "$ref": "#/$defs/Expr"
+            }
+          },
+          "required": [
+            "op",
+            "l",
+            "r"
+          ],
+          "title": "Or",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Element-wise `l` + `r`.",
+          "properties": {
+            "l": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "Add"
+            },
+            "r": {
+              "$ref": "#/$defs/Expr"
+            }
+          },
+          "required": [
+            "op",
+            "l",
+            "r"
+          ],
+          "title": "Add",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Element-wise `l` - `r`.",
+          "properties": {
+            "l": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "Sub"
+            },
+            "r": {
+              "$ref": "#/$defs/Expr"
+            }
+          },
+          "required": [
+            "op",
+            "l",
+            "r"
+          ],
+          "title": "Sub",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Element-wise `l` * `r`.",
+          "properties": {
+            "l": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "Mul"
+            },
+            "r": {
+              "$ref": "#/$defs/Expr"
+            }
+          },
+          "required": [
+            "op",
+            "l",
+            "r"
+          ],
+          "title": "Mul",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Element-wise `l` / `r`.",
+          "properties": {
+            "l": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "Div"
+            },
+            "r": {
+              "$ref": "#/$defs/Expr"
+            }
+          },
+          "required": [
+            "op",
+            "l",
+            "r"
+          ],
+          "title": "Div",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Negation (-`of`).",
+          "properties": {
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "Neg"
+            }
+          },
+          "required": [
+            "op",
+            "of"
+          ],
+          "title": "Neg",
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "$id": "https://github.com/imgarylai/citrusinvest/schema/lemon-spec.schema.json",
+  "$ref": "#/$defs/Expr",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The serializable lemon strategy AST: a JSON tree tagged by \"op\". Generated from crates/lemon metadata; do not edit by hand.",
+  "title": "Lemon strategy spec (Expr tree)"
+}
