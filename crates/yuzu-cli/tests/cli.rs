@@ -79,3 +79,107 @@ fn lists_symbols_and_runs_a_single_backtest() {
     assert_eq!(report.equity.len(), 3);
     assert!(report.metrics.total_return.is_finite());
 }
+
+#[test]
+fn grid_expands_cartesian_product_with_placeholders() {
+    let grid: yuzu_cli::GridSpec = serde_json::from_str(
+        r#"{
+            "spec": {"op":"Average","of":{"op":"Data","name":"close"},"n":"$n","x":"$thresh"},
+            "params": {"n": [10, 20], "thresh": [0.5]}
+        }"#,
+    )
+    .unwrap();
+    let variants = yuzu_cli::expand_grid(&grid);
+    assert_eq!(variants.len(), 2);
+    assert_eq!(variants[0].0, "n=10,thresh=0.5");
+    assert_eq!(variants[0].1["n"], 10);
+    assert_eq!(variants[0].1["x"], 0.5);
+    assert_eq!(variants[1].1["n"], 20);
+    // non-placeholder strings and unknown placeholders pass through untouched
+    assert_eq!(variants[0].1["of"]["name"], "close");
+
+    // no params -> the spec itself
+    let plain: yuzu_cli::GridSpec =
+        serde_json::from_str(r#"{"spec": {"op":"Data","name":"close"}}"#).unwrap();
+    assert_eq!(yuzu_cli::expand_grid(&plain).len(), 1);
+}
+
+/// A 12-day fixture where AAA always rises and BBB always falls — every
+/// window's best variant is "hold AAA-style top-1 by momentum".
+fn long_fixture(tag: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("yuzu_cli_fix_{tag}"));
+    let _ = fs::remove_dir_all(&dir);
+    for (sym, base, step) in [("AAA", 10.0_f64, 0.5_f64), ("BBB", 20.0, -0.5)] {
+        let rows: Vec<OhlcvRow> = (0..12)
+            .map(|i| {
+                let c = base + step * i as f64;
+                OhlcvRow {
+                    day: 20240102 + i as i32, // 20240102..20240113, all valid dates
+                    adj_open: c,
+                    adj_high: c,
+                    adj_low: c,
+                    adj_close: c,
+                    volume: 0.0,
+                }
+            })
+            .collect();
+        let p = dir.join("prices");
+        fs::create_dir_all(&p).unwrap();
+        fs::write(
+            p.join(format!("{sym}.csv.gz")),
+            write_series(&rows).unwrap(),
+        )
+        .unwrap();
+    }
+    dir
+}
+
+#[test]
+fn walkforward_picks_in_sample_winner_and_chains_oos_equity() {
+    let dir = long_fixture("wf");
+    // Two variants: hold the 1-day riser (picks AAA) vs the 1-day faller (picks BBB).
+    let variants = vec![
+        (
+            "riser".to_string(),
+            r#"{"op":"Rise","of":{"op":"Data","name":"close"},"n":1}"#.to_string(),
+        ),
+        (
+            "faller".to_string(),
+            r#"{"op":"Fall","of":{"op":"Data","name":"close"},"n":1}"#.to_string(),
+        ),
+    ];
+    let report = yuzu_cli::run_walkforward(
+        &dir,
+        &variants,
+        20240102,
+        20240113,
+        4, // train
+        3, // test
+        &Default::default(),
+        SortKey::TotalReturn,
+    )
+    .unwrap();
+
+    // 12 days: windows at rows [0..4)+[4..7), [7..11)+[11..12) -> 2 windows.
+    assert_eq!(report.windows.len(), 2);
+    // AAA rises all the way: the riser wins in-sample and gains out-of-sample.
+    for w in &report.windows {
+        assert_eq!(w.chosen, "riser", "window {}..{}", w.train_from, w.test_to);
+    }
+    assert!(report.total_return > 0.0);
+    // stitched OOS curve covers only the test rows (3 + 1)
+    assert_eq!(report.equity.len(), 4);
+    assert_eq!(report.dates.len(), 4);
+    // errors on impossible windows
+    assert!(yuzu_cli::run_walkforward(
+        &dir,
+        &variants,
+        20240102,
+        20240113,
+        50,
+        3,
+        &Default::default(),
+        SortKey::Sharpe
+    )
+    .is_err());
+}
