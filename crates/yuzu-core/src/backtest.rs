@@ -26,6 +26,14 @@ pub struct BacktestConfig {
     /// A crude stand-in for market impact / spread: `0.0005` = 5 bps per trade
     /// leg. `0.0` (the default) disables it.
     pub slippage_ratio: f64,
+    /// Notional book size in dollars, used only by the liquidity cap below to
+    /// convert weights into dollar positions. `0.0` (the default) disables the cap.
+    pub initial_capital: f64,
+    /// Max fraction of a symbol's daily dollar volume the book may hold:
+    /// `|w| <= max_participation * price * volume / initial_capital`. Requires a
+    /// volume panel and `initial_capital > 0`. `0.0` (the default) disables it.
+    /// The cap is measured against `initial_capital`, not compounded equity.
+    pub max_participation: f64,
 }
 
 impl Default for BacktestConfig {
@@ -35,6 +43,8 @@ impl Default for BacktestConfig {
             tax_ratio: 0.0,
             position_limit: 0.0,
             slippage_ratio: 0.0,
+            initial_capital: 0.0,
+            max_participation: 0.0,
         }
     }
 }
@@ -54,6 +64,28 @@ pub(crate) fn cap_weights_row(row: &mut [f64], limit: f64) {
     }
     for w in row.iter_mut() {
         *w = w.clamp(-limit, limit);
+    }
+}
+
+/// Cap each weight by the symbol's share of tradable dollar volume:
+/// `|w[c]| <= max_participation * dollar_vol[c] / initial_capital` (sign-
+/// preserving; residual stays in cash). A NaN dollar volume (missing volume or
+/// price data) leaves the weight unchanged — data gaps aren't liquidity.
+pub(crate) fn cap_weights_by_liquidity(
+    row: &mut [f64],
+    dollar_vol: &[f64],
+    max_participation: f64,
+    initial_capital: f64,
+) {
+    if max_participation <= 0.0 || initial_capital <= 0.0 {
+        return;
+    }
+    for (w, dv) in row.iter_mut().zip(dollar_vol) {
+        if dv.is_nan() {
+            continue;
+        }
+        let cap = max_participation * dv / initial_capital;
+        *w = w.clamp(-cap, cap);
     }
 }
 
@@ -133,11 +165,23 @@ pub fn run(
     prices: &Panel,
     high: Option<&Panel>,
     low: Option<&Panel>,
+    volume: Option<&Panel>,
     cfg: &BacktestConfig,
 ) -> BacktestRun {
     let (pos, px) = align(positions, prices);
     let hi = conform_to(&px, high);
     let lo = conform_to(&px, low);
+    // dollar volume per cell (NaN where volume is absent); only materialized
+    // when the liquidity cap is active.
+    let liquidity_on = cfg.max_participation > 0.0 && cfg.initial_capital > 0.0 && volume.is_some();
+    let dollar_vol: Option<Array2<f64>> = if liquidity_on {
+        conform_to(&px, volume).map(|mut v| {
+            v.zip_mut_with(&px.data, |dv, p| *dv *= p);
+            v
+        })
+    } else {
+        None
+    };
     let n = px.ncols();
     let nrows = px.nrows();
     let dates = px.dates.clone();
@@ -164,6 +208,15 @@ pub fn run(
             let mut row = last.clone();
             normalize_weights_row(&mut row);
             cap_weights_row(&mut row, cfg.position_limit);
+            if let Some(dv) = &dollar_vol {
+                let dv_row: Vec<f64> = (0..n).map(|c| dv[[r, c]]).collect();
+                cap_weights_by_liquidity(
+                    &mut row,
+                    &dv_row,
+                    cfg.max_participation,
+                    cfg.initial_capital,
+                );
+            }
             exposure[r] = row.iter().map(|w| w.abs()).sum();
             for c in 0..n {
                 target[[r, c]] = row[c];
@@ -335,7 +388,7 @@ mod tests {
             vec![vec![10.0], vec![11.0], vec![12.0]],
         )
         .unwrap();
-        let run = run(&pos, &px, None, None, &BacktestConfig::default());
+        let run = run(&pos, &px, None, None, None, &BacktestConfig::default());
         assert_eq!(run.equity.len(), 3);
         assert!((run.equity[0] - 1.0).abs() < 1e-12);
         assert!((run.equity[1] - 1.1).abs() < 1e-12); // +10%
@@ -362,7 +415,7 @@ mod tests {
             slippage_ratio: 0.001,
             ..Default::default()
         };
-        let r = run(&pos, &px, None, None, &slip);
+        let r = run(&pos, &px, None, None, None, &slip);
         // Flat price: equity = (1 - 0.001) entering * (1 - 0.001) exiting.
         let want = (1.0 - 0.001) * (1.0 - 0.001);
         assert!(
@@ -379,8 +432,65 @@ mod tests {
             fee_ratio: 0.001,
             ..Default::default()
         };
-        let r2 = run(&pos, &px, None, None, &fee);
+        let r2 = run(&pos, &px, None, None, None, &fee);
         assert_eq!(r.equity, r2.equity);
+    }
+
+    #[test]
+    fn liquidity_cap_limits_weight_to_volume_participation() {
+        use crate::panel::Panel;
+        let dates = vec![20240102, 20240103, 20240104];
+        let syms = vec!["A".to_string()];
+        let pos = Panel::from_rows(
+            dates.clone(),
+            syms.clone(),
+            vec![vec![1.0], vec![1.0], vec![1.0]],
+        )
+        .unwrap();
+        let px = Panel::from_rows(
+            dates.clone(),
+            syms.clone(),
+            vec![vec![10.0], vec![10.0], vec![10.0]],
+        )
+        .unwrap();
+        // Day-0 dollar volume = 10 * 1000 = 10_000. With capital 1_000_000 and
+        // 5% participation, the cap is 10_000 * 0.05 / 1_000_000 = 0.0005.
+        let vol = Panel::from_rows(
+            dates.clone(),
+            syms.clone(),
+            vec![vec![1000.0], vec![1000.0], vec![1000.0]],
+        )
+        .unwrap();
+        let cfg = BacktestConfig {
+            initial_capital: 1_000_000.0,
+            max_participation: 0.05,
+            ..Default::default()
+        };
+        let r = run(&pos, &px, None, None, Some(&vol), &cfg);
+        assert!((r.exposure[0] - 0.0005).abs() < 1e-12, "capped weight");
+
+        // Cap off (defaults) or volume missing -> full weight.
+        let r2 = run(
+            &pos,
+            &px,
+            None,
+            None,
+            Some(&vol),
+            &BacktestConfig::default(),
+        );
+        assert!((r2.exposure[0] - 1.0).abs() < 1e-12);
+        let r3 = run(&pos, &px, None, None, None, &cfg);
+        assert!((r3.exposure[0] - 1.0).abs() < 1e-12);
+
+        // NaN volume day: weight passes through uncapped.
+        let vol_nan = Panel::from_rows(
+            dates.clone(),
+            syms.clone(),
+            vec![vec![f64::NAN], vec![1000.0], vec![1000.0]],
+        )
+        .unwrap();
+        let r4 = run(&pos, &px, None, None, Some(&vol_nan), &cfg);
+        assert!((r4.exposure[0] - 1.0).abs() < 1e-12, "NaN dv -> no cap");
     }
 
     #[test]
@@ -399,7 +509,7 @@ mod tests {
             vec![vec![10.0], vec![11.0], vec![12.0]],
         )
         .unwrap();
-        let run = run(&pos, &px, None, None, &BacktestConfig::default());
+        let run = run(&pos, &px, None, None, None, &BacktestConfig::default());
         assert_eq!(run.exposure.len(), 3);
         for e in &run.exposure {
             assert!((e - 1.0).abs() < 1e-12);
@@ -462,6 +572,7 @@ mod tests {
             &close,
             Some(&high),
             Some(&low),
+            None,
             &BacktestConfig::default(),
         );
         let long = r.trades.iter().find(|t| t.symbol == "LONG").unwrap();
@@ -475,7 +586,7 @@ mod tests {
         assert!((short.mae.unwrap() - (-0.2)).abs() < 1e-9, "short mae");
 
         // No high/low → None.
-        let r2 = run(&pos, &close, None, None, &BacktestConfig::default());
+        let r2 = run(&pos, &close, None, None, None, &BacktestConfig::default());
         assert!(r2.trades.iter().all(|t| t.mae.is_none() && t.mfe.is_none()));
     }
 }

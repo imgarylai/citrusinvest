@@ -15,7 +15,7 @@ fn check(name: &str) {
     let v = load_golden(name);
     let pos: Panel = panel_from_json(&v, "positions");
     let px: Panel = panel_from_json(&v, "prices");
-    let r = run(&pos, &px, None, None, &cfg(&v));
+    let r = run(&pos, &px, None, None, None, &cfg(&v));
     let want = v["equity"].as_array().unwrap();
     assert_eq!(r.equity.len(), want.len());
     for (i, w) in want.iter().enumerate() {
@@ -42,7 +42,7 @@ fn trades_recorded() {
     let v = load_golden("backtest_nofee");
     let pos: Panel = panel_from_json(&v, "positions");
     let px: Panel = panel_from_json(&v, "prices");
-    let r = run(&pos, &px, None, None, &BacktestConfig::default());
+    let r = run(&pos, &px, None, None, None, &BacktestConfig::default());
     let aaa: Vec<_> = r.trades.iter().filter(|t| t.symbol == "AAA").collect();
     assert_eq!(aaa.len(), 2);
     assert_eq!(aaa[0].entry_date, 20240102);
