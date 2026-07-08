@@ -40,8 +40,17 @@ Coverage:
 
 ```bash
 # one-time: rustup component add llvm-tools-preview && cargo install cargo-llvm-cov
-cargo llvm-cov --summary-only
+cargo llvm-cov --summary-only     # quick look
+
+bash scripts/coverage.sh          # the CI gate: fails under 95% line + region
+bash scripts/coverage.sh --html   # same, plus an HTML report in target/llvm-cov/
 ```
+
+CI enforces **≥95%** line and region coverage on the workspace (`scripts/coverage.sh`).
+The binary entry points (`crates/*/src/main.rs`) are excluded from the measurement —
+they are thin shims (arg parsing, I/O wiring, the blocking HTTP server loop) whose
+logic lives in the library crates, which are measured. New library code needs tests
+to keep the gate green.
 
 ## Code style
 

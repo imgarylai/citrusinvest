@@ -249,3 +249,118 @@ fn walkforward_warmup_captures_returns_cold_start_misses() {
         cold.total_return
     );
 }
+
+#[test]
+fn list_symbols_is_empty_when_prices_dir_is_absent() {
+    let dir = std::env::temp_dir().join("yuzu_cli_no_prices");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    // No prices/ subdir at all → empty list, not an error.
+    assert!(list_symbols(&dir).unwrap().is_empty());
+}
+
+#[test]
+fn list_symbols_skips_non_files_and_non_matching_names() {
+    let dir = fixture("mixed");
+    let prices = dir.join("prices");
+    // A subdirectory under prices/ (not a file) and a file without the .csv.gz
+    // suffix are both ignored; only AAA and BBB remain.
+    fs::create_dir_all(prices.join("nested_dir")).unwrap();
+    fs::write(prices.join("README.txt"), b"not a price file").unwrap();
+    assert_eq!(
+        list_symbols(&dir).unwrap(),
+        vec!["AAA".to_string(), "BBB".to_string()]
+    );
+}
+
+#[test]
+fn run_single_loads_volume_panel_for_the_liquidity_cap() {
+    let dir = fixture("liquidity");
+    // A non-zero cap loads the volume panel in addition to close.
+    let cfg = yuzu_core::backtest::BacktestConfig {
+        initial_capital: 1_000_000.0,
+        max_participation: 0.1,
+        ..Default::default()
+    };
+    let spec = r#"{"op":"IsLargest","of":{"op":"Data","name":"close"},"n":1}"#;
+    let report = run_single(&dir, spec, 20240102, 20240104, &cfg).unwrap();
+    assert_eq!(report.equity.len(), 3);
+}
+
+#[test]
+fn run_single_loads_a_benchmark_symbol_panel() {
+    let dir = fixture("bench");
+    // benchmark_key names a symbol (AAA) that isn't itself a panel key ("close"),
+    // so its closes are loaded into a dedicated "AAA" panel.
+    let cfg = yuzu_core::backtest::BacktestConfig {
+        benchmark_key: Some("AAA".to_string()),
+        ..Default::default()
+    };
+    let spec = r#"{"op":"IsLargest","of":{"op":"Data","name":"close"},"n":1}"#;
+    let report = run_single(&dir, spec, 20240102, 20240104, &cfg).unwrap();
+    assert!(report.benchmark.is_some());
+}
+
+#[test]
+fn sweep_ranks_by_every_sort_key() {
+    let dir = fixture("sortkeys");
+    let variants = vec![
+        (
+            "top1".to_string(),
+            r#"{"op":"IsLargest","of":{"op":"Data","name":"close"},"n":1}"#.to_string(),
+        ),
+        (
+            "all".to_string(),
+            r#"{"op":"Data","name":"close"}"#.to_string(),
+        ),
+    ];
+    for key in [
+        SortKey::Sharpe,
+        SortKey::TotalReturn,
+        SortKey::Cagr,
+        SortKey::Calmar,
+    ] {
+        let board = run_sweep(
+            &dir,
+            &variants,
+            20240102,
+            20240104,
+            &Default::default(),
+            key,
+        );
+        assert_eq!(board.len(), 2);
+        assert!(board.iter().all(|e| e.ok));
+    }
+}
+
+#[test]
+fn sweep_marks_every_variant_failed_when_the_panel_cannot_load() {
+    // `prices` is a regular file, not a directory: listing symbols errors, so the
+    // shared panel never loads and every variant reports that same load error
+    // instead of a per-variant result.
+    let dir = std::env::temp_dir().join("yuzu_cli_unreadable");
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("prices"), b"i am a file, not a directory").unwrap();
+
+    let variants = vec![
+        (
+            "a".to_string(),
+            r#"{"op":"Data","name":"close"}"#.to_string(),
+        ),
+        (
+            "b".to_string(),
+            r#"{"op":"Data","name":"close"}"#.to_string(),
+        ),
+    ];
+    let board = run_sweep(
+        &dir,
+        &variants,
+        20240102,
+        20240104,
+        &Default::default(),
+        SortKey::Sharpe,
+    );
+    assert_eq!(board.len(), 2);
+    assert!(board.iter().all(|e| !e.ok && e.error.is_some()));
+}

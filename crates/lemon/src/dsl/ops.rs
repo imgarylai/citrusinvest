@@ -607,6 +607,95 @@ mod tests {
     }
 
     #[test]
+    fn function_ops_expose_every_row_with_schema_metadata() {
+        let ops = function_ops();
+        // One OpInfo per row in the table.
+        assert_eq!(ops.len(), ROWS.len());
+
+        // sma is the canonical name for Average and carries `average` as an alias.
+        let sma = ops.iter().find(|o| o.tag == "Average").unwrap();
+        assert_eq!(sma.name, "sma");
+        assert!(sma.aliases.contains(&"average"));
+        assert!(!sma.description.is_empty());
+
+        // Every field carries a name, a known kind, and a required flag; the field
+        // kinds collectively cover the full `field_kind` match.
+        let mut kinds = std::collections::BTreeSet::new();
+        for op in &ops {
+            for f in &op.fields {
+                assert!(!f.name.is_empty());
+                assert!(matches!(
+                    f.kind,
+                    "expr" | "number" | "string" | "bool" | "list" | "list-string"
+                ));
+                kinds.insert(f.kind);
+            }
+        }
+        // The table exercises expr and number kinds at minimum.
+        assert!(kinds.contains("expr"));
+        assert!(kinds.contains("number"));
+    }
+
+    #[test]
+    fn field_defaults_match_serde() {
+        // Documented serde defaults surface through field_default…
+        assert_eq!(field_default("StochD", "d"), Some(serde_json::json!(3)));
+        assert_eq!(field_default("Rank", "pct"), Some(serde_json::json!(true)));
+        assert_eq!(
+            field_default("Neutralize", "add_const"),
+            Some(serde_json::json!(true))
+        );
+        // …and everything else has no default.
+        assert_eq!(field_default("Average", "n"), None);
+        assert_eq!(field_default("Nope", "nope"), None);
+
+        // field_default is threaded through function_ops for the defaulted fields.
+        let stoch_d = function_ops()
+            .into_iter()
+            .find(|o| o.tag == "StochD")
+            .unwrap();
+        let d_field = stoch_d.fields.iter().find(|f| f.name == "d").unwrap();
+        assert_eq!(d_field.default, Some(serde_json::json!(3)));
+    }
+
+    #[test]
+    fn field_kind_and_required_cover_every_variant() {
+        use Field::*;
+        for (f, kind, required) in [
+            (Expr("x"), "expr", true),
+            (ExprOpt("x"), "expr", false),
+            (ExprList("x"), "list", true),
+            (Num("x"), "number", true),
+            (NumOpt("x"), "number", false),
+            (BoolOpt("x"), "bool", false),
+            (Str("x"), "string", true),
+            (StrOpt("x"), "string", false),
+            (StrListOpt("x"), "list-string", false),
+        ] {
+            assert_eq!(field_name(&f), "x");
+            assert_eq!(field_kind(&f), kind);
+            assert_eq!(field_required(&f), required);
+        }
+    }
+
+    #[test]
+    fn tag_and_operator_lookups() {
+        // sig_by_tag round-trips against op_by_name.
+        assert_eq!(sig_by_tag("Average").unwrap().tag, "Average");
+        assert!(sig_by_tag("NotATag").is_none());
+
+        // binary_operators exposes the BINOPS table.
+        let ops = binary_operators();
+        assert!(ops.contains(&(">", "Gt")));
+        assert!(ops.contains(&("/", "Div")));
+        assert_eq!(ops.len(), 10);
+
+        // Unknown / operator-style tags return "" from dsl_name_for_tag (fallback arm).
+        assert_eq!(dsl_name_for_tag("TotallyUnknownTag"), "");
+        assert_eq!(prefix_tag("+"), None);
+    }
+
+    #[test]
     fn every_spec_op_has_a_signature_or_operator() {
         // The 51 op tags from spec.rs. If a new op is added, add it here AND to the
         // table/operator maps — this test is the completeness gate for this plan.
