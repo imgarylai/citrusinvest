@@ -33,15 +33,20 @@ set `lemon.server.enabled` to `false`.
 ```bash
 cd editors/vscode
 npm install
-npm run compile          # emits out/extension.js
+npm run compile          # esbuild bundle -> dist/extension.js
 ```
 
-Then press <kbd>F5</kbd> in VS Code to launch an Extension Development Host, or
-package a `.vsix` with [`vsce`](https://github.com/microsoft/vscode-vsce):
+Then press <kbd>F5</kbd> in VS Code to launch an Extension Development Host (the
+`Run Extension` launch config runs `npm run watch` for you), or package a
+`.vsix` with [`vsce`](https://github.com/microsoft/vscode-vsce):
 
 ```bash
-npx @vscode/vsce package
+npm run package          # -> lemon-lang-<version>.vsix
 ```
+
+Install the `.vsix` locally via **Extensions ▸ … ▸ Install from VSIX**, or
+publish it (`npx @vscode/vsce publish`) once you have a registered publisher and
+an Azure DevOps access token.
 
 ## Settings
 
