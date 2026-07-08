@@ -22,6 +22,10 @@ pub struct BacktestConfig {
     pub fee_ratio: f64,
     pub tax_ratio: f64,
     pub position_limit: f64,
+    /// Slippage charged per unit of turnover (both sides), on top of `fee_ratio`.
+    /// A crude stand-in for market impact / spread: `0.0005` = 5 bps per trade
+    /// leg. `0.0` (the default) disables it.
+    pub slippage_ratio: f64,
 }
 
 impl Default for BacktestConfig {
@@ -30,6 +34,7 @@ impl Default for BacktestConfig {
             fee_ratio: 0.0,
             tax_ratio: 0.0,
             position_limit: 0.0,
+            slippage_ratio: 0.0,
         }
     }
 }
@@ -232,7 +237,9 @@ pub fn run(
                 } else {
                     xp / ep
                 };
-                let net = (1.0 - cfg.fee_ratio) * gross * (1.0 - cfg.fee_ratio - cfg.tax_ratio);
+                let net = (1.0 - cfg.fee_ratio - cfg.slippage_ratio)
+                    * gross
+                    * (1.0 - cfg.fee_ratio - cfg.tax_ratio - cfg.slippage_ratio);
                 let dir = target[[er, c]].signum();
                 let (mae, mfe) = excursion(&hi, &lo, er, r, c, ep, dir);
                 trades.push(Trade {
@@ -282,7 +289,7 @@ fn rebalance_cost(drift: &[f64], target: &[f64], cfg: &BacktestConfig) -> f64 {
         .zip(target)
         .map(|(d, t)| (d - t).max(0.0))
         .sum();
-    cfg.fee_ratio * turnover + cfg.tax_ratio * sells
+    (cfg.fee_ratio + cfg.slippage_ratio) * turnover + cfg.tax_ratio * sells
 }
 
 #[cfg(test)]
@@ -333,6 +340,47 @@ mod tests {
         assert!((run.equity[0] - 1.0).abs() < 1e-12);
         assert!((run.equity[1] - 1.1).abs() < 1e-12); // +10%
         assert!((run.equity[2] - 1.2).abs() < 1e-12); // 11->12 = +9.09% on 1.1
+    }
+
+    #[test]
+    fn slippage_charges_turnover_like_a_fee() {
+        use crate::panel::Panel;
+        // Enter day 0, exit day 2: two turnover events of 1.0 each.
+        let pos = Panel::from_rows(
+            vec![20240102, 20240103, 20240104],
+            vec!["A".into()],
+            vec![vec![1.0], vec![1.0], vec![0.0]],
+        )
+        .unwrap();
+        let px = Panel::from_rows(
+            vec![20240102, 20240103, 20240104],
+            vec!["A".into()],
+            vec![vec![10.0], vec![10.0], vec![10.0]],
+        )
+        .unwrap();
+        let slip = BacktestConfig {
+            slippage_ratio: 0.001,
+            ..Default::default()
+        };
+        let r = run(&pos, &px, None, None, &slip);
+        // Flat price: equity = (1 - 0.001) entering * (1 - 0.001) exiting.
+        let want = (1.0 - 0.001) * (1.0 - 0.001);
+        assert!(
+            (r.equity[2] - want).abs() < 1e-12,
+            "equity {} want {want}",
+            r.equity[2]
+        );
+        // The closed trade's net return carries slippage on both legs.
+        let t = &r.trades[0];
+        let want_ret = (1.0 - 0.001) * 1.0 * (1.0 - 0.001) - 1.0;
+        assert!((t.ret - want_ret).abs() < 1e-12, "trade ret {}", t.ret);
+        // Identical run with slippage folded into fee_ratio matches exactly.
+        let fee = BacktestConfig {
+            fee_ratio: 0.001,
+            ..Default::default()
+        };
+        let r2 = run(&pos, &px, None, None, &fee);
+        assert_eq!(r.equity, r2.equity);
     }
 
     #[test]

@@ -105,8 +105,7 @@ pub fn run_sweep(
     };
     let cfg = BacktestConfig {
         fee_ratio,
-        tax_ratio: 0.0,
-        position_limit: 0.0,
+        ..Default::default()
     };
 
     let mut board: Vec<SweepEntry> = variants
@@ -160,8 +159,7 @@ pub fn run_single(
     let ctx = load_close(root, from, to)?;
     let cfg = BacktestConfig {
         fee_ratio,
-        tax_ratio: 0.0,
-        position_limit: 0.0,
+        ..Default::default()
     };
     run_backtest(spec_json, &ctx, "close", &cfg).map_err(|e| e.to_string())
 }
