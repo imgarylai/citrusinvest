@@ -54,9 +54,19 @@ pub struct Report {
     /// when a benchmark was supplied.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub benchmark: Option<Vec<f64>>,
+    /// Calendar-bucket return tables (chained off each bucket's closing equity).
+    pub monthly_returns: Vec<metrics::PeriodReturn>,
+    pub yearly_returns: Vec<metrics::PeriodReturn>,
+    /// Rolling 252-day annualized Sharpe / volatility, aligned to `dates`
+    /// (NaN → JSON null before the window fills).
+    pub rolling_sharpe: Vec<f64>,
+    pub rolling_volatility: Vec<f64>,
     pub trades: Vec<Trade>,
     pub metrics: Metrics,
 }
+
+/// Window (trading days) for the rolling series in [`Report`].
+pub const ROLLING_WINDOW: usize = 252;
 
 pub fn build_report(run: BacktestRun) -> Report {
     build_report_with_benchmark(run, None)
@@ -99,11 +109,19 @@ pub fn build_report_with_benchmark(run: BacktestRun, benchmark: Option<Vec<f64>>
         information_ratio: bench.map(|b| metrics::information_ratio(eq, b)),
     };
     let drawdown = metrics::drawdown_series(eq);
+    let monthly_returns = metrics::monthly_returns(dates, eq);
+    let yearly_returns = metrics::yearly_returns(dates, eq);
+    let rolling_sharpe = metrics::rolling_sharpe(eq, ROLLING_WINDOW);
+    let rolling_volatility = metrics::rolling_volatility(eq, ROLLING_WINDOW);
     Report {
         dates: run.dates,
         equity: run.equity,
         drawdown,
         benchmark,
+        monthly_returns,
+        yearly_returns,
+        rolling_sharpe,
+        rolling_volatility,
         trades: run.trades,
         metrics,
     }
@@ -173,6 +191,14 @@ mod tests {
         // no benchmark supplied -> benchmark fields absent from the JSON
         assert!(!json.contains("\"benchmark\""));
         assert!(!json.contains("\"alpha\""));
+        // calendar + rolling series are always present
+        assert_eq!(report.monthly_returns.len(), 1); // one month of data
+        assert_eq!(report.monthly_returns[0].period, "2024-01");
+        assert!((report.monthly_returns[0].ret - 0.2).abs() < 1e-9);
+        assert_eq!(report.yearly_returns[0].period, "2024");
+        assert_eq!(report.rolling_sharpe.len(), 3); // all NaN (window 252)
+        assert!(json.contains("\"monthly_returns\""));
+        assert!(json.contains("\"rolling_volatility\""));
     }
 
     #[test]
