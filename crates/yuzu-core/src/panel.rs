@@ -70,6 +70,19 @@ impl Panel {
         self.symbols.len()
     }
 
+    /// The sub-panel whose dates fall in `[from, to]` (inclusive, `YYYYMMDD`).
+    /// Symbols are unchanged; an empty range yields a zero-row panel. Dates are
+    /// sorted ascending, so the kept rows are one contiguous block.
+    pub fn slice_dates(&self, from: i32, to: i32) -> Panel {
+        let start = self.dates.partition_point(|&d| d < from);
+        let end = self.dates.partition_point(|&d| d <= to);
+        Panel {
+            dates: self.dates[start..end].to_vec(),
+            symbols: self.symbols.clone(),
+            data: self.data.slice(ndarray::s![start..end, ..]).to_owned(),
+        }
+    }
+
     pub fn shift(&self, n: usize) -> Panel {
         let mut out = Array2::from_elem(self.data.dim(), f64::NAN);
         if n < self.nrows() {
@@ -89,6 +102,22 @@ impl Panel {
 mod tests {
     use super::*;
     use ndarray::array;
+
+    #[test]
+    fn slice_dates_keeps_inclusive_range() {
+        let p = Panel::new(
+            vec![20240102, 20240103, 20240104, 20240105],
+            vec!["A".into()],
+            array![[1.0], [2.0], [3.0], [4.0]],
+        )
+        .unwrap();
+        let s = p.slice_dates(20240103, 20240104);
+        assert_eq!(s.dates, vec![20240103, 20240104]);
+        assert_eq!(s.data, array![[2.0], [3.0]]);
+        // bounds outside the range clamp; inverted range is empty
+        assert_eq!(p.slice_dates(0, 99999999).nrows(), 4);
+        assert_eq!(p.slice_dates(20240106, 20240110).nrows(), 0);
+    }
 
     #[test]
     fn new_rejects_shape_mismatch() {
