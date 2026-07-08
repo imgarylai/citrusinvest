@@ -12,7 +12,7 @@
 //! - [`print`] — the canonical formatter: JSON `Expr` → indented DSL text.
 
 mod lex;
-mod ops;
+pub mod ops;
 mod parse;
 mod print;
 

@@ -41,3 +41,14 @@ pub mod spec;
 
 pub use dsl::{format, parse, ParseError};
 pub use spec::Expr;
+
+/// Machine-readable op vocabulary: the catalog of callable ops (canonical names,
+/// aliases, tags, ordered field specs, defaults, descriptions) plus the binary
+/// operators. This is the single source of truth the schema generator
+/// (`cargo run -p lemon-lang --example gen-schema`) reads to emit
+/// `schema/op-catalog.json` and `schema/lemon-spec.schema.json`.
+pub mod meta {
+    pub use crate::dsl::ops::{
+        binary_operators, field_default, function_ops, FieldInfo, OpInfo, ALL_OP_TAGS,
+    };
+}

@@ -1,0 +1,1092 @@
+[
+  {
+    "args": [
+      {
+        "kind": "string",
+        "name": "name",
+        "required": true
+      }
+    ],
+    "description": "A raw input series by name (e.g. close, pe, revenue_growth). In DSL, a bare identifier lowers to this.",
+    "form": "leaf",
+    "name": "Data",
+    "tag": "Data"
+  },
+  {
+    "args": [
+      {
+        "kind": "number",
+        "name": "value",
+        "required": true
+      }
+    ],
+    "description": "A constant scalar value, broadcast across the panel. In DSL, a bare number operand lowers to this.",
+    "form": "leaf",
+    "name": "Const",
+    "tag": "Const"
+  },
+  {
+    "aliases": [
+      "average"
+    ],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      }
+    ],
+    "description": "Simple moving average of `of` over `n` days.",
+    "form": "function",
+    "name": "sma",
+    "tag": "Average"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      }
+    ],
+    "description": "Exponential moving average of `of` over `n` days.",
+    "form": "function",
+    "name": "ema",
+    "tag": "Ema"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      }
+    ],
+    "description": "Rolling standard deviation of `of` over `n` days.",
+    "form": "function",
+    "name": "std",
+    "tag": "Std"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      }
+    ],
+    "description": "Relative Strength Index of `of` over `n` days.",
+    "form": "function",
+    "name": "rsi",
+    "tag": "Rsi"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      }
+    ],
+    "description": "Percentage change of `of` over `n` days.",
+    "form": "function",
+    "name": "pct_change",
+    "tag": "PctChange"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      }
+    ],
+    "description": "1 where `of` rose for `n` consecutive days, else 0.",
+    "form": "function",
+    "name": "rise",
+    "tag": "Rise"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      }
+    ],
+    "description": "1 where `of` fell for `n` consecutive days, else 0.",
+    "form": "function",
+    "name": "fall",
+    "tag": "Fall"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      }
+    ],
+    "description": "`of` lagged forward by `n` days.",
+    "form": "function",
+    "name": "shift",
+    "tag": "Shift"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      }
+    ],
+    "description": "Rolling maximum of `of` over `n` days.",
+    "form": "function",
+    "name": "rolling_max",
+    "tag": "RollingMax"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "high",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "low",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "close",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      }
+    ],
+    "description": "Average True Range over `n` days from high/low/close.",
+    "form": "function",
+    "name": "atr",
+    "tag": "Atr"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "high",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "low",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "close",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      }
+    ],
+    "description": "Normalized ATR (percent) over `n` days.",
+    "form": "function",
+    "name": "natr",
+    "tag": "Natr"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "high",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "low",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "close",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      }
+    ],
+    "description": "Williams %R over `n` days.",
+    "form": "function",
+    "name": "willr",
+    "tag": "WillR"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "high",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "low",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "close",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      }
+    ],
+    "description": "Commodity Channel Index over `n` days.",
+    "form": "function",
+    "name": "cci",
+    "tag": "Cci"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "high",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "low",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "close",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      }
+    ],
+    "description": "Stochastic %K over `n` days.",
+    "form": "function",
+    "name": "stoch_k",
+    "tag": "StochK"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "high",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "low",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "close",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      },
+      {
+        "default": 3,
+        "kind": "number",
+        "name": "d",
+        "required": false
+      }
+    ],
+    "description": "Stochastic %D: `d`-day average of %K over `n` days (d defaults to 3).",
+    "form": "function",
+    "name": "stoch_d",
+    "tag": "StochD"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "high",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      }
+    ],
+    "description": "Aroon Up over `n` days from high.",
+    "form": "function",
+    "name": "aroon_up",
+    "tag": "AroonUp"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "low",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      }
+    ],
+    "description": "Aroon Down over `n` days from low.",
+    "form": "function",
+    "name": "aroon_down",
+    "tag": "AroonDown"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "high",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "low",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "close",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      }
+    ],
+    "description": "Average Directional Index over `n` days.",
+    "form": "function",
+    "name": "adx",
+    "tag": "Adx"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "high",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "low",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "close",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      }
+    ],
+    "description": "Plus Directional Indicator (+DI) over `n` days.",
+    "form": "function",
+    "name": "plus_di",
+    "tag": "PlusDi"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "high",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "low",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "close",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      }
+    ],
+    "description": "Minus Directional Indicator (-DI) over `n` days.",
+    "form": "function",
+    "name": "minus_di",
+    "tag": "MinusDi"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "close",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "volume",
+        "required": true
+      }
+    ],
+    "description": "On-Balance Volume from close and volume.",
+    "form": "function",
+    "name": "obv",
+    "tag": "Obv"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "high",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "low",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "close",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "volume",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      }
+    ],
+    "description": "Money Flow Index over `n` days.",
+    "form": "function",
+    "name": "mfi",
+    "tag": "Mfi"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "high",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "low",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "close",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "volume",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      }
+    ],
+    "description": "Volume-Weighted Average Price over `n` days from high/low/close/volume.",
+    "form": "function",
+    "name": "vwap",
+    "tag": "Vwap"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      }
+    ],
+    "description": "1 for the `n` highest values per row (cross-section), else 0.",
+    "form": "function",
+    "name": "is_largest",
+    "tag": "IsLargest"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      }
+    ],
+    "description": "1 for the `n` lowest values per row (cross-section), else 0.",
+    "form": "function",
+    "name": "is_smallest",
+    "tag": "IsSmallest"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "nwindow",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "nsatisfy",
+        "required": false
+      }
+    ],
+    "description": "1 where `of` held true at least `nsatisfy` times within the last `nwindow` rows.",
+    "form": "function",
+    "name": "sustain",
+    "tag": "Sustain"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      }
+    ],
+    "description": "1 on the row where `of` turns false->true (rising edge).",
+    "form": "function",
+    "name": "is_entry",
+    "tag": "IsEntry"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      }
+    ],
+    "description": "1 on the row where `of` turns true->false (falling edge).",
+    "form": "function",
+    "name": "is_exit",
+    "tag": "IsExit"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      }
+    ],
+    "description": "Ceiling of `of`.",
+    "form": "function",
+    "name": "ceil",
+    "tag": "Ceil"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "default": true,
+        "kind": "bool",
+        "name": "pct",
+        "required": false
+      },
+      {
+        "default": true,
+        "kind": "bool",
+        "name": "ascending",
+        "required": false
+      }
+    ],
+    "description": "Cross-sectional rank of `of` per row; `pct` for 0..1 percentile (default true), `ascending` sets direction (default true).",
+    "form": "function",
+    "name": "rank",
+    "tag": "Rank"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "by",
+        "required": true
+      }
+    ],
+    "description": "`of` kept only where `by` is true; elsewhere dropped.",
+    "form": "function",
+    "name": "mask",
+    "tag": "Mask"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "entry",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "exit",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "nstocks_limit",
+        "required": false
+      },
+      {
+        "kind": "expr",
+        "name": "rank",
+        "required": false
+      },
+      {
+        "kind": "number",
+        "name": "stop_loss",
+        "required": false
+      },
+      {
+        "kind": "number",
+        "name": "take_profit",
+        "required": false
+      },
+      {
+        "kind": "number",
+        "name": "trail_stop",
+        "required": false
+      },
+      {
+        "kind": "number",
+        "name": "trail_stop_activation",
+        "required": false
+      }
+    ],
+    "description": "Stateful rotation: enter on `entry`, exit on `exit`, hold up to `nstocks_limit` (prioritised by `rank`), with optional stop_loss/take_profit/trail_stop/trail_stop_activation.",
+    "form": "function",
+    "name": "hold_until",
+    "tag": "HoldUntil"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "kind": "string",
+        "name": "freq",
+        "required": false
+      },
+      {
+        "kind": "expr",
+        "name": "on",
+        "required": false
+      }
+    ],
+    "description": "Hold `of`, refreshing on calendar `freq` (W/ME/QE) or on dates where `on` is true.",
+    "form": "function",
+    "name": "rebalance",
+    "tag": "Rebalance"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "kind": "list",
+        "name": "by",
+        "required": true
+      },
+      {
+        "default": true,
+        "kind": "bool",
+        "name": "add_const",
+        "required": false
+      }
+    ],
+    "description": "Cross-sectionally regress `of` against the `by` factors, optionally adding a constant (default true).",
+    "form": "function",
+    "name": "neutralize",
+    "tag": "Neutralize"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "default": true,
+        "kind": "bool",
+        "name": "add_const",
+        "required": false
+      }
+    ],
+    "description": "Neutralize `of` within each industry/sector (add_const defaults to true).",
+    "form": "function",
+    "name": "neutralize_industry",
+    "tag": "NeutralizeIndustry"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "kind": "list-string",
+        "name": "categories",
+        "required": false
+      }
+    ],
+    "description": "Rank `of` within each industry, optionally limited to `categories`.",
+    "form": "function",
+    "name": "industry_rank",
+    "tag": "IndustryRank"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "kind": "string",
+        "name": "agg",
+        "required": true
+      }
+    ],
+    "description": "Aggregate `of` within each industry using `agg` (e.g. mean).",
+    "form": "function",
+    "name": "groupby_category",
+    "tag": "GroupbyCategory"
+  },
+  {
+    "args": [
+      {
+        "kind": "expr",
+        "name": "l",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "r",
+        "required": true
+      }
+    ],
+    "description": "1 where `l` is greater than `r`, else 0.",
+    "form": "operator",
+    "name": ">",
+    "tag": "Gt"
+  },
+  {
+    "args": [
+      {
+        "kind": "expr",
+        "name": "l",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "r",
+        "required": true
+      }
+    ],
+    "description": "1 where `l` is less than `r`, else 0.",
+    "form": "operator",
+    "name": "<",
+    "tag": "Lt"
+  },
+  {
+    "args": [
+      {
+        "kind": "expr",
+        "name": "l",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "r",
+        "required": true
+      }
+    ],
+    "description": "1 where `l` is greater than or equal to `r`, else 0.",
+    "form": "operator",
+    "name": ">=",
+    "tag": "Ge"
+  },
+  {
+    "args": [
+      {
+        "kind": "expr",
+        "name": "l",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "r",
+        "required": true
+      }
+    ],
+    "description": "1 where `l` is less than or equal to `r`, else 0.",
+    "form": "operator",
+    "name": "<=",
+    "tag": "Le"
+  },
+  {
+    "args": [
+      {
+        "kind": "expr",
+        "name": "l",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "r",
+        "required": true
+      }
+    ],
+    "description": "Logical AND of two boolean panels.",
+    "form": "operator",
+    "name": "and",
+    "tag": "And"
+  },
+  {
+    "args": [
+      {
+        "kind": "expr",
+        "name": "l",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "r",
+        "required": true
+      }
+    ],
+    "description": "Logical OR of two boolean panels.",
+    "form": "operator",
+    "name": "or",
+    "tag": "Or"
+  },
+  {
+    "args": [
+      {
+        "kind": "expr",
+        "name": "l",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "r",
+        "required": true
+      }
+    ],
+    "description": "Element-wise `l` + `r`.",
+    "form": "operator",
+    "name": "+",
+    "tag": "Add"
+  },
+  {
+    "args": [
+      {
+        "kind": "expr",
+        "name": "l",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "r",
+        "required": true
+      }
+    ],
+    "description": "Element-wise `l` - `r`.",
+    "form": "operator",
+    "name": "-",
+    "tag": "Sub"
+  },
+  {
+    "args": [
+      {
+        "kind": "expr",
+        "name": "l",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "r",
+        "required": true
+      }
+    ],
+    "description": "Element-wise `l` * `r`.",
+    "form": "operator",
+    "name": "*",
+    "tag": "Mul"
+  },
+  {
+    "args": [
+      {
+        "kind": "expr",
+        "name": "l",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "r",
+        "required": true
+      }
+    ],
+    "description": "Element-wise `l` / `r`.",
+    "form": "operator",
+    "name": "/",
+    "tag": "Div"
+  },
+  {
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      }
+    ],
+    "description": "Negation (-`of`).",
+    "form": "operator",
+    "name": "-",
+    "tag": "Neg",
+    "unary": true
+  }
+]
