@@ -206,10 +206,15 @@ fn build_spec_schema() -> Value {
         ));
     }
 
-    // Unary negation.
+    // Unary operators.
     branches.push(op_object_schema(
         "Neg",
         "Negation (-`of`).",
+        &[("of", "expr", true)],
+    ));
+    branches.push(op_object_schema(
+        "Not",
+        "Logical NOT of a boolean panel (NaN is falsy, so `not` of NaN is 1).",
         &[("of", "expr", true)],
     ));
 

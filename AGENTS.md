@@ -28,8 +28,8 @@ MSRV: **1.86**. Edition 2021.
 If you generate or modify strategy code, **read [`docs/lemon.md`](docs/lemon.md)** — the full
 language reference. The sharp edges that trip up generators:
 
-- There is **no** `==`, `!=`, `&`, `|`, or `!`. Logical AND/OR are the words `and` / `or`;
-  comparisons (`> < >= <=`) output `1.0`/`0.0`.
+- There is **no** `==`, `!=`, `&`, `|`, or `!`. Logical AND/OR/NOT are the words
+  `and` / `or` / `not`; comparisons (`> < >= <=`) output `1.0`/`0.0`.
 - Function calls take **positional args first, then keyword args** (`fn(x, n=3)`).
 - List literals `[a, b]` exist **only** inside a call argument.
 - An **unknown bare identifier silently becomes a data-series reference** — typos are not caught
@@ -45,7 +45,8 @@ Machine-readable references for tool-use / structured output:
 - A compact prompt-ready cheat sheet: [`docs/lemon-prompt.md`](docs/lemon-prompt.md).
 
 Validate generated lemon with the parser (`lemon::parse(src)` returns `ParseError { line, col, msg }`)
-or the `lemon fmt` binary — feed it back to self-correct.
+or the `lemon fmt` binary — feed it back to self-correct. `lemon lint --series close,pe,…`
+additionally flags unknown series names (typos become silent `Data` leaves) and unused `let`s.
 
 ## Conventions
 
