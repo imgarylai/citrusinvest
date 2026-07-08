@@ -67,6 +67,11 @@
           "default": true,
           "description": "Enable the lemon language server (hover, completion, diagnostics). Disable to use syntax highlighting only."
         },
+        "lemon.server.autoDownload": {
+          "type": "boolean",
+          "default": true,
+          "description": "When lemon-lsp is not found on PATH, download the matching prebuilt binary from GitHub Releases and cache it. Disable to require a manually installed server (see lemon.server.path)."
+        },
         "lemon.series": {
           "type": "array",
           "items": {

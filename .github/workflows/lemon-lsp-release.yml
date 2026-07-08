@@ -1,0 +1,93 @@
+name: lemon-lsp binaries
+
+# Cross-compile the `lemon-lsp` language server for every VS Code target and
+# attach the binaries to a GitHub Release. The VS Code extension scans releases
+# newest-first for the first one carrying its platform's binary, so it does not
+# matter which tag they land on — only that they are attached to some release.
+#
+# release-plz cuts per-crate releases (e.g. `lemon-lang-v0.2.0`) with the default
+# GITHUB_TOKEN, which does NOT cascade into other workflows (GitHub's recursion
+# guard). So the primary path is:
+#   - workflow_dispatch — run by hand with an existing release tag (e.g.
+#     `lemon-lang-v0.2.0`); the binaries are built from that tag and uploaded.
+#   - release: published — also handled, for manually-published releases.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build and attach binaries to (e.g. v0.2.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.vscode }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            vscode: linux-x64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            vscode: linux-arm64
+            cross: true
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            vscode: darwin-x64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            vscode: darwin-arm64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            vscode: win32-x64
+            ext: ".exe"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Build from the tagged source so each binary matches its release.
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross linker (aarch64 linux)
+        if: matrix.cross
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+          echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: cargo build --release -p lemon-lsp --target ${{ matrix.target }}
+
+      - name: Package binary + checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          bin="target/${{ matrix.target }}/release/lemon-lsp${{ matrix.ext }}"
+          asset="lemon-lsp-${{ matrix.vscode }}${{ matrix.ext }}"
+          cp "$bin" "$asset"
+          if command -v sha256sum >/dev/null; then
+            sha256sum "$asset" > "$asset.sha256"
+          else
+            shasum -a 256 "$asset" > "$asset.sha256"
+          fi
+
+      - name: Upload to release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          set -euo pipefail
+          asset="lemon-lsp-${{ matrix.vscode }}${{ matrix.ext }}"
+          gh release upload "$TAG" "$asset" "$asset.sha256" --clobber --repo "$GITHUB_REPOSITORY"
