@@ -356,7 +356,8 @@ carry it on both legs too.
 `position_limit = 0.0` (uncapped), `slippage_ratio = 0.0`,
 `initial_capital = 0.0` / `max_participation = 0.0` (liquidity cap off),
 `delist_after = 0` (delisting handling off), `delist_haircut = 0.0`,
-`benchmark_key = None`.
+`benchmark_key = None`, `bootstrap_samples = 0` (bootstrap off) /
+`bootstrap_block = 0` (auto `⌊√n⌋`).
 
 ---
 
@@ -401,6 +402,18 @@ its first observation):
 | `tracking_error`    | `std(r − b, ddof = 1) · sqrt(252)`                                |
 | `information_ratio` | `mean(r − b) / std(r − b, ddof = 1) · sqrt(252)`                  |
 
+**Calendar & rolling series** (always emitted): `monthly_returns` /
+`yearly_returns` are calendar buckets chained off each bucket's closing equity
+(`[{"period": "2024-01", "ret": 0.021}, …]`); `rolling_sharpe` /
+`rolling_volatility` are 252-day rolling series aligned to `dates` (NaN → JSON
+`null` during warmup).
+
+**Bootstrap bands** (only when `bootstrap_samples > 0`): a circular block
+bootstrap over the daily returns (block length `bootstrap_block`, `0` = auto
+`⌊√n⌋`; deterministic fixed-seed PRNG) rebuilds `bootstrap_samples` synthetic
+equity curves and reports p05/p50/p95 for Sharpe, CAGR, and max drawdown under
+`report.bootstrap`.
+
 Global conventions: annualization factor **252**, risk-free rate **0**,
 `std` uses **ddof = 1**.
 `year_frac = (end − start).total_seconds() / 31_557_600` (Julian year).
@@ -425,6 +438,16 @@ renders charts and tables.
   "equity":   [1.0, 1.02, ...],            // NAV, same length as dates
   "drawdown": [0.0, -0.01, ...],           // fraction below peak, same length
   "benchmark": [1.0, 1.01, ...],           // rebased benchmark curve — only when benchmark_key is set
+  "monthly_returns": [{ "period": "2024-01", "ret": 0.021 }, ...],
+  "yearly_returns":  [{ "period": "2024", "ret": 0.18 }, ...],
+  "rolling_sharpe":     [null, ..., 1.2],  // 252-day window; null during warmup
+  "rolling_volatility": [null, ..., 0.14],
+  "bootstrap": {                           // only when bootstrap_samples > 0
+    "n_samples": 1000, "block_len": 15,
+    "sharpe":       { "p05": 0.4, "p50": 1.1, "p95": 1.9 },
+    "cagr":         { "p05": -0.02, "p50": 0.12, "p95": 0.31 },
+    "max_drawdown": { "p05": -0.28, "p50": -0.14, "p95": -0.07 }
+  },
   "trades": [
     {
       "symbol":     "AAPL",
@@ -486,6 +509,33 @@ renders charts and tables.
 
 ---
 
+### Parameter grids & walk-forward (yuzu-cli)
+
+The batch CLI can expand a **parameter grid** and run research workflows over
+it. A grid file is a spec template plus value lists — any JSON string equal to
+`"$name"` inside the spec is substituted:
+
+```jsonc
+{
+  "spec": { "op": "IsLargest", "of": { "op": "Data", "name": "close" }, "n": "$n" },
+  "params": { "n": [10, 20, 50] }
+}
+```
+
+- `yuzu-cli grid --data D --grid g.json [--sort sharpe] [--top 20]` — expand
+  the cartesian product (variant names like `"n=20"`) and emit a ranked
+  leaderboard (same output as `sweep`).
+- `yuzu-cli walkforward --data D --grid g.json --train-days 504 --test-days 126
+  [--sort sharpe]` — roll an in-sample/out-of-sample window over the trading-day
+  axis: pick the best variant on each train slice, run it on the following test
+  slice, and chain the out-of-sample equity into one curve. Output: per-window
+  selection table (`chosen`, `in_sample_metric`, `oos_return`) plus the stitched
+  OOS `equity`/`dates` and summary metrics. Each window starts cold (no
+  indicator warmup carry-over) — an identical handicap for every variant.
+
+All `BacktestConfig` flags (fees, slippage, liquidity cap, delisting,
+benchmark, bootstrap) apply to these commands too.
+
 ### Deferred (not yet modeled)
 
 These items are explicit scope cuts, not gaps:
@@ -493,8 +543,9 @@ These items are explicit scope cuts, not gaps:
 - **Advanced cost semantics** (`touched_exit` / `retain_cost_when_rebalance` / `stop_trading_next_period`) — the engine currently uses the simplified model described above.
 - **Volume-aware slippage** — `slippage_ratio` is a flat per-leg haircut; an impact model that scales with participation is future work.
 - **Portfolio optimization** (mean-variance, risk parity, etc.).
-- **Monthly / yearly metric tiers** (rolling windows, calendar buckets).
-- **Walk-forward / parameter-grid tooling** — `yuzu-cli sweep` ranks hand-supplied variants; grid generation and in/out-of-sample splits are future work.
+- **Walk-forward warmup carry-over** — `yuzu-cli walkforward` starts each
+  window cold (indicators re-warm inside the slice) and the chained OOS curve
+  skips the one-day gap return at each window boundary.
 
 Per-trade **MAE / MFE** (maximum adverse / favorable excursion) and factor
 **neutralization** (`neutralize` / `neutralize_industry` / `industry_rank` /
