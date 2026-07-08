@@ -1,0 +1,13 @@
+# yuzu-source-s3
+
+[![crates.io](https://img.shields.io/crates/v/yuzu-source-s3)](https://crates.io/crates/yuzu-source-s3)
+
+S3-compatible `ObjectSource` for [`yuzu-data`](https://crates.io/crates/yuzu-data),
+reading objects over SigV4-presigned HTTPS GETs. Part of
+[citrusinvest](https://github.com/imgarylai/citrusinvest).
+
+See the [engine docs](https://github.com/imgarylai/citrusinvest/blob/main/docs/backtest-engine.md).
+
+## License
+
+MIT

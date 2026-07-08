@@ -1,6 +1,6 @@
 # citrusinvest engine
 
-![license](https://img.shields.io/badge/license-MIT-blue) ![rust](https://img.shields.io/badge/rust-2021-orange)
+[![yuzu-core](https://img.shields.io/crates/v/yuzu-core?label=yuzu-core)](https://crates.io/crates/yuzu-core) [![lemon-lang](https://img.shields.io/crates/v/lemon-lang?label=lemon-lang)](https://crates.io/crates/lemon-lang) ![license](https://img.shields.io/badge/license-MIT-blue) ![rust](https://img.shields.io/badge/rust-2021-orange)
 
 The open-source Rust backtest + strategy engine behind **citrusinvest** — the
 **yuzu** backtest core plus the **lemon** strategy DSL. Pure, I/O-free math:
@@ -16,6 +16,17 @@ yuzu_core::run_backtest(spec_json, ctx, price_key, cfg) -> Result<Report, Engine
 
 Architecture, DSL vocabulary, NAV model, metric conventions, and the Report JSON
 contract live in [`docs/backtest-engine.md`](docs/backtest-engine.md).
+
+## Published crates
+
+| Crate | Description |
+|-------|-------------|
+| [`yuzu-core`](https://crates.io/crates/yuzu-core) | Pure, I/O-free backtest engine core. |
+| [`yuzu-data`](https://crates.io/crates/yuzu-data) | Native I/O: gzip CSV price/fundamental files → panels. |
+| [`yuzu-source-s3`](https://crates.io/crates/yuzu-source-s3) | S3-compatible `ObjectSource` for `yuzu-data`. |
+| [`lemon-lang`](https://crates.io/crates/lemon-lang) | The lemon strategy DSL (imported as `lemon`). |
+
+The `wasm`/`cli`/`server` crates are not published.
 
 ## Build
 
