@@ -56,5 +56,24 @@ cargo llvm-cov --summary-only
 - Make sure `cargo build --workspace`, `cargo test`, and `cargo fmt --check`
   pass before opening the PR.
 
+## Releases
+
+Releases are automated with [release-plz](https://release-plz.dev/) — every push to
+`main` runs it.
+
+- **Contributors:** nothing to do beyond Conventional Commits. `feat:` → minor,
+  `fix:`/`perf:` → patch; `docs`/`chore`/`refactor`/`test`/`ci` don't trigger a release.
+- **Maintainers:** release-plz keeps an open **"release" PR** that bumps the crate
+  `version` fields and updates `CHANGELOG.md`. Merge it to tag, publish a GitHub
+  release, and push the library crates to crates.io. That PR auto-regenerates on
+  every push to `main`, so merge order relative to feature PRs doesn't matter — it
+  always accumulates everything since the last release.
+- **Don't** hand-edit crate `version` fields — release-plz owns them (a manual bump
+  would publish immediately instead of going through the release PR).
+
+Published library crates: `yuzu-core`, `yuzu-data`, `yuzu-source-s3`, and `lemon-lang`
+(the `lemon` crate — still imported as `lemon` — publishes under the name `lemon-lang`).
+The wasm/CLI/server crates are `publish = false`.
+
 By contributing you agree that your contributions are licensed under the MIT
 License (see [`LICENSE`](LICENSE)).
