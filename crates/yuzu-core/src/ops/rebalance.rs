@@ -10,6 +10,7 @@ pub enum Freq {
     Weekly,
     MonthEnd,
     QuarterEnd,
+    YearEnd,
 }
 
 fn to_naive(yyyymmdd: i32) -> NaiveDate {
@@ -28,6 +29,7 @@ fn period_key(d: i32, freq: Freq) -> i64 {
         }
         Freq::MonthEnd => nd.year() as i64 * 100 + nd.month() as i64,
         Freq::QuarterEnd => nd.year() as i64 * 10 + ((nd.month() as i64 - 1) / 3),
+        Freq::YearEnd => nd.year() as i64,
     }
 }
 
