@@ -1,65 +1,63 @@
-# backtest-engine — Rust strategy DSL + backtest core
+# citrusinvest — Rust strategy DSL + backtest engine
 
-A Rust workspace at `packages/backtest-engine/` for **US stocks**: build a
-strategy in the **Lemon** DSL, evaluate it over price/fundamental data, and
-backtest it.
+A Rust workspace for **US stocks**: build a strategy in the **Lemon** DSL,
+evaluate it over price/fundamental data, and backtest it. This is the engine
+behind citrusinvest — the repo root is the Cargo workspace.
 
-> **Why Rust, not the existing TS quant layer?** The engine must run two ways from
-> one codebase: in the browser/Worker via **WASM**, and as a native batch binary on
-> AWS (large-scale backtests via Rayon). The behavior is pinned by golden tests.
-
-Full design rationale: [`docs/superpowers/specs/2026-06-18-rust-backtest-engine-design.md`](./superpowers/specs/2026-06-18-rust-backtest-engine-design.md).
-This page is the living overview; the spec is the frozen decision record.
+> **Why Rust?** The engine runs two ways from one codebase: in the browser/Worker
+> via **WASM**, and as a native batch binary (large-scale backtests via Rayon).
+> The behavior is pinned by golden tests.
 
 ---
 
 ## Workspace layout
 
 ```
-packages/backtest-engine/
-  Cargo.toml                 # workspace (members = crates/*)
-  crates/lemon/              # the Lemon DSL — human-writable text ⇄ JSON Expr tree
-    src/
-      spec.rs                # Expr AST (serde-deserializable strategy tree)
-      dsl/
-        lex.rs               # tokenizer
-        parse.rs             # text → JSON Expr (Pratt; `let` = parse-time inlining)
-        print.rs             # JSON Expr → text (flat; lossy — no let/comment reconstruction)
-        ops.rs               # op vocabulary: DSL names ⇄ Expr tags + field layout
-  crates/yuzu-core/          # pure, I/O-free evaluator — re-exports `lemon::spec`
-    src/
-      panel.rs               # Panel type (dates × symbols f64 matrix) + shift
-      align.rs               # align(a,b): union rows, intersect cols
-      error.rs               # EngineError
-      ops/                   # one file per op family: arith, indicators, ta,
-                             #   cross_section, signals, rotation, rebalance,
-                             #   neutralize, linalg
-      eval.rs                # eval(Expr) + run_strategy(json) + run_backtest(...)
-    tests/
-      golden/                # committed *.json fixtures (expected outputs)
-      golden_harness.rs      # load_golden / panel_from_json / assert_panel_eq
-      golden_ops.rs          # per-op golden tests
-      strategy_e2e.rs        # full spec → position matrix golden
-  crates/yuzu-data/          # native-only OHLCV loader (Phase 1b-A — see below)
-  crates/yuzu-wasm/          # browser/Worker bindings (run_backtest_json)
-  crates/yuzu-cli/           # native batch binary
-  crates/lemon-wasm/         # browser Lemon parse/format (powers the web editor)
+Cargo.toml                 # workspace (members = crates/*)
+crates/lemon/              # the Lemon DSL — human-writable text ⇄ JSON Expr tree
+  src/
+    spec.rs                # Expr AST (serde-deserializable strategy tree)
+    dsl/
+      lex.rs               # tokenizer
+      parse.rs             # text → JSON Expr (Pratt; `let` = parse-time inlining)
+      print.rs             # JSON Expr → text (flat; lossy — no let/comment reconstruction)
+      ops.rs               # op vocabulary: DSL names ⇄ Expr tags + field layout
+crates/lemon-wasm/         # Lemon parse/format over WASM (powers the web editor)
+crates/yuzu-core/          # pure, I/O-free evaluator — re-exports `lemon::spec`
+  src/
+    panel.rs               # Panel type (dates × symbols f64 matrix) + shift
+    align.rs               # align(a,b): union rows, intersect cols
+    error.rs               # EngineError
+    ops/                   # one file per op family: arith, indicators, ta,
+                           #   cross_section, signals, rotation, rebalance,
+                           #   neutralize, linalg
+    eval.rs                # eval(Expr) + run_strategy(json) + run_backtest(...)
+  tests/
+    golden/                # committed *.json fixtures (expected outputs)
+    golden_harness.rs      # load_golden / panel_from_json / assert_panel_eq
+    golden_ops.rs          # per-op golden tests
+    strategy_e2e.rs        # full spec → position matrix golden
+    strategy_backtest_e2e.rs  # full spec → backtest report golden
+crates/yuzu-data/          # native I/O layer: OHLCV + fundamentals loaders (see below)
+crates/yuzu-source-s3/     # generic S3 ObjectSource for yuzu-data
+crates/yuzu-wasm/          # browser/Worker bindings (run_backtest_json)
+crates/yuzu-server/        # native backtest server core (source-agnostic handle_backtest)
+crates/yuzu-cli/           # native batch binary
 ```
 
 **Two families.** `lemon-*` is the **language** (text ⇄ Expr tree); `yuzu-*` is the
-**engine** (evaluate → backtest, plus the native data loader). `spec.rs` (the `Expr`
-AST) lives in `lemon` and is re-exported by `yuzu-core` (`pub use lemon::spec`), so
-both the parser and the evaluator agree on one tree shape. The user-facing language
-guide is at `/docs/lemon`; this page is the engine internals.
+**engine** (evaluate → backtest, plus data loading, server, and CLI). `spec.rs` (the
+`Expr` AST) lives in `lemon` and is re-exported by `yuzu-core` (`pub use lemon::spec`),
+so both the parser and the evaluator agree on one tree shape.
 
 ---
 
-## Data loader (Phase 1b-A, yuzu-data)
+## Data loader (yuzu-data)
 
-`crates/yuzu-data/` is a **native-only** crate that reads per-symbol OHLCV price
-files from disk (or any `ObjectSource` implementation) and returns a `Panel` ready for
-the evaluator. It depends on `yuzu-core`; `yuzu-core` never depends on it (keeping
-the WASM build I/O-free).
+`crates/yuzu-data/` is a **native** crate that reads per-symbol OHLCV price
+files (plus fundamentals/industry) from disk or any `ObjectSource` implementation
+and returns a `Panel` ready for the evaluator. It depends on `yuzu-core`;
+`yuzu-core` never depends on it (keeping the WASM build I/O-free).
 
 ### File contract
 
@@ -95,21 +93,23 @@ pub trait ObjectSource {
 ```
 
 `key` is the relative path (`prices/AAPL.csv.gz`). Returning `Ok(None)` means the
-file doesn't exist; `load_panel` treats a missing file as an all-NaN column.
+file doesn't exist; `load_panel` treats a missing file as an all-NaN column. A
+sibling `ObjectSink` trait (`fn put(&self, key, bytes)`) covers writes.
 
-**`LocalSource`** is the only implementation shipped in this crate. It resolves keys
-under a root directory on the local filesystem — used by tests, the CLI, and offline
-development. An R2/S3 adapter is deferred to the batch runner (Phase 1d).
+**`LocalSource`** resolves keys under a root directory on the local filesystem —
+used by tests, the CLI, and offline development. The `yuzu-source-s3` crate ships a
+generic S3-backed `ObjectSource` for the batch runner.
 
 ### `load_panel`
 
 ```rust
-pub fn load_panel<S: ObjectSource>(
+pub fn load_panel<S: ObjectSource + Sync>(
     source: &S,
     symbols: &[String],
     field: Field,
     from: i32,
     to: i32,
+    dir: &str,
 ) -> Result<Panel, DataError>
 ```
 
@@ -117,18 +117,22 @@ pub fn load_panel<S: ObjectSource>(
   `Field::AdjOpen`, `Field::AdjHigh`, `Field::AdjLow`, `Field::AdjClose`,
   or `Field::Volume`.
 - `from` / `to` — inclusive date bounds in `YYYYMMDD`.
+- `dir` — the key prefix under which per-symbol files live; defaults to
+  `PRICES_DIR` (`"prices"`) at call sites.
 - Returns a `Panel` whose rows are the **union** of all dates that appear in any
   symbol's file within `[from, to]`, and whose columns are `symbols` in the given order.
 - Cells absent in a symbol's file become `NaN`; a symbol with no file at all becomes
-  an all-NaN column.
+  an all-NaN column. Symbols are fetched concurrently; a corrupt file is treated as
+  missing rather than sinking the batch.
 
 Top-level re-exports (use as `yuzu_data::load_panel`, `yuzu_data::Field`,
-`yuzu_data::OhlcvRow`, `yuzu_data::LocalSource`, `yuzu_data::ObjectSource`):
+`yuzu_data::OhlcvRow`, `yuzu_data::LocalSource`, `yuzu_data::ObjectSource`,
+`yuzu_data::PRICES_DIR`):
 
 ```rust
 pub use csv_io::{Field, OhlcvRow};
-pub use loader::load_panel;
-pub use source::{LocalSource, ObjectSource};
+pub use loader::{load_panel, PRICES_DIR};
+pub use source::{LocalSource, ObjectSink, ObjectSource};
 ```
 
 ---
@@ -141,7 +145,7 @@ One type carries everything. A `Panel` is a dense `f64` matrix with:
 - `symbols: Vec<String>` — column index (tickers).
 - `data: Array2<f64>` — the values; **`NaN` means missing**.
 
-Conventions that match numpy/pandas:
+Element-wise conventions:
 
 - **Booleans** live in the same `f64` matrix as `1.0` (true) / `0.0` (false). `NaN` is falsy. Truthiness is `x == 1.0`.
 - **Arithmetic** propagates `NaN`. **Comparisons** involving `NaN` yield `false` (`0.0`).
@@ -149,11 +153,11 @@ Conventions that match numpy/pandas:
 
 ---
 
-## DSL vocabulary (Phase 1a-1)
+## DSL vocabulary
 
 Semantics are pinned by golden fixtures (committed expected outputs). The table below names ops
-by their semantics; their **Lemon surface names** (e.g. `average` → `sma`/`average`,
-`rank_cs` → `rank`) and call signatures are at `/docs/lemon`.
+by their semantics; the **Lemon surface names** map through `lemon/src/dsl/ops.rs`
+(e.g. `average` → `sma`/`average`, `rank_cs` → `rank`).
 
 | Op                                 | Meaning                                                                                                               |
 | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
@@ -169,23 +173,25 @@ by their semantics; their **Lemon surface names** (e.g. `average` → `sma`/`ave
 | `quantile_row(c)`                  | per-row quantile across columns, linear interpolation                                                                 |
 | arithmetic / comparison / logical  | `+ - * /`, `> >= < <= == !=`, `& \| !`, scalar variants                                                               |
 
-`exit_when` is implemented but not yet exposed in the `Expr` AST.
+`exit_when` and `quantile_row` are implemented as `Panel` ops (golden-tested) but
+are not yet exposed as `Expr` AST variants / DSL surface names.
 
 OHLCV technical indicators (`atr`, `natr`, `cci`, `aroon`, `stoch`, `adx`/`±di`,
 `obv`, `mfi`, `willr`, and `vwap` = rolling-`n` `Σ(tp·vol)/Σvol` over typical
-price `(H+L+C)/3`) live in `ops/ta.rs`; the full per-op reference is generated from
-`lemon/src/spec.rs` (fields) + `lemon/src/dsl/ops.rs` (DSL names) into the web app's
-op-reference table (`pnpm cli gen:op-docs`).
+price `(H+L+C)/3`) live in `ops/ta.rs`; the per-op reference is the pairing of
+`lemon/src/spec.rs` (Expr fields) with `lemon/src/dsl/ops.rs` (DSL names).
 
 ---
 
 ## Strategy spec: the `Expr` AST
 
 A strategy is a **serializable JSON tree** (`spec.rs`, in the `lemon` crate), so the
-website and the batch runner produce the same artifact. It is what **Lemon** text
+WASM (browser/Worker) path and the native batch runner produce the same artifact.
+It is what **Lemon** text
 compiles to — authors write `close > sma(close, 2)`, the parser lowers it to this
-tree. The evaluator (`yuzu-core/eval.rs`) walks the tree against a data context
-(`HashMap<String, Panel>` keyed by series name, e.g. `"close"`).
+tree. The evaluator (`yuzu-core/eval.rs`) walks the tree against an `EvalContext`
+(numeric `panels: HashMap<String, Panel>` keyed by series name, e.g. `"close"`,
+plus a `symbol → industry` map used by the neutralization/grouping ops).
 
 ```jsonc
 // (close > sma2).hold_until(close < sma2, nstocks_limit=1)
@@ -225,13 +231,13 @@ source of truth; regenerating means re-deriving from the same sample data.
 Run the suite:
 
 ```bash
-cargo test --manifest-path packages/backtest-engine/Cargo.toml
+cargo test
 ```
 
-Coverage (CI gates at `--fail-under-lines 90`; the run also executes the tests):
+Coverage (the run also executes the tests):
 
 ```bash
-cargo llvm-cov --manifest-path packages/backtest-engine/Cargo.toml --summary-only
+cargo llvm-cov --summary-only
 ```
 
 Every op family is golden-tested — including the price-stop paths in
@@ -240,13 +246,13 @@ Every op family is golden-tested — including the price-stop paths in
 > **Fixture note:** ops that change the row count (`rebalance`) or column count
 > (`quantile_row`) write `expected_dates` / `expected_symbols`; the harness reads
 > `<key>_dates` / `<key>_symbols` when present, else the shared `dates`/`symbols`.
-> `assert_panel_eq` compares matrix shape + values, not the axis labels (pandas
-> labels resampled rows by period-end; the engine keeps the last-observation date
-> — same partition, different label).
+> `assert_panel_eq` compares matrix shape + values, not the axis labels (the
+> engine labels resampled rows by the last-observation date rather than the
+> period-end — same partition, different label).
 
 ---
 
-## Backtest (Phase 1a-2)
+## Backtest
 
 ### Entry point
 
@@ -283,6 +289,10 @@ w[i]  = w[i] / total
 Weights that already sum to ≤ 1 are left unchanged (fractional book is
 allowed). The implicit remainder is cash (undeployed capital).
 
+Then, if `position_limit > 0`, each weight is clamped to `±position_limit`
+(sign-preserving per-position cap, leaving the residual in cash). `position_limit
+= 0` (the default) disables the cap.
+
 **Step 3 — NAV loop.**
 Starting from `equity[0] = 1.0` (minus day-0 entry cost), for each subsequent
 day:
@@ -307,7 +317,8 @@ value   *= (1 - cost)
 
 No slippage model.
 
-**`BacktestConfig` defaults:** `fee_ratio = 0.0`, `tax_ratio = 0.0`.
+**`BacktestConfig` defaults:** `fee_ratio = 0.0`, `tax_ratio = 0.0`,
+`position_limit = 0.0` (uncapped).
 
 ---
 
@@ -347,7 +358,7 @@ When there are no closed trades, trade-level metrics return `NaN` (`num_trades`
 and `max_consecutive_losses` return `0`). `profit_factor` returns `∞` when
 losses = 0; `recovery_factor` and `calmar` return `∞` when `max_drawdown = 0`.
 The trade-level/exposure metrics beyond `avg_holding_period` are hand-verified
-unit tests (not in `ffn_core.py`); `max_drawdown_duration`'s boundary excludes
+unit tests; `max_drawdown_duration`'s boundary excludes
 the recovery row (counts rows strictly underwater).
 
 ---
@@ -355,7 +366,7 @@ the recovery row (counts rows strictly underwater).
 ### Report JSON contract
 
 `Report` is `serde::Serialize`; the engine emits numbers only — the frontend
-(Phase 1c) renders charts and tables.
+renders charts and tables.
 
 ```jsonc
 {
@@ -404,38 +415,28 @@ the recovery row (counts rows strictly underwater).
 
 ### Testing basis
 
-- **Metrics** (`metrics.rs`) — golden-tested against `ffn_core.py` via
-  `tests/golden_metrics.rs`. A small equity curve and trade list are run
-  through both Python and Rust; the Rust values must match within floating-point
-  tolerance.
-- **NAV loop** (`backtest.rs`) — pinned by an **independent pandas reference**: a
-  pure-Python re-derivation of the same NAV math, replayed via committed fixtures
-  (`tests/golden_backtest.rs`), the offline CI baseline.
+- **Metrics** (`metrics.rs`) — golden-tested via `tests/golden_metrics.rs`. The
+  expected values were derived once independently and committed as
+  fixtures; the Rust values must match within floating-point tolerance. (The
+  reference tooling is not part of this repo — the fixtures are the source of truth.)
+- **NAV loop** (`backtest.rs`) — pinned by an **independent re-derivation**
+  of the same NAV math, captured once and replayed via committed fixtures
+  (`tests/golden_backtest.rs`), the offline baseline.
 - **Report round-trip** (`report.rs`) — `serde_json::to_string` is asserted to
   produce valid JSON containing the expected field names.
 
 ---
 
-### Deferred (out of scope for Phase 1a-2)
+### Deferred (not yet modeled)
 
 These items are explicit scope cuts, not gaps:
 
-- **Per-trade MAE / MFE** (maximum adverse / favorable excursion).
 - **Advanced cost semantics** (`touched_exit` / `retain_cost_when_rebalance` / `stop_trading_next_period`) — the engine currently uses the simplified model described above.
 - **Portfolio optimization** (mean-variance, risk parity, etc.).
 - **Monthly / yearly metric tiers** (rolling windows, calendar buckets).
-- **Alpha / beta** — requires a benchmark series; deferred to Phase 1a-3 where the benchmark data source is decided.
+- **Alpha / beta** — requires a benchmark series (not yet wired in).
 
----
-
-## Phasing
-
-This crate covers **Phase 1a-1** (DSL → position matrix) and **Phase 1a-2**
-(backtest loop + metrics → report). What follows, each its own plan:
-
-- **1a-3** — factor neutralization + sector panel (+ alpha/beta with a benchmark)
-- **1b** — data ingestion (two-tier D1 hot + R2 bulk, Cloudflare Workflows)
-- **1c** — WASM build + web `/backtest` route (charts rendered on the frontend)
-- **1d** — native CLI + AWS Rayon batch
-
-Active plan: [`docs/superpowers/plans/2026-06-18-backtest-engine-core-dsl.md`](./superpowers/plans/2026-06-18-backtest-engine-core-dsl.md).
+Per-trade **MAE / MFE** (maximum adverse / favorable excursion) and factor
+**neutralization** (`neutralize` / `neutralize_industry` / `industry_rank` /
+`groupby_category`) are now implemented and golden-tested — see the `mae`/`mfe`
+trade fields above and `ops/neutralize.rs`.
