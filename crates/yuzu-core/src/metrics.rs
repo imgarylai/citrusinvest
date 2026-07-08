@@ -261,6 +261,83 @@ pub fn avg_exposure(exposure: &[f64]) -> f64 {
     exposure.iter().sum::<f64>() / exposure.len() as f64
 }
 
+// ---- calendar-period and rolling metrics -----------------------------------
+
+/// One calendar bucket's return: `period` is `"2024-01"` (monthly) or `"2024"`
+/// (yearly); `ret` is the equity return over the bucket, chained off the
+/// previous bucket's closing equity (the first bucket chains off `equity[0]`).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct PeriodReturn {
+    pub period: String,
+    pub ret: f64,
+}
+
+fn period_returns(dates: &[i32], equity: &[f64], monthly: bool) -> Vec<PeriodReturn> {
+    let key = |d: i32| if monthly { d / 100 } else { d / 10000 };
+    let label = |k: i32| {
+        if monthly {
+            format!("{}-{:02}", k / 100, k % 100)
+        } else {
+            k.to_string()
+        }
+    };
+    let mut out = Vec::new();
+    if dates.is_empty() || equity.len() != dates.len() {
+        return out;
+    }
+    let mut baseline = equity[0];
+    let mut cur = key(dates[0]);
+    for i in 0..dates.len() {
+        let k = key(dates[i]);
+        if k != cur {
+            // row i-1 closed the previous bucket
+            out.push(PeriodReturn {
+                period: label(cur),
+                ret: equity[i - 1] / baseline - 1.0,
+            });
+            baseline = equity[i - 1];
+            cur = k;
+        }
+    }
+    out.push(PeriodReturn {
+        period: label(cur),
+        ret: equity[equity.len() - 1] / baseline - 1.0,
+    });
+    out
+}
+
+pub fn monthly_returns(dates: &[i32], equity: &[f64]) -> Vec<PeriodReturn> {
+    period_returns(dates, equity, true)
+}
+
+pub fn yearly_returns(dates: &[i32], equity: &[f64]) -> Vec<PeriodReturn> {
+    period_returns(dates, equity, false)
+}
+
+/// Rolling annualized volatility over a `window` of daily returns; NaN until
+/// `window` returns are available (row `window` onward, since row 0 has none).
+pub fn rolling_volatility(equity: &[f64], window: usize) -> Vec<f64> {
+    let r = to_returns(equity);
+    let mut out = vec![f64::NAN; r.len()];
+    for i in window..r.len() {
+        let (_, std) = mean_std(&r[i + 1 - window..=i]);
+        out[i] = std * 252.0_f64.sqrt();
+    }
+    out
+}
+
+/// Rolling annualized Sharpe (rf = 0) over a `window` of daily returns; NaN
+/// until `window` returns are available.
+pub fn rolling_sharpe(equity: &[f64], window: usize) -> Vec<f64> {
+    let r = to_returns(equity);
+    let mut out = vec![f64::NAN; r.len()];
+    for i in window..r.len() {
+        let (mean, std) = mean_std(&r[i + 1 - window..=i]);
+        out[i] = (mean / std.max(1e-6)) * 252.0_f64.sqrt();
+    }
+    out
+}
+
 // ---- benchmark-relative metrics ------------------------------------------
 // All take the strategy and benchmark equity curves (same length, aligned by
 // row); daily-return pairs where either side is NaN are dropped.
@@ -343,6 +420,43 @@ pub fn benchmark_return(bench: &[f64]) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn period_returns_bucket_by_month_and_year() {
+        // Dec 2023 (2 rows) -> Jan 2024 (2 rows) -> Feb 2024 (1 row).
+        let dates = [20231228, 20231229, 20240102, 20240131, 20240201];
+        let eq = [1.0, 1.1, 1.1, 1.32, 1.32];
+        let m = monthly_returns(&dates, &eq);
+        assert_eq!(m.len(), 3);
+        assert_eq!(m[0].period, "2023-12");
+        assert!((m[0].ret - 0.1).abs() < 1e-12);
+        assert_eq!(m[1].period, "2024-01");
+        assert!((m[1].ret - 0.2).abs() < 1e-12); // 1.32/1.1 - 1
+        assert_eq!(m[2].period, "2024-02");
+        assert!(m[2].ret.abs() < 1e-12);
+        let y = yearly_returns(&dates, &eq);
+        assert_eq!(y.len(), 2);
+        assert_eq!(y[0].period, "2023");
+        assert!((y[0].ret - 0.1).abs() < 1e-12);
+        assert_eq!(y[1].period, "2024");
+        assert!((y[1].ret - 0.2).abs() < 1e-12);
+    }
+
+    #[test]
+    fn rolling_metrics_warm_up_then_fill() {
+        // Constant +1% daily: vol 0, sharpe huge; window 3 -> NaN rows 0..=2.
+        let mut eq = vec![1.0];
+        for _ in 0..5 {
+            let prev = *eq.last().unwrap();
+            eq.push(prev * 1.01);
+        }
+        let vol = rolling_volatility(&eq, 3);
+        let sh = rolling_sharpe(&eq, 3);
+        assert!(vol[2].is_nan() && sh[2].is_nan());
+        assert!(vol[3].abs() < 1e-9, "constant returns -> zero vol");
+        assert!(sh[3] > 0.0);
+        assert_eq!(vol.len(), eq.len());
+    }
 
     #[test]
     fn benchmark_relative_metrics() {
