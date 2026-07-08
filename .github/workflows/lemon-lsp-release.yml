@@ -42,13 +42,15 @@ jobs:
             target: aarch64-unknown-linux-musl
             vscode: linux-arm64
             cross: true
-          # macOS: build x64 on the older runner and pin a low deployment target
-          # so the binaries run on older macOS, not only the SDK's newest.
-          - os: macos-13
+          # macOS: what makes the binary run on old macOS is the deployment
+          # target it bakes in (not the builder's OS), so we set that and keep
+          # the runner floating — no pinned label to age out. x64 cross-compiles
+          # from the arm64 runner.
+          - os: macos-latest
             target: x86_64-apple-darwin
             vscode: darwin-x64
             macos_target: "10.15"
-          - os: macos-14
+          - os: macos-latest
             target: aarch64-apple-darwin
             vscode: darwin-arm64
             macos_target: "11.0"
