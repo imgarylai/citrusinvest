@@ -244,12 +244,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let report = yuzu_cli::run_walkforward(
                 &common.data,
                 &variants,
-                common.from,
-                common.to,
-                train_days,
-                test_days,
+                &yuzu_cli::WalkForwardParams {
+                    from: common.from,
+                    to: common.to,
+                    train_days,
+                    test_days,
+                    sort_by: sort.into(),
+                },
                 &cfg,
-                sort.into(),
             )?;
             emit(&common.out, serde_json::to_string_pretty(&report)?)?;
         }
