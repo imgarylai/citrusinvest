@@ -67,6 +67,9 @@ mod tests {
         let src = LocalSource::new(&dir);
         // a key with a missing parent dir ("panels/") must still write
         src.put("panels/close.csv.gz", b"data").unwrap();
-        assert_eq!(src.get("panels/close.csv.gz").unwrap(), Some(b"data".to_vec()));
+        assert_eq!(
+            src.get("panels/close.csv.gz").unwrap(),
+            Some(b"data".to_vec())
+        );
     }
 }

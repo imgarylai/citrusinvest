@@ -169,7 +169,10 @@ pub fn rebuild_combined_panels<S: ObjectSource + ObjectSink + Sync>(
             .collect();
         let panel = assemble(symbols, &per_symbol)?;
         max_days = max_days.max(panel.dates.len());
-        source.put(&format!("{panels_dir}/{name}.csv.gz"), &write_combined_panel(&panel)?)?;
+        source.put(
+            &format!("{panels_dir}/{name}.csv.gz"),
+            &write_combined_panel(&panel)?,
+        )?;
         fields += 1;
     }
 
@@ -181,21 +184,30 @@ pub fn rebuild_combined_panels<S: ObjectSource + ObjectSink + Sync>(
         .map(|s| format!("{fundamentals_dir}/{s}.csv.gz"))
         .collect();
     let fund_bytes = crate::parallel::fetch_raw(source, &fund_keys)?;
-    for name in FUNDAMENTAL_FIELDS.iter().chain(std::iter::once(&REPORT_EVENT_FIELD)) {
+    for name in FUNDAMENTAL_FIELDS
+        .iter()
+        .chain(std::iter::once(&REPORT_EVENT_FIELD))
+    {
         let per_symbol: Vec<Vec<(i32, f64)>> = fund_bytes
             .iter()
             .map(|b| match b {
-                Some(bytes) => parse_fundamentals(bytes, *name).unwrap_or_default(),
+                Some(bytes) => parse_fundamentals(bytes, name).unwrap_or_default(),
                 None => Vec::new(),
             })
             .collect();
         let panel = assemble(symbols, &per_symbol)?;
         max_days = max_days.max(panel.dates.len());
-        source.put(&format!("{panels_dir}/{name}.csv.gz"), &write_combined_panel(&panel)?)?;
+        source.put(
+            &format!("{panels_dir}/{name}.csv.gz"),
+            &write_combined_panel(&panel)?,
+        )?;
         fields += 1;
     }
 
-    Ok(RebuildSummary { fields, days: max_days })
+    Ok(RebuildSummary {
+        fields,
+        days: max_days,
+    })
 }
 
 /// Union-dates assembly: rows = sorted union of all symbols' days, cols = symbols
@@ -259,7 +271,11 @@ mod tests {
         let frow = |day, pe| {
             let mut values = vec![f64::NAN; FUNDAMENTAL_FIELDS.len()];
             values[0] = pe; // "pe" is column 0
-            FundamentalRow { day, values, report_event: 0.0 }
+            FundamentalRow {
+                day,
+                values,
+                report_event: 0.0,
+            }
         };
         fs::write(
             dir.join("fundamentals/AAA.csv.gz"),
@@ -325,9 +341,11 @@ mod tests {
         assert_eq!(p.data[[0, 0]], 31.0); // CCC 0103
         assert_eq!(p.data[[0, 1]], 11.0); // AAA 0103
         assert!(p.data[[0, 2]].is_nan()); // ZZZ absent from file
-        // absent combined file → Ok(None) (caller falls back)
-        assert!(load_combined_panel(&src, "missing", &syms, 0, 99999999, PANELS_DIR)
-            .unwrap()
-            .is_none());
+                                          // absent combined file → Ok(None) (caller falls back)
+        assert!(
+            load_combined_panel(&src, "missing", &syms, 0, 99999999, PANELS_DIR)
+                .unwrap()
+                .is_none()
+        );
     }
 }

@@ -15,8 +15,12 @@ pub fn align(a: &Panel, b: &Panel) -> (Panel, Panel) {
 
     // intersection of symbols, preserving a's order
     let bset: std::collections::HashSet<&String> = b.symbols.iter().collect();
-    let symbols: Vec<String> =
-        a.symbols.iter().filter(|s| bset.contains(*s)).cloned().collect();
+    let symbols: Vec<String> = a
+        .symbols
+        .iter()
+        .filter(|s| bset.contains(*s))
+        .cloned()
+        .collect();
 
     (project(a, &dates, &symbols), project(b, &dates, &symbols))
 }
@@ -36,7 +40,11 @@ fn project(p: &Panel, dates: &[i32], symbols: &[String]) -> Panel {
             }
         }
     }
-    Panel { dates: dates.to_vec(), symbols: symbols.to_vec(), data }
+    Panel {
+        dates: dates.to_vec(),
+        symbols: symbols.to_vec(),
+        data,
+    }
 }
 
 #[cfg(test)]
@@ -62,7 +70,7 @@ mod tests {
         let (ra, rb) = align(&a, &b);
         assert_eq!(ra.dates, vec![20240102, 20240103, 20240104]);
         assert_eq!(ra.symbols, vec!["B".to_string()]); // intersection
-        // a had B=2.0 at 0103; row 0102 present in a but not b
+                                                       // a had B=2.0 at 0103; row 0102 present in a but not b
         assert_eq!(ra.data[[1, 0]], 4.0);
         assert!(ra.data[[2, 0]].is_nan()); // a missing 0104
         assert!(rb.data[[0, 0]].is_nan()); // b missing 0102

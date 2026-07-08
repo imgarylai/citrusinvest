@@ -68,7 +68,13 @@ pub fn build_report(run: BacktestRun) -> Report {
         avg_exposure: metrics::avg_exposure(&run.exposure),
     };
     let drawdown = metrics::drawdown_series(eq);
-    Report { dates: run.dates, equity: run.equity, drawdown, trades: run.trades, metrics }
+    Report {
+        dates: run.dates,
+        equity: run.equity,
+        drawdown,
+        trades: run.trades,
+        metrics,
+    }
 }
 
 #[cfg(test)]

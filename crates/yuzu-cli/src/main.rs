@@ -83,7 +83,14 @@ enum Cmd {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     match Cli::parse().cmd {
-        Cmd::Run { data, spec, from, to, fee_ratio, out } => {
+        Cmd::Run {
+            data,
+            spec,
+            from,
+            to,
+            fee_ratio,
+            out,
+        } => {
             let spec_json = std::fs::read_to_string(&spec)?;
             let report = yuzu_cli::run_single(&data, &spec_json, from, to, fee_ratio)?;
             let json = serde_json::to_string_pretty(&report)?;
@@ -92,7 +99,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 None => println!("{json}"),
             }
         }
-        Cmd::Sweep { data, specs, from, to, fee_ratio, sort, top, out } => {
+        Cmd::Sweep {
+            data,
+            specs,
+            from,
+            to,
+            fee_ratio,
+            sort,
+            top,
+            out,
+        } => {
             let raw = std::fs::read_to_string(&specs)?;
             let parsed: Vec<Variant> = serde_json::from_str(&raw)?;
             let variants: Vec<(String, String)> = parsed

@@ -11,7 +11,11 @@ use super::ParseError;
 /// Lower DSL text to a JSON `Expr` tree.
 pub fn parse(src: &str) -> Result<Value, ParseError> {
     let toks = lex(src)?;
-    let mut p = Parser { toks: &toks, pos: 0, env: HashMap::new() };
+    let mut p = Parser {
+        toks: &toks,
+        pos: 0,
+        env: HashMap::new(),
+    };
     p.program()
 }
 
@@ -36,15 +40,29 @@ impl<'a> Parser<'a> {
 
     fn err(&self, message: impl Into<String>) -> ParseError {
         let t = self.peek();
-        ParseError { line: t.line, col: t.col, message: message.into() }
+        ParseError {
+            line: t.line,
+            col: t.col,
+            message: message.into(),
+        }
     }
 
     fn program(&mut self) -> Result<Value, ParseError> {
         while self.peek().kind == TokenKind::Let {
             self.next(); // `let`
             let (name, line, col) = match self.next() {
-                Token { kind: TokenKind::Ident(n), line, col } => (n, line, col),
-                t => return Err(ParseError { line: t.line, col: t.col, message: "expected name after `let`".into() }),
+                Token {
+                    kind: TokenKind::Ident(n),
+                    line,
+                    col,
+                } => (n, line, col),
+                t => {
+                    return Err(ParseError {
+                        line: t.line,
+                        col: t.col,
+                        message: "expected name after `let`".into(),
+                    })
+                }
             };
             if self.next().kind != TokenKind::Eq {
                 return Err(self.err("expected `=` in let binding"));
@@ -52,7 +70,11 @@ impl<'a> Parser<'a> {
             let value = self.expr(0)?;
             let value = promote(value).map_err(|m| self.err(m))?;
             if self.env.contains_key(&name) {
-                return Err(ParseError { line, col, message: format!("`{name}` is already defined") });
+                return Err(ParseError {
+                    line,
+                    col,
+                    message: format!("`{name}` is already defined"),
+                });
             }
             self.env.insert(name, value);
         }
@@ -89,7 +111,9 @@ impl<'a> Parser<'a> {
                 TokenKind::Ident(s) if s == "and" || s == "or" => s.clone(),
                 _ => break,
             };
-            let Some((l_bp, r_bp, tag)) = infix_binding(&op) else { break };
+            let Some((l_bp, r_bp, tag)) = infix_binding(&op) else {
+                break;
+            };
             if l_bp < min_bp {
                 break;
             }
@@ -129,13 +153,20 @@ impl<'a> Parser<'a> {
                     Ok(json!({ "op": "Data", "name": name }))
                 }
             }
-            other => Err(ParseError { line: t.line, col: t.col, message: format!("unexpected token {other:?}") }),
+            other => Err(ParseError {
+                line: t.line,
+                col: t.col,
+                message: format!("unexpected token {other:?}"),
+            }),
         }
     }
 
     fn call(&mut self, name: &str, line: usize, col: usize) -> Result<Value, ParseError> {
-        let sig = ops::op_by_name(name)
-            .ok_or(ParseError { line, col, message: format!("unknown op `{name}`") })?;
+        let sig = ops::op_by_name(name).ok_or(ParseError {
+            line,
+            col,
+            message: format!("unknown op `{name}`"),
+        })?;
         self.next(); // consume `(`
 
         let mut positional: Vec<Value> = Vec::new();
@@ -165,7 +196,11 @@ impl<'a> Parser<'a> {
         }
         self.next(); // consume `)`
 
-        build(sig, positional, keyword).map_err(|m| ParseError { line, col, message: m })
+        build(sig, positional, keyword).map_err(|m| ParseError {
+            line,
+            col,
+            message: m,
+        })
     }
 
     /// A single argument: `[ ... ]` list literal or a full expression.
@@ -218,12 +253,20 @@ fn promote(v: Value) -> Result<Value, String> {
 }
 
 /// Place bound args into a JSON op object per the signature's field kinds.
-fn build(sig: &ops::OpSig, positional: Vec<Value>, mut keyword: HashMap<String, Value>) -> Result<Value, String> {
+fn build(
+    sig: &ops::OpSig,
+    positional: Vec<Value>,
+    mut keyword: HashMap<String, Value>,
+) -> Result<Value, String> {
     let mut obj = Map::new();
     obj.insert("op".into(), Value::String(sig.tag.into()));
 
     if positional.len() > sig.fields.len() {
-        return Err(format!("`{}` takes at most {} positional args", sig.tag, sig.fields.len()));
+        return Err(format!(
+            "`{}` takes at most {} positional args",
+            sig.tag,
+            sig.fields.len()
+        ));
     }
 
     // Collect each field's value: positional by index, else keyword by name.
@@ -236,7 +279,10 @@ fn build(sig: &ops::OpSig, positional: Vec<Value>, mut keyword: HashMap<String, 
         };
         let Some(raw) = provided else {
             // required fields must be present
-            if matches!(field, Field::Expr(_) | Field::Num(_) | Field::Str(_) | Field::ExprList(_)) {
+            if matches!(
+                field,
+                Field::Expr(_) | Field::Num(_) | Field::Str(_) | Field::ExprList(_)
+            ) {
                 return Err(format!("`{}` requires `{name}`", sig.tag));
             }
             continue;
@@ -323,9 +369,9 @@ mod tests {
 
     #[test]
     fn arity_and_unknown_keyword_errors() {
-        assert!(parse("sma(close)").is_err());          // missing n
-        assert!(parse("sma(close, 2, 3)").is_err());     // too many
-        assert!(parse("sma(close, bogus=2)").is_err());  // unknown keyword
+        assert!(parse("sma(close)").is_err()); // missing n
+        assert!(parse("sma(close, 2, 3)").is_err()); // too many
+        assert!(parse("sma(close, bogus=2)").is_err()); // unknown keyword
     }
 
     #[test]
@@ -393,7 +439,11 @@ mod tests {
     #[test]
     fn reports_position_on_unclosed_paren() {
         let err = parse("sma(close, 2").unwrap_err();
-        assert!(err.message.contains("`,` or `)`") || err.message.contains(")"), "{}", err.message);
+        assert!(
+            err.message.contains("`,` or `)`") || err.message.contains(")"),
+            "{}",
+            err.message
+        );
     }
 
     #[test]

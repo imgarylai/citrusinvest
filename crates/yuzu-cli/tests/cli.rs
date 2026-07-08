@@ -1,12 +1,15 @@
+use std::fs;
 use yuzu_cli::{list_symbols, run_single, run_sweep, SortKey};
 use yuzu_data::csv_io::{write_series, OhlcvRow};
-use std::fs;
 
 fn fixture(tag: &str) -> std::path::PathBuf {
     // per-test temp dir (tests run in parallel) holding prices/<sym>.csv.gz for AAA, BBB.
     let dir = std::env::temp_dir().join(format!("yuzu_cli_fix_{tag}"));
     let _ = fs::remove_dir_all(&dir);
-    for (sym, closes) in [("AAA", [10.0_f64, 11.0, 12.0]), ("BBB", [5.0_f64, 4.0, 6.0])] {
+    for (sym, closes) in [
+        ("AAA", [10.0_f64, 11.0, 12.0]),
+        ("BBB", [5.0_f64, 4.0, 6.0]),
+    ] {
         let rows: Vec<OhlcvRow> = closes
             .iter()
             .enumerate()
@@ -21,7 +24,11 @@ fn fixture(tag: &str) -> std::path::PathBuf {
             .collect();
         let p = dir.join("prices");
         fs::create_dir_all(&p).unwrap();
-        fs::write(p.join(format!("{sym}.csv.gz")), write_series(&rows).unwrap()).unwrap();
+        fs::write(
+            p.join(format!("{sym}.csv.gz")),
+            write_series(&rows).unwrap(),
+        )
+        .unwrap();
     }
     dir
 }
@@ -34,8 +41,14 @@ fn sweeps_variants_and_ranks_them() {
             "hold_top1".to_string(),
             r#"{"op":"IsLargest","of":{"op":"Data","name":"close"},"n":1}"#.to_string(),
         ),
-        ("hold_all".to_string(), r#"{"op":"Data","name":"close"}"#.to_string()),
-        ("broken".to_string(), r#"{"op":"Data","name":"missing"}"#.to_string()), // unknown series -> error
+        (
+            "hold_all".to_string(),
+            r#"{"op":"Data","name":"close"}"#.to_string(),
+        ),
+        (
+            "broken".to_string(),
+            r#"{"op":"Data","name":"missing"}"#.to_string(),
+        ), // unknown series -> error
     ];
     let board = run_sweep(&dir, &variants, 20240102, 20240104, 0.0, SortKey::Sharpe);
 
@@ -48,7 +61,10 @@ fn sweeps_variants_and_ranks_them() {
 #[test]
 fn lists_symbols_and_runs_a_single_backtest() {
     let dir = fixture("run");
-    assert_eq!(list_symbols(&dir).unwrap(), vec!["AAA".to_string(), "BBB".to_string()]);
+    assert_eq!(
+        list_symbols(&dir).unwrap(),
+        vec!["AAA".to_string(), "BBB".to_string()]
+    );
 
     // is_largest(close, 1), rebalanced — always holds one name; just assert it runs + shapes.
     let spec = r#"{"op":"IsLargest","of":{"op":"Data","name":"close"},"n":1}"#;

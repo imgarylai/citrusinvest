@@ -19,7 +19,11 @@ fn format_at(expr: &Value, depth: usize) -> String {
         return literal(expr);
     };
     match tag {
-        "Data" => expr.get("name").and_then(Value::as_str).unwrap_or("?").to_string(),
+        "Data" => expr
+            .get("name")
+            .and_then(Value::as_str)
+            .unwrap_or("?")
+            .to_string(),
         "Const" => literal(expr.get("value").unwrap_or(&Value::Null)),
         "Neg" => format!("(-{})", format_at(child(expr, "of"), depth)),
         "Ceil" => format!("ceil({})", format_at(child(expr, "of"), depth)),
@@ -52,8 +56,8 @@ fn print_call(tag: &str, expr: &Value, depth: usize) -> String {
     let child_depth = depth + 1;
     let mut parts: Vec<String> = Vec::new();
     let mut brk = false; // set true once any Expr arg is nested → break this call
-    // Once true, every subsequent field must be emitted as keyword=value so we
-    // never produce a positional arg after a keyword arg (parser would reject it).
+                         // Once true, every subsequent field must be emitted as keyword=value so we
+                         // never produce a positional arg after a keyword arg (parser would reject it).
     let mut keyword_mode = false;
     for field in sig.fields {
         let fname = ops::field_name(field);
@@ -68,13 +72,18 @@ fn print_call(tag: &str, expr: &Value, depth: usize) -> String {
                 if items.iter().any(|v| !is_leaf(v)) {
                     brk = true;
                 }
-                let rendered: Vec<String> = items.iter().map(|v| format_at(v, child_depth)).collect();
+                let rendered: Vec<String> =
+                    items.iter().map(|v| format_at(v, child_depth)).collect();
                 format!("[{}]", rendered.join(", "))
             }
             Field::StrListOpt(_) => {
                 let empty = Vec::new();
-                let items: Vec<String> =
-                    val.as_array().unwrap_or(&empty).iter().map(|v| literal(v)).collect();
+                let items: Vec<String> = val
+                    .as_array()
+                    .unwrap_or(&empty)
+                    .iter()
+                    .map(literal)
+                    .collect();
                 format!("[{}]", items.join(", "))
             }
             Field::Expr(_) | Field::ExprOpt(_) => {
@@ -99,7 +108,10 @@ fn print_call(tag: &str, expr: &Value, depth: usize) -> String {
     if brk {
         let ind = INDENT.repeat(child_depth);
         let close = INDENT.repeat(depth);
-        format!("{name}(\n{ind}{}\n{close})", parts.join(&format!(",\n{ind}")))
+        format!(
+            "{name}(\n{ind}{}\n{close})",
+            parts.join(&format!(",\n{ind}"))
+        )
     } else {
         format!("{name}({})", parts.join(", "))
     }
@@ -190,7 +202,10 @@ mod tests {
     fn binop_arg_breaks_parent_but_stays_inline_itself() {
         let v = json!({"op":"Mask","of":{"op":"IsLargest","of":{"op":"Data","name":"x"},"n":30},
             "by":{"op":"Gt","l":{"op":"Data","name":"market_cap"},"r":{"op":"Const","value":5}}});
-        assert_eq!(format(&v), "mask(\n  is_largest(x, 30),\n  (market_cap > 5)\n)");
+        assert_eq!(
+            format(&v),
+            "mask(\n  is_largest(x, 30),\n  (market_cap > 5)\n)"
+        );
         assert_eq!(super::super::parse(&format(&v)).unwrap(), v);
     }
 }

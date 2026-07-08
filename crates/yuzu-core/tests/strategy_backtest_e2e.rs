@@ -1,10 +1,10 @@
 mod golden_harness;
+use golden_harness::{load_golden, panel_from_json};
+use std::collections::HashMap;
 use yuzu_core::backtest::BacktestConfig;
 use yuzu_core::panel::Panel;
 use yuzu_core::run_backtest;
 use yuzu_core::EvalContext;
-use golden_harness::{load_golden, panel_from_json};
-use std::collections::HashMap;
 
 #[test]
 fn spec_to_report_end_to_end() {

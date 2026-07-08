@@ -46,7 +46,11 @@ impl Panel {
         }
         // ensure exactly bool-valued
         let data = out.mapv(|x| bool_to_f64(x == 1.0));
-        Panel { dates: self.dates.clone(), symbols: self.symbols.clone(), data }
+        Panel {
+            dates: self.dates.clone(),
+            symbols: self.symbols.clone(),
+            data,
+        }
     }
 
     pub fn is_largest(&self, n: usize) -> Panel {

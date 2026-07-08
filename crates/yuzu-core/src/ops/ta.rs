@@ -36,7 +36,9 @@ pub fn atr(high: &Panel, low: &Panel, close: &Panel, n: usize) -> Panel {
     let (nrows, ncols) = close.data.dim();
     let mut out = Array2::from_elem((nrows, ncols), f64::NAN);
     for c in 0..ncols {
-        let Some(first) = col_start(close, c) else { continue };
+        let Some(first) = col_start(close, c) else {
+            continue;
+        };
         let mut tr = vec![f64::NAN; nrows];
         for r in (first + 1)..nrows {
             let h = high.data[[r, c]];
@@ -49,7 +51,11 @@ pub fn atr(high: &Panel, low: &Panel, close: &Panel, n: usize) -> Panel {
             out[[r, c]] = sm[r];
         }
     }
-    Panel { dates: close.dates.clone(), symbols: close.symbols.clone(), data: out }
+    Panel {
+        dates: close.dates.clone(),
+        symbols: close.symbols.clone(),
+        data: out,
+    }
 }
 
 /// Normalized ATR: `100 * ATR / close`.
@@ -66,7 +72,11 @@ pub fn natr(high: &Panel, low: &Panel, close: &Panel, n: usize) -> Panel {
             }
         }
     }
-    Panel { dates: close.dates.clone(), symbols: close.symbols.clone(), data: out }
+    Panel {
+        dates: close.dates.clone(),
+        symbols: close.symbols.clone(),
+        data: out,
+    }
 }
 
 /// Commodity Channel Index over typical price `TP=(H+L+C)/3`, constant 0.015.
@@ -74,7 +84,9 @@ pub fn cci(high: &Panel, low: &Panel, close: &Panel, n: usize) -> Panel {
     let (nrows, ncols) = close.data.dim();
     let mut out = Array2::from_elem((nrows, ncols), f64::NAN);
     for c in 0..ncols {
-        let Some(first) = col_start(close, c) else { continue };
+        let Some(first) = col_start(close, c) else {
+            continue;
+        };
         let tp: Vec<f64> = (0..nrows)
             .map(|r| (high.data[[r, c]] + low.data[[r, c]] + close.data[[r, c]]) / 3.0)
             .collect();
@@ -91,7 +103,11 @@ pub fn cci(high: &Panel, low: &Panel, close: &Panel, n: usize) -> Panel {
             }
         }
     }
-    Panel { dates: close.dates.clone(), symbols: close.symbols.clone(), data: out }
+    Panel {
+        dates: close.dates.clone(),
+        symbols: close.symbols.clone(),
+        data: out,
+    }
 }
 
 /// Aroon Up/Down core: over a window of `n+1` bars ending at `r`, find the most
@@ -101,10 +117,16 @@ fn aroon_dir(p: &Panel, n: usize, want_max: bool) -> Panel {
     let (nrows, ncols) = p.data.dim();
     let mut out = Array2::from_elem((nrows, ncols), f64::NAN);
     if n == 0 {
-        return Panel { dates: p.dates.clone(), symbols: p.symbols.clone(), data: out };
+        return Panel {
+            dates: p.dates.clone(),
+            symbols: p.symbols.clone(),
+            data: out,
+        };
     }
     for c in 0..ncols {
-        let Some(first) = col_start(p, c) else { continue };
+        let Some(first) = col_start(p, c) else {
+            continue;
+        };
         for r in (first + n)..nrows {
             let lo = r - n;
             let mut ext = p.data[[lo, c]];
@@ -127,7 +149,11 @@ fn aroon_dir(p: &Panel, n: usize, want_max: bool) -> Panel {
             }
         }
     }
-    Panel { dates: p.dates.clone(), symbols: p.symbols.clone(), data: out }
+    Panel {
+        dates: p.dates.clone(),
+        symbols: p.symbols.clone(),
+        data: out,
+    }
 }
 
 pub fn aroon_up(high: &Panel, n: usize) -> Panel {
@@ -152,7 +178,11 @@ pub fn stoch_k(high: &Panel, low: &Panel, close: &Panel, n: usize) -> Panel {
             }
         }
     }
-    Panel { dates: close.dates.clone(), symbols: close.symbols.clone(), data: out }
+    Panel {
+        dates: close.dates.clone(),
+        symbols: close.symbols.clone(),
+        data: out,
+    }
 }
 
 /// %D: full-window `d`-period SMA of %K (leading-NaN aware, `min_periods = d`).
@@ -161,10 +191,16 @@ pub fn stoch_d(high: &Panel, low: &Panel, close: &Panel, n: usize, d: usize) -> 
     let (nrows, ncols) = k.data.dim();
     let mut out = Array2::from_elem((nrows, ncols), f64::NAN);
     if d == 0 {
-        return Panel { dates: k.dates.clone(), symbols: k.symbols.clone(), data: out };
+        return Panel {
+            dates: k.dates.clone(),
+            symbols: k.symbols.clone(),
+            data: out,
+        };
     }
     for c in 0..ncols {
-        let Some(first) = col_start(&k, c) else { continue };
+        let Some(first) = col_start(&k, c) else {
+            continue;
+        };
         for r in (first + d - 1)..nrows {
             let lo = r + 1 - d;
             let w: Vec<f64> = (lo..=r).map(|i| k.data[[i, c]]).collect();
@@ -173,7 +209,11 @@ pub fn stoch_d(high: &Panel, low: &Panel, close: &Panel, n: usize, d: usize) -> 
             }
         }
     }
-    Panel { dates: k.dates.clone(), symbols: k.symbols.clone(), data: out }
+    Panel {
+        dates: k.dates.clone(),
+        symbols: k.symbols.clone(),
+        data: out,
+    }
 }
 
 /// Per-column ±DI series (Wilder-smoothed +DM/−DM over smoothed TR).
@@ -181,7 +221,9 @@ fn di_cols(high: &Panel, low: &Panel, close: &Panel, c: usize, n: usize) -> (Vec
     let nrows = close.nrows();
     let mut pdi = vec![f64::NAN; nrows];
     let mut mdi = vec![f64::NAN; nrows];
-    let Some(first) = col_start(close, c) else { return (pdi, mdi) };
+    let Some(first) = col_start(close, c) else {
+        return (pdi, mdi);
+    };
     let mut pdm = vec![f64::NAN; nrows];
     let mut mdm = vec![f64::NAN; nrows];
     let mut tr = vec![f64::NAN; nrows];
@@ -216,7 +258,11 @@ fn di_panel(high: &Panel, low: &Panel, close: &Panel, n: usize, plus: bool) -> P
             out[[r, c]] = src[r];
         }
     }
-    Panel { dates: close.dates.clone(), symbols: close.symbols.clone(), data: out }
+    Panel {
+        dates: close.dates.clone(),
+        symbols: close.symbols.clone(),
+        data: out,
+    }
 }
 
 pub fn plus_di(high: &Panel, low: &Panel, close: &Panel, n: usize) -> Panel {
@@ -233,14 +279,20 @@ pub fn adx(high: &Panel, low: &Panel, close: &Panel, n: usize) -> Panel {
     let (nrows, ncols) = close.data.dim();
     let mut out = Array2::from_elem((nrows, ncols), f64::NAN);
     for c in 0..ncols {
-        let Some(first) = col_start(close, c) else { continue };
+        let Some(first) = col_start(close, c) else {
+            continue;
+        };
         let (pdi, mdi) = di_cols(high, low, close, c, n);
         let mut dx = vec![f64::NAN; nrows];
         for r in 0..nrows {
             let (p, m) = (pdi[r], mdi[r]);
             if p.is_finite() && m.is_finite() {
                 let sum = p + m;
-                dx[r] = if sum != 0.0 { 100.0 * (p - m).abs() / sum } else { 0.0 };
+                dx[r] = if sum != 0.0 {
+                    100.0 * (p - m).abs() / sum
+                } else {
+                    0.0
+                };
             }
         }
         // DX's first finite row is first+n; offset wilder so seed = mean of first
@@ -252,7 +304,11 @@ pub fn adx(high: &Panel, low: &Panel, close: &Panel, n: usize) -> Panel {
             }
         }
     }
-    Panel { dates: close.dates.clone(), symbols: close.symbols.clone(), data: out }
+    Panel {
+        dates: close.dates.clone(),
+        symbols: close.symbols.clone(),
+        data: out,
+    }
 }
 
 /// On-Balance Volume: cumulative ±volume by sign of the close change (0 on flat).
@@ -261,7 +317,9 @@ pub fn obv(close: &Panel, volume: &Panel) -> Panel {
     let (nrows, ncols) = close.data.dim();
     let mut out = Array2::from_elem((nrows, ncols), f64::NAN);
     for c in 0..ncols {
-        let Some(first) = col_start(close, c) else { continue };
+        let Some(first) = col_start(close, c) else {
+            continue;
+        };
         let mut acc = volume.data[[first, c]];
         out[[first, c]] = acc;
         for r in (first + 1)..nrows {
@@ -275,7 +333,11 @@ pub fn obv(close: &Panel, volume: &Panel) -> Panel {
             out[[r, c]] = acc;
         }
     }
-    Panel { dates: close.dates.clone(), symbols: close.symbols.clone(), data: out }
+    Panel {
+        dates: close.dates.clone(),
+        symbols: close.symbols.clone(),
+        data: out,
+    }
 }
 
 /// Money Flow Index over `n` periods. TP=(H+L+C)/3; raw money flow TP*V is summed
@@ -285,7 +347,9 @@ pub fn mfi(high: &Panel, low: &Panel, close: &Panel, volume: &Panel, n: usize) -
     let (nrows, ncols) = close.data.dim();
     let mut out = Array2::from_elem((nrows, ncols), f64::NAN);
     for c in 0..ncols {
-        let Some(first) = col_start(close, c) else { continue };
+        let Some(first) = col_start(close, c) else {
+            continue;
+        };
         let tp: Vec<f64> = (0..nrows)
             .map(|r| (high.data[[r, c]] + low.data[[r, c]] + close.data[[r, c]]) / 3.0)
             .collect();
@@ -303,10 +367,18 @@ pub fn mfi(high: &Panel, low: &Panel, close: &Panel, volume: &Panel, n: usize) -
             let lo = r + 1 - n;
             let p: f64 = (lo..=r).map(|k| pos[k]).sum();
             let ng: f64 = (lo..=r).map(|k| neg[k]).sum();
-            out[[r, c]] = if ng == 0.0 { 100.0 } else { 100.0 - 100.0 / (1.0 + p / ng) };
+            out[[r, c]] = if ng == 0.0 {
+                100.0
+            } else {
+                100.0 - 100.0 / (1.0 + p / ng)
+            };
         }
     }
-    Panel { dates: close.dates.clone(), symbols: close.symbols.clone(), data: out }
+    Panel {
+        dates: close.dates.clone(),
+        symbols: close.symbols.clone(),
+        data: out,
+    }
 }
 
 /// Volume-Weighted Average Price over `n` periods. Typical price TP=(H+L+C)/3;
@@ -316,10 +388,16 @@ pub fn vwap(high: &Panel, low: &Panel, close: &Panel, volume: &Panel, n: usize) 
     let (nrows, ncols) = close.data.dim();
     let mut out = Array2::from_elem((nrows, ncols), f64::NAN);
     if n == 0 {
-        return Panel { dates: close.dates.clone(), symbols: close.symbols.clone(), data: out };
+        return Panel {
+            dates: close.dates.clone(),
+            symbols: close.symbols.clone(),
+            data: out,
+        };
     }
     for c in 0..ncols {
-        let Some(first) = col_start(close, c) else { continue };
+        let Some(first) = col_start(close, c) else {
+            continue;
+        };
         let tp: Vec<f64> = (0..nrows)
             .map(|r| (high.data[[r, c]] + low.data[[r, c]] + close.data[[r, c]]) / 3.0)
             .collect();
@@ -340,7 +418,11 @@ pub fn vwap(high: &Panel, low: &Panel, close: &Panel, volume: &Panel, n: usize) 
             }
         }
     }
-    Panel { dates: close.dates.clone(), symbols: close.symbols.clone(), data: out }
+    Panel {
+        dates: close.dates.clone(),
+        symbols: close.symbols.clone(),
+        data: out,
+    }
 }
 
 /// Williams %R: `-100 * (HHₙ - C) / (HHₙ - LLₙ)`.
@@ -357,7 +439,11 @@ pub fn willr(high: &Panel, low: &Panel, close: &Panel, n: usize) -> Panel {
             }
         }
     }
-    Panel { dates: close.dates.clone(), symbols: close.symbols.clone(), data: out }
+    Panel {
+        dates: close.dates.clone(),
+        symbols: close.symbols.clone(),
+        data: out,
+    }
 }
 
 #[cfg(test)]
@@ -370,8 +456,12 @@ mod tests {
     fn hlc() -> (Panel, Panel, Panel) {
         let d: Vec<i32> = (0..6).map(|i| 20240102 + i).collect();
         let col = |v: [f64; 6]| {
-            Panel::from_rows(d.clone(), vec!["A".into()], v.iter().map(|x| vec![*x]).collect())
-                .unwrap()
+            Panel::from_rows(
+                d.clone(),
+                vec!["A".into()],
+                v.iter().map(|x| vec![*x]).collect(),
+            )
+            .unwrap()
         };
         (
             col([10.0, 11.0, 12.0, 11.0, 13.0, 12.0]),
@@ -423,8 +513,12 @@ mod tests {
         // Down: row3=66.667, row4=33.333, row5=0.
         let d: Vec<i32> = (0..6).map(|i| 20240102 + i).collect();
         let col = |v: [f64; 6]| {
-            Panel::from_rows(d.clone(), vec!["A".into()], v.iter().map(|x| vec![*x]).collect())
-                .unwrap()
+            Panel::from_rows(
+                d.clone(),
+                vec!["A".into()],
+                v.iter().map(|x| vec![*x]).collect(),
+            )
+            .unwrap()
         };
         let high = col([10.0, 11.0, 12.0, 11.0, 13.0, 12.0]);
         let low = col([8.0, 9.0, 7.0, 9.0, 10.0, 11.0]);
@@ -473,10 +567,18 @@ mod tests {
             )
             .unwrap()
         };
-        let high = mk([10.0, 11.0, 12.0, 13.0, 14.0, 15.0], [15.0, 14.0, 13.0, 12.0, 11.0, 10.0]);
-        let low = mk([9.0, 10.0, 11.0, 12.0, 13.0, 14.0], [14.0, 13.0, 12.0, 11.0, 10.0, 9.0]);
-        let close =
-            mk([9.5, 10.5, 11.5, 12.5, 13.5, 14.5], [14.5, 13.5, 12.5, 11.5, 10.5, 9.5]);
+        let high = mk(
+            [10.0, 11.0, 12.0, 13.0, 14.0, 15.0],
+            [15.0, 14.0, 13.0, 12.0, 11.0, 10.0],
+        );
+        let low = mk(
+            [9.0, 10.0, 11.0, 12.0, 13.0, 14.0],
+            [14.0, 13.0, 12.0, 11.0, 10.0, 9.0],
+        );
+        let close = mk(
+            [9.5, 10.5, 11.5, 12.5, 13.5, 14.5],
+            [14.5, 13.5, 12.5, 11.5, 10.5, 9.5],
+        );
 
         let pdi = plus_di(&high, &low, &close, 2);
         let mdi = minus_di(&high, &low, &close, 2);
@@ -504,7 +606,13 @@ mod tests {
         let vol = Panel::from_rows(
             d,
             vec!["A".into()],
-            vec![vec![100.0], vec![200.0], vec![150.0], vec![120.0], vec![300.0]],
+            vec![
+                vec![100.0],
+                vec![200.0],
+                vec![150.0],
+                vec![120.0],
+                vec![300.0],
+            ],
         )
         .unwrap();
         let o = obv(&close, &vol);
@@ -521,8 +629,12 @@ mod tests {
         // MFI(3): row3 = 100-100/(1+2770/1200) = 69.7733; row4 = 36.2789.
         let d: Vec<i32> = (0..5).map(|i| 20240102 + i).collect();
         let col = |v: [f64; 5]| {
-            Panel::from_rows(d.clone(), vec!["A".into()], v.iter().map(|x| vec![*x]).collect())
-                .unwrap()
+            Panel::from_rows(
+                d.clone(),
+                vec!["A".into()],
+                v.iter().map(|x| vec![*x]).collect(),
+            )
+            .unwrap()
         };
         let high = col([10.0, 12.0, 11.0, 13.0, 12.0]);
         let low = col([8.0, 10.0, 9.0, 11.0, 10.0]);
@@ -560,7 +672,14 @@ mod tests {
         let vol = Panel::from_rows(
             (0..6).map(|i| 20240102 + i).collect(),
             vec!["A".into()],
-            vec![vec![100.0], vec![200.0], vec![300.0], vec![400.0], vec![500.0], vec![600.0]],
+            vec![
+                vec![100.0],
+                vec![200.0],
+                vec![300.0],
+                vec![400.0],
+                vec![500.0],
+                vec![600.0],
+            ],
         )
         .unwrap();
         let v = vwap(&h, &l, &c, &vol, 3);

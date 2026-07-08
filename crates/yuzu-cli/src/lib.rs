@@ -4,12 +4,12 @@
 use std::collections::HashMap;
 use std::path::Path;
 
+use rayon::prelude::*;
+use serde::Serialize;
 use yuzu_core::backtest::BacktestConfig;
 use yuzu_core::report::Report;
 use yuzu_core::{run_backtest, EvalContext};
 use yuzu_data::{load_panel, Field, LocalSource, PRICES_DIR};
-use rayon::prelude::*;
-use serde::Serialize;
 
 /// Symbols that have a `prices/<sym>.csv.gz` file under `root`, sorted.
 pub fn list_symbols(root: &Path) -> std::io::Result<Vec<String>> {
@@ -23,7 +23,11 @@ pub fn list_symbols(root: &Path) -> std::io::Result<Vec<String>> {
         if !entry.file_type()?.is_file() {
             continue;
         }
-        if let Some(sym) = entry.file_name().to_str().and_then(|n| n.strip_suffix(".csv.gz")) {
+        if let Some(sym) = entry
+            .file_name()
+            .to_str()
+            .and_then(|n| n.strip_suffix(".csv.gz"))
+        {
             out.push(sym.to_string());
         }
     }
@@ -36,10 +40,14 @@ pub fn list_symbols(root: &Path) -> std::io::Result<Vec<String>> {
 pub(crate) fn load_close(root: &Path, from: i32, to: i32) -> Result<EvalContext, String> {
     let syms = list_symbols(root).map_err(|e| e.to_string())?;
     let src = LocalSource::new(root);
-    let panel = load_panel(&src, &syms, Field::AdjClose, from, to, PRICES_DIR).map_err(|e| e.to_string())?;
+    let panel = load_panel(&src, &syms, Field::AdjClose, from, to, PRICES_DIR)
+        .map_err(|e| e.to_string())?;
     let mut panels = HashMap::new();
     panels.insert("close".to_string(), panel);
-    Ok(EvalContext { panels, industry: HashMap::new() })
+    Ok(EvalContext {
+        panels,
+        industry: HashMap::new(),
+    })
 }
 
 /// Which metric to rank by in a sweep.
@@ -95,24 +103,30 @@ pub fn run_sweep(
         Ok(v) => v,
         Err(e) => return variants.iter().map(|(n, _)| failed(n, e.clone())).collect(),
     };
-    let cfg = BacktestConfig { fee_ratio, tax_ratio: 0.0, position_limit: 0.0 };
+    let cfg = BacktestConfig {
+        fee_ratio,
+        tax_ratio: 0.0,
+        position_limit: 0.0,
+    };
 
     let mut board: Vec<SweepEntry> = variants
         .par_iter()
-        .map(|(name, spec)| match run_backtest(spec, &ctx, "close", &cfg) {
-            Ok(r) => SweepEntry {
-                name: name.clone(),
-                ok: true,
-                error: None,
-                total_return: r.metrics.total_return,
-                cagr: r.metrics.cagr,
-                sharpe: r.metrics.sharpe,
-                sortino: r.metrics.sortino,
-                max_drawdown: r.metrics.max_drawdown,
-                calmar: r.metrics.calmar,
+        .map(
+            |(name, spec)| match run_backtest(spec, &ctx, "close", &cfg) {
+                Ok(r) => SweepEntry {
+                    name: name.clone(),
+                    ok: true,
+                    error: None,
+                    total_return: r.metrics.total_return,
+                    cagr: r.metrics.cagr,
+                    sharpe: r.metrics.sharpe,
+                    sortino: r.metrics.sortino,
+                    max_drawdown: r.metrics.max_drawdown,
+                    calmar: r.metrics.calmar,
+                },
+                Err(e) => failed(name, e.to_string()),
             },
-            Err(e) => failed(name, e.to_string()),
-        })
+        )
         .collect();
 
     let key = |e: &SweepEntry| match sort_by {
@@ -124,8 +138,7 @@ pub fn run_sweep(
     // ok entries first, then non-NaN metrics before NaN, then by metric descending;
     // failures and NaN-metric runs sink to the bottom.
     board.sort_by(|a, b| {
-        b.ok
-            .cmp(&a.ok)
+        b.ok.cmp(&a.ok)
             .then(key(a).is_nan().cmp(&key(b).is_nan()))
             .then(
                 key(b)
@@ -145,6 +158,10 @@ pub fn run_single(
     fee_ratio: f64,
 ) -> Result<Report, String> {
     let ctx = load_close(root, from, to)?;
-    let cfg = BacktestConfig { fee_ratio, tax_ratio: 0.0, position_limit: 0.0 };
+    let cfg = BacktestConfig {
+        fee_ratio,
+        tax_ratio: 0.0,
+        position_limit: 0.0,
+    };
     run_backtest(spec_json, &ctx, "close", &cfg).map_err(|e| e.to_string())
 }

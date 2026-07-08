@@ -49,15 +49,23 @@ impl Panel {
     }
 
     pub fn rebalance_dates(&self, dates: &[i32]) -> Panel {
-        let pos: std::collections::HashMap<i32, usize> =
-            self.dates.iter().enumerate().map(|(i, d)| (*d, i)).collect();
+        let pos: std::collections::HashMap<i32, usize> = self
+            .dates
+            .iter()
+            .enumerate()
+            .map(|(i, d)| (*d, i))
+            .collect();
         let mut out = ndarray::Array2::from_elem((dates.len(), self.ncols()), f64::NAN);
         for (r, d) in dates.iter().enumerate() {
             if let Some(&sr) = pos.get(d) {
                 out.row_mut(r).assign(&self.data.row(sr));
             }
         }
-        Panel { dates: dates.to_vec(), symbols: self.symbols.clone(), data: out }
+        Panel {
+            dates: dates.to_vec(),
+            symbols: self.symbols.clone(),
+            data: out,
+        }
     }
 
     fn select_rows(&self, rows: &[usize]) -> Panel {
@@ -67,7 +75,11 @@ impl Panel {
             out.row_mut(r).assign(&self.data.row(src));
             dates.push(self.dates[src]);
         }
-        Panel { dates, symbols: self.symbols.clone(), data: out }
+        Panel {
+            dates,
+            symbols: self.symbols.clone(),
+            data: out,
+        }
     }
 }
 

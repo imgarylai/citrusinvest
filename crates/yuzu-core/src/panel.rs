@@ -37,7 +37,11 @@ impl Panel {
                 data_len: data.len(),
             });
         }
-        Ok(Panel { dates, symbols, data })
+        Ok(Panel {
+            dates,
+            symbols,
+            data,
+        })
     }
 
     pub fn from_rows(
@@ -48,8 +52,13 @@ impl Panel {
         let nrows = rows.len();
         let ncols = symbols.len();
         let flat: Vec<f64> = rows.into_iter().flatten().collect();
-        let data = Array2::from_shape_vec((nrows, ncols), flat)
-            .map_err(|_| EngineError::ShapeMismatch { rows: nrows, cols: ncols, data_len: 0 })?;
+        let data = Array2::from_shape_vec((nrows, ncols), flat).map_err(|_| {
+            EngineError::ShapeMismatch {
+                rows: nrows,
+                cols: ncols,
+                data_len: 0,
+            }
+        })?;
         Panel::new(dates, symbols, data)
     }
 
@@ -68,7 +77,11 @@ impl Panel {
                 .assign(&self.data.slice(ndarray::s![..self.nrows() - n, ..]));
         }
         let _ = Axis(0); // keep import used if slicing form changes
-        Panel { dates: self.dates.clone(), symbols: self.symbols.clone(), data: out }
+        Panel {
+            dates: self.dates.clone(),
+            symbols: self.symbols.clone(),
+            data: out,
+        }
     }
 }
 

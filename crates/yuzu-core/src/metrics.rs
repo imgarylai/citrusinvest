@@ -88,8 +88,11 @@ pub fn sortino(equity: &[f64]) -> f64 {
     let r = to_returns(equity);
     // ffn: er = returns (rf=0); negative_returns = min(er[1:], 0).
     let (mean, _) = mean_std(&r);
-    let downside: Vec<f64> =
-        r.iter().skip(1).map(|&x| if x < 0.0 { x } else { 0.0 }).collect();
+    let downside: Vec<f64> = r
+        .iter()
+        .skip(1)
+        .map(|&x| if x < 0.0 { x } else { 0.0 })
+        .collect();
     let (_, dstd) = mean_std(&downside);
     if dstd <= 0.0 || dstd.is_nan() {
         return f64::NAN;
@@ -182,7 +185,11 @@ pub fn num_trades(trades: &[Trade]) -> f64 {
 }
 
 pub fn avg_win(trades: &[Trade]) -> f64 {
-    let w: Vec<f64> = closed(trades).iter().map(|t| t.ret).filter(|&r| r > 0.0).collect();
+    let w: Vec<f64> = closed(trades)
+        .iter()
+        .map(|t| t.ret)
+        .filter(|&r| r > 0.0)
+        .collect();
     if w.is_empty() {
         return f64::NAN;
     }
@@ -190,7 +197,11 @@ pub fn avg_win(trades: &[Trade]) -> f64 {
 }
 
 pub fn avg_loss(trades: &[Trade]) -> f64 {
-    let l: Vec<f64> = closed(trades).iter().map(|t| t.ret).filter(|&r| r < 0.0).collect();
+    let l: Vec<f64> = closed(trades)
+        .iter()
+        .map(|t| t.ret)
+        .filter(|&r| r < 0.0)
+        .collect();
     if l.is_empty() {
         return f64::NAN;
     }

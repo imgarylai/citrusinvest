@@ -26,7 +26,11 @@ pub struct BacktestConfig {
 
 impl Default for BacktestConfig {
     fn default() -> Self {
-        BacktestConfig { fee_ratio: 0.0, tax_ratio: 0.0, position_limit: 0.0 }
+        BacktestConfig {
+            fee_ratio: 0.0,
+            tax_ratio: 0.0,
+            position_limit: 0.0,
+        }
     }
 }
 
@@ -53,10 +57,19 @@ pub(crate) fn cap_weights_row(row: &mut [f64], limit: f64) {
 /// (date, symbol) lookup, independent of `align`, so indices line up with `grid`.
 fn conform_to(grid: &Panel, other: Option<&Panel>) -> Option<Array2<f64>> {
     let other = other?;
-    let row_of: HashMap<i32, usize> =
-        other.dates.iter().copied().enumerate().map(|(i, d)| (d, i)).collect();
-    let col_of: HashMap<&str, usize> =
-        other.symbols.iter().enumerate().map(|(i, s)| (s.as_str(), i)).collect();
+    let row_of: HashMap<i32, usize> = other
+        .dates
+        .iter()
+        .copied()
+        .enumerate()
+        .map(|(i, d)| (d, i))
+        .collect();
+    let col_of: HashMap<&str, usize> = other
+        .symbols
+        .iter()
+        .enumerate()
+        .map(|(i, s)| (s.as_str(), i))
+        .collect();
     let mut out = Array2::from_elem(grid.data.raw_dim(), f64::NAN);
     for (r, day) in grid.dates.iter().enumerate() {
         let Some(&or) = row_of.get(day) else { continue };
@@ -171,7 +184,11 @@ pub fn run(
         for c in 0..n {
             let p0 = px.data[[r - 1, c]];
             let p1 = px.data[[r, c]];
-            let ret = if p0.is_nan() || p1.is_nan() || p0 == 0.0 { 0.0 } else { p1 / p0 - 1.0 };
+            let ret = if p0.is_nan() || p1.is_nan() || p0 == 0.0 {
+                0.0
+            } else {
+                p1 / p0 - 1.0
+            };
             g += w_prev[c] * ret;
             drift[c] = w_prev[c] * (1.0 + ret);
         }
@@ -210,7 +227,11 @@ pub fn run(
             } else if exit_now {
                 let (er, ep) = open.take().unwrap();
                 let xp = px.data[[r, c]];
-                let gross = if ep == 0.0 || ep.is_nan() || xp.is_nan() { 1.0 } else { xp / ep };
+                let gross = if ep == 0.0 || ep.is_nan() || xp.is_nan() {
+                    1.0
+                } else {
+                    xp / ep
+                };
                 let net = (1.0 - cfg.fee_ratio) * gross * (1.0 - cfg.fee_ratio - cfg.tax_ratio);
                 let dir = target[[er, c]].signum();
                 let (mae, mfe) = excursion(&hi, &lo, er, r, c, ep, dir);
@@ -227,7 +248,11 @@ pub fn run(
         }
         if let Some((er, ep)) = open {
             let xp = px.data[[nrows - 1, c]];
-            let gross = if ep == 0.0 || ep.is_nan() || xp.is_nan() { 1.0 } else { xp / ep };
+            let gross = if ep == 0.0 || ep.is_nan() || xp.is_nan() {
+                1.0
+            } else {
+                xp / ep
+            };
             let dir = target[[er, c]].signum();
             let (mae, mfe) = excursion(&hi, &lo, er, nrows - 1, c, ep, dir);
             trades.push(Trade {
@@ -242,12 +267,21 @@ pub fn run(
         }
     }
 
-    BacktestRun { dates, equity, trades, exposure }
+    BacktestRun {
+        dates,
+        equity,
+        trades,
+        exposure,
+    }
 }
 
 fn rebalance_cost(drift: &[f64], target: &[f64], cfg: &BacktestConfig) -> f64 {
     let turnover: f64 = drift.iter().zip(target).map(|(d, t)| (t - d).abs()).sum();
-    let sells: f64 = drift.iter().zip(target).map(|(d, t)| (d - t).max(0.0)).sum();
+    let sells: f64 = drift
+        .iter()
+        .zip(target)
+        .map(|(d, t)| (d - t).max(0.0))
+        .sum();
     cfg.fee_ratio * turnover + cfg.tax_ratio * sells
 }
 
@@ -331,23 +365,57 @@ mod tests {
         let syms = vec!["LONG".to_string(), "SHORT".to_string()];
         // LONG: held days 0-2, exits day 3 (closed). SHORT: held all days (open).
         let pos = Panel::from_rows(
-            dates.clone(), syms.clone(),
-            vec![vec![1.0, -1.0], vec![1.0, -1.0], vec![1.0, -1.0], vec![0.0, -1.0]],
-        ).unwrap();
+            dates.clone(),
+            syms.clone(),
+            vec![
+                vec![1.0, -1.0],
+                vec![1.0, -1.0],
+                vec![1.0, -1.0],
+                vec![0.0, -1.0],
+            ],
+        )
+        .unwrap();
         let close = Panel::from_rows(
-            dates.clone(), syms.clone(),
-            vec![vec![10.0, 10.0], vec![11.0, 9.0], vec![12.0, 8.0], vec![11.0, 9.0]],
-        ).unwrap();
+            dates.clone(),
+            syms.clone(),
+            vec![
+                vec![10.0, 10.0],
+                vec![11.0, 9.0],
+                vec![12.0, 8.0],
+                vec![11.0, 9.0],
+            ],
+        )
+        .unwrap();
         let high = Panel::from_rows(
-            dates.clone(), syms.clone(),
-            vec![vec![10.0, 10.0], vec![13.0, 11.0], vec![12.0, 12.0], vec![11.0, 9.0]],
-        ).unwrap();
+            dates.clone(),
+            syms.clone(),
+            vec![
+                vec![10.0, 10.0],
+                vec![13.0, 11.0],
+                vec![12.0, 12.0],
+                vec![11.0, 9.0],
+            ],
+        )
+        .unwrap();
         let low = Panel::from_rows(
-            dates.clone(), syms.clone(),
-            vec![vec![9.0, 10.0], vec![11.0, 8.0], vec![12.0, 7.0], vec![10.0, 9.0]],
-        ).unwrap();
+            dates.clone(),
+            syms.clone(),
+            vec![
+                vec![9.0, 10.0],
+                vec![11.0, 8.0],
+                vec![12.0, 7.0],
+                vec![10.0, 9.0],
+            ],
+        )
+        .unwrap();
 
-        let r = run(&pos, &close, Some(&high), Some(&low), &BacktestConfig::default());
+        let r = run(
+            &pos,
+            &close,
+            Some(&high),
+            Some(&low),
+            &BacktestConfig::default(),
+        );
         let long = r.trades.iter().find(|t| t.symbol == "LONG").unwrap();
         let short = r.trades.iter().find(|t| t.symbol == "SHORT").unwrap();
 

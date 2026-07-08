@@ -19,7 +19,10 @@ pub struct EvalContext {
 
 impl EvalContext {
     pub fn new(panels: HashMap<String, Panel>) -> Self {
-        EvalContext { panels, industry: HashMap::new() }
+        EvalContext {
+            panels,
+            industry: HashMap::new(),
+        }
     }
 }
 
@@ -30,7 +33,8 @@ impl From<HashMap<String, Panel>> for EvalContext {
 }
 
 pub fn run_strategy(spec_json: &str, ctx: &EvalContext) -> Result<Panel, EngineError> {
-    let expr: Expr = serde_json::from_str(spec_json).map_err(|e| EngineError::Eval(e.to_string()))?;
+    let expr: Expr =
+        serde_json::from_str(spec_json).map_err(|e| EngineError::Eval(e.to_string()))?;
     eval(&expr, ctx)
 }
 
@@ -52,9 +56,9 @@ fn num_binop(
     f: impl Fn(f64, f64) -> f64,
 ) -> Result<Panel, EngineError> {
     match (as_const(l), as_const(r)) {
-        (Some(_), Some(_)) => {
-            Err(EngineError::Eval("both operands of a binary op are Const".into()))
-        }
+        (Some(_), Some(_)) => Err(EngineError::Eval(
+            "both operands of a binary op are Const".into(),
+        )),
         (Some(a), None) => Ok(eval(r, ctx)?.scalar_lhs(a, f)),
         (None, Some(b)) => Ok(eval(l, ctx)?.scalar_rhs(b, f)),
         (None, None) => Ok(eval(l, ctx)?.ewise(&eval(r, ctx)?, f)),
@@ -72,7 +76,9 @@ pub fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
         Const { value } => {
             // Const is only meaningful inside scalar ops, handled by callers.
             // Reject standalone evaluation.
-            return Err(EngineError::Eval(format!("bare Const {value} not allowed at top level")));
+            return Err(EngineError::Eval(format!(
+                "bare Const {value} not allowed at top level"
+            )));
         }
         Average { of, n } => eval(of, ctx)?.average(*n),
         Ema { of, n } => eval(of, ctx)?.ema(*n),
@@ -82,44 +88,90 @@ pub fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
         Rise { of, n } => eval(of, ctx)?.rise(*n),
         Shift { of, n } => eval(of, ctx)?.shift(*n),
         RollingMax { of, n } => eval(of, ctx)?.rolling_max(*n),
-        Atr { high, low, close, n } => {
-            ta::atr(&eval(high, ctx)?, &eval(low, ctx)?, &eval(close, ctx)?, *n)
-        }
-        Natr { high, low, close, n } => {
-            ta::natr(&eval(high, ctx)?, &eval(low, ctx)?, &eval(close, ctx)?, *n)
-        }
-        WillR { high, low, close, n } => {
-            ta::willr(&eval(high, ctx)?, &eval(low, ctx)?, &eval(close, ctx)?, *n)
-        }
-        Cci { high, low, close, n } => {
-            ta::cci(&eval(high, ctx)?, &eval(low, ctx)?, &eval(close, ctx)?, *n)
-        }
-        StochK { high, low, close, n } => {
-            ta::stoch_k(&eval(high, ctx)?, &eval(low, ctx)?, &eval(close, ctx)?, *n)
-        }
-        StochD { high, low, close, n, d } => {
-            ta::stoch_d(&eval(high, ctx)?, &eval(low, ctx)?, &eval(close, ctx)?, *n, *d)
-        }
+        Atr {
+            high,
+            low,
+            close,
+            n,
+        } => ta::atr(&eval(high, ctx)?, &eval(low, ctx)?, &eval(close, ctx)?, *n),
+        Natr {
+            high,
+            low,
+            close,
+            n,
+        } => ta::natr(&eval(high, ctx)?, &eval(low, ctx)?, &eval(close, ctx)?, *n),
+        WillR {
+            high,
+            low,
+            close,
+            n,
+        } => ta::willr(&eval(high, ctx)?, &eval(low, ctx)?, &eval(close, ctx)?, *n),
+        Cci {
+            high,
+            low,
+            close,
+            n,
+        } => ta::cci(&eval(high, ctx)?, &eval(low, ctx)?, &eval(close, ctx)?, *n),
+        StochK {
+            high,
+            low,
+            close,
+            n,
+        } => ta::stoch_k(&eval(high, ctx)?, &eval(low, ctx)?, &eval(close, ctx)?, *n),
+        StochD {
+            high,
+            low,
+            close,
+            n,
+            d,
+        } => ta::stoch_d(
+            &eval(high, ctx)?,
+            &eval(low, ctx)?,
+            &eval(close, ctx)?,
+            *n,
+            *d,
+        ),
         AroonUp { high, n } => ta::aroon_up(&eval(high, ctx)?, *n),
         AroonDown { low, n } => ta::aroon_down(&eval(low, ctx)?, *n),
-        Adx { high, low, close, n } => {
-            ta::adx(&eval(high, ctx)?, &eval(low, ctx)?, &eval(close, ctx)?, *n)
-        }
-        PlusDi { high, low, close, n } => {
-            ta::plus_di(&eval(high, ctx)?, &eval(low, ctx)?, &eval(close, ctx)?, *n)
-        }
-        MinusDi { high, low, close, n } => {
-            ta::minus_di(&eval(high, ctx)?, &eval(low, ctx)?, &eval(close, ctx)?, *n)
-        }
+        Adx {
+            high,
+            low,
+            close,
+            n,
+        } => ta::adx(&eval(high, ctx)?, &eval(low, ctx)?, &eval(close, ctx)?, *n),
+        PlusDi {
+            high,
+            low,
+            close,
+            n,
+        } => ta::plus_di(&eval(high, ctx)?, &eval(low, ctx)?, &eval(close, ctx)?, *n),
+        MinusDi {
+            high,
+            low,
+            close,
+            n,
+        } => ta::minus_di(&eval(high, ctx)?, &eval(low, ctx)?, &eval(close, ctx)?, *n),
         Obv { close, volume } => ta::obv(&eval(close, ctx)?, &eval(volume, ctx)?),
-        Mfi { high, low, close, volume, n } => ta::mfi(
+        Mfi {
+            high,
+            low,
+            close,
+            volume,
+            n,
+        } => ta::mfi(
             &eval(high, ctx)?,
             &eval(low, ctx)?,
             &eval(close, ctx)?,
             &eval(volume, ctx)?,
             *n,
         ),
-        Vwap { high, low, close, volume, n } => ta::vwap(
+        Vwap {
+            high,
+            low,
+            close,
+            volume,
+            n,
+        } => ta::vwap(
             &eval(high, ctx)?,
             &eval(low, ctx)?,
             &eval(close, ctx)?,
@@ -129,7 +181,11 @@ pub fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
         Fall { of, n } => eval(of, ctx)?.fall(*n),
         IsLargest { of, n } => eval(of, ctx)?.is_largest(*n),
         IsSmallest { of, n } => eval(of, ctx)?.is_smallest(*n),
-        Sustain { of, nwindow, nsatisfy } => eval(of, ctx)?.sustain(*nwindow, *nsatisfy),
+        Sustain {
+            of,
+            nwindow,
+            nsatisfy,
+        } => eval(of, ctx)?.sustain(*nwindow, *nsatisfy),
         IsEntry { of } => eval(of, ctx)?.is_entry(),
         IsExit { of } => eval(of, ctx)?.is_exit(),
         Gt { l, r } => num_binop(l, r, ctx, |x, y| bool_to_f64(x > y))?,
@@ -196,9 +252,7 @@ pub fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
                         "Rebalance takes either freq or on, not both".into(),
                     ))
                 }
-                (None, None) => {
-                    return Err(EngineError::Eval("Rebalance needs freq or on".into()))
-                }
+                (None, None) => return Err(EngineError::Eval("Rebalance needs freq or on".into())),
                 (Some(freq), None) => {
                     let f = match freq {
                         "W" => Freq::Weekly,
@@ -231,7 +285,10 @@ pub fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
         }
         Neutralize { of, by, add_const } => {
             let factor = eval(of, ctx)?;
-            let neutralizers = by.iter().map(|b| eval(b, ctx)).collect::<Result<Vec<_>, _>>()?;
+            let neutralizers = by
+                .iter()
+                .map(|b| eval(b, ctx))
+                .collect::<Result<Vec<_>, _>>()?;
             factor.neutralize(&neutralizers, *add_const)
         }
         NeutralizeIndustry { of, add_const } => {
@@ -356,9 +413,11 @@ mod tests {
         let c = ctx();
         let d = r#"{"op":"Data","name":"close"}"#;
         // Rank pct ascending, row0 [1,4] => A=0.5, B=1.0
-        let rank =
-            run_strategy(&format!(r#"{{"op":"Rank","of":{d},"pct":true,"ascending":true}}"#), &c)
-                .unwrap();
+        let rank = run_strategy(
+            &format!(r#"{{"op":"Rank","of":{d},"pct":true,"ascending":true}}"#),
+            &c,
+        )
+        .unwrap();
         assert_eq!(rank.data[[0, 0]], 0.5);
         assert_eq!(rank.data[[0, 1]], 1.0);
         // Add close + close, row0 [1,4] => [2,8]
@@ -367,7 +426,9 @@ mod tests {
         assert_eq!(add.data[[0, 1]], 8.0);
         // Ceil(close * 0.5), row1 [2,3] => [1.0,1.5] => [1,2]
         let ceil = run_strategy(
-            &format!(r#"{{"op":"Ceil","of":{{"op":"Mul","l":{d},"r":{{"op":"Const","value":0.5}}}}}}"#),
+            &format!(
+                r#"{{"op":"Ceil","of":{{"op":"Mul","l":{d},"r":{{"op":"Const","value":0.5}}}}}}"#
+            ),
             &c,
         )
         .unwrap();
@@ -445,7 +506,11 @@ mod tests {
     fn shift_variant_lags_the_series() {
         // ctx close col A = [1,2,3]; shift(1) -> [NaN,1,2]
         let c = ctx();
-        let r = run_strategy(r#"{"op":"Shift","of":{"op":"Data","name":"close"},"n":1}"#, &c).unwrap();
+        let r = run_strategy(
+            r#"{"op":"Shift","of":{"op":"Data","name":"close"},"n":1}"#,
+            &c,
+        )
+        .unwrap();
         assert!(r.data[[0, 0]].is_nan());
         assert_eq!(r.data[[1, 0]], 1.0);
         assert_eq!(r.data[[2, 0]], 2.0);
@@ -455,7 +520,11 @@ mod tests {
     fn rolling_max_variant_evaluates() {
         let c = ctx();
         // ctx close col A = [1,2,3]; rolling_max(2) -> [NaN,2,3]
-        let r = run_strategy(r#"{"op":"RollingMax","of":{"op":"Data","name":"close"},"n":2}"#, &c).unwrap();
+        let r = run_strategy(
+            r#"{"op":"RollingMax","of":{"op":"Data","name":"close"},"n":2}"#,
+            &c,
+        )
+        .unwrap();
         assert!(r.data[[0, 0]].is_nan());
         assert_eq!(r.data[[1, 0]], 2.0);
         assert_eq!(r.data[[2, 0]], 3.0);
@@ -474,7 +543,10 @@ mod tests {
             ("high".into(), mk(10.0, 11.0, 12.0, 11.0, 13.0, 12.0)),
             ("low".into(), mk(8.0, 9.0, 10.0, 9.0, 10.0, 11.0)),
             ("close".into(), mk(9.0, 10.0, 11.0, 10.0, 12.0, 11.0)),
-            ("volume".into(), mk(100.0, 110.0, 120.0, 130.0, 140.0, 150.0)),
+            (
+                "volume".into(),
+                mk(100.0, 110.0, 120.0, 130.0, 140.0, 150.0),
+            ),
         ]))
     }
 
@@ -574,8 +646,9 @@ mod tests {
         let entry = r#"{ "op": "Gt", "l": { "op": "Data", "name": "close" }, "r": { "op": "Const", "value": 0.0 } }"#;
         let exit = r#"{ "op": "Lt", "l": { "op": "Data", "name": "close" }, "r": { "op": "Const", "value": 0.0 } }"#;
         let no_stop = format!(r#"{{ "op": "HoldUntil", "entry": {entry}, "exit": {exit} }}"#);
-        let with_tp =
-            format!(r#"{{ "op": "HoldUntil", "entry": {entry}, "exit": {exit}, "take_profit": 0.2 }}"#);
+        let with_tp = format!(
+            r#"{{ "op": "HoldUntil", "entry": {entry}, "exit": {exit}, "take_profit": 0.2 }}"#
+        );
 
         let held = run_strategy(&no_stop, &c).unwrap();
         let stopped = run_strategy(&with_tp, &c).unwrap();

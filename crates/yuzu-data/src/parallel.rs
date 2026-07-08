@@ -90,7 +90,11 @@ mod tests {
         fs::write(dir.join("a.bin"), b"AA").unwrap();
         fs::write(dir.join("b.bin"), b"BB").unwrap();
         let src = LocalSource::new(&dir);
-        let keys = vec!["a.bin".to_string(), "missing.bin".to_string(), "b.bin".to_string()];
+        let keys = vec![
+            "a.bin".to_string(),
+            "missing.bin".to_string(),
+            "b.bin".to_string(),
+        ];
         let got = fetch_raw(&src, &keys).unwrap();
         assert_eq!(got, vec![Some(b"AA".to_vec()), None, Some(b"BB".to_vec())]);
     }

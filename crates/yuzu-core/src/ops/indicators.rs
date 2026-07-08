@@ -38,7 +38,11 @@ impl Panel {
                 }
             }
         }
-        Panel { dates: self.dates.clone(), symbols: self.symbols.clone(), data: out }
+        Panel {
+            dates: self.dates.clone(),
+            symbols: self.symbols.clone(),
+            data: out,
+        }
     }
 
     /// Rolling-window maximum over `n` periods (`min_periods = n`): the first
@@ -48,7 +52,11 @@ impl Panel {
         let (nrows, ncols) = self.data.dim();
         let mut out = Array2::from_elem((nrows, ncols), f64::NAN);
         if n == 0 {
-            return Panel { dates: self.dates.clone(), symbols: self.symbols.clone(), data: out };
+            return Panel {
+                dates: self.dates.clone(),
+                symbols: self.symbols.clone(),
+                data: out,
+            };
         }
         for c in 0..ncols {
             for r in (n - 1)..nrows {
@@ -70,7 +78,11 @@ impl Panel {
                 }
             }
         }
-        Panel { dates: self.dates.clone(), symbols: self.symbols.clone(), data: out }
+        Panel {
+            dates: self.dates.clone(),
+            symbols: self.symbols.clone(),
+            data: out,
+        }
     }
 
     /// Rolling-window minimum over `n` periods (`min_periods = n`): the first
@@ -79,7 +91,11 @@ impl Panel {
         let (nrows, ncols) = self.data.dim();
         let mut out = Array2::from_elem((nrows, ncols), f64::NAN);
         if n == 0 {
-            return Panel { dates: self.dates.clone(), symbols: self.symbols.clone(), data: out };
+            return Panel {
+                dates: self.dates.clone(),
+                symbols: self.symbols.clone(),
+                data: out,
+            };
         }
         for c in 0..ncols {
             for r in (n - 1)..nrows {
@@ -101,7 +117,11 @@ impl Panel {
                 }
             }
         }
-        Panel { dates: self.dates.clone(), symbols: self.symbols.clone(), data: out }
+        Panel {
+            dates: self.dates.clone(),
+            symbols: self.symbols.clone(),
+            data: out,
+        }
     }
 
     pub fn rise(&self, n: usize) -> Panel {
@@ -159,7 +179,11 @@ impl Panel {
                 i = j;
             }
         }
-        Panel { dates: self.dates.clone(), symbols: self.symbols.clone(), data: out }
+        Panel {
+            dates: self.dates.clone(),
+            symbols: self.symbols.clone(),
+            data: out,
+        }
     }
 
     /// Wilder's RSI over `n` periods, computed per symbol down the time axis —
@@ -174,7 +198,11 @@ impl Panel {
         let (nrows, ncols) = self.data.dim();
         let mut out = Array2::from_elem((nrows, ncols), f64::NAN);
         if n == 0 {
-            return Panel { dates: self.dates.clone(), symbols: self.symbols.clone(), data: out };
+            return Panel {
+                dates: self.dates.clone(),
+                symbols: self.symbols.clone(),
+                data: out,
+            };
         }
         let delta = |a: f64, b: f64| {
             let d = a - b;
@@ -214,7 +242,11 @@ impl Panel {
                 out[[r, c]] = rsi_from(avg_gain, avg_loss);
             }
         }
-        Panel { dates: self.dates.clone(), symbols: self.symbols.clone(), data: out }
+        Panel {
+            dates: self.dates.clone(),
+            symbols: self.symbols.clone(),
+            data: out,
+        }
     }
 
     /// TA-Lib-compatible EMA over `n` periods: seeded with the SMA of the first
@@ -227,7 +259,11 @@ impl Panel {
         let (nrows, ncols) = self.data.dim();
         let mut out = Array2::from_elem((nrows, ncols), f64::NAN);
         if n == 0 {
-            return Panel { dates: self.dates.clone(), symbols: self.symbols.clone(), data: out };
+            return Panel {
+                dates: self.dates.clone(),
+                symbols: self.symbols.clone(),
+                data: out,
+            };
         }
         let k = 2.0 / (n as f64 + 1.0);
         for c in 0..ncols {
@@ -246,7 +282,11 @@ impl Panel {
                 out[[r, c]] = ema;
             }
         }
-        Panel { dates: self.dates.clone(), symbols: self.symbols.clone(), data: out }
+        Panel {
+            dates: self.dates.clone(),
+            symbols: self.symbols.clone(),
+            data: out,
+        }
     }
 
     /// Rolling population standard deviation over `n` periods (`ddof=0`,
@@ -257,7 +297,11 @@ impl Panel {
         let (nrows, ncols) = self.data.dim();
         let mut out = Array2::from_elem((nrows, ncols), f64::NAN);
         if n == 0 {
-            return Panel { dates: self.dates.clone(), symbols: self.symbols.clone(), data: out };
+            return Panel {
+                dates: self.dates.clone(),
+                symbols: self.symbols.clone(),
+                data: out,
+            };
         }
         for c in 0..ncols {
             for r in (n - 1)..nrows {
@@ -271,15 +315,21 @@ impl Panel {
                 out[[r, c]] = var.sqrt();
             }
         }
-        Panel { dates: self.dates.clone(), symbols: self.symbols.clone(), data: out }
+        Panel {
+            dates: self.dates.clone(),
+            symbols: self.symbols.clone(),
+            data: out,
+        }
     }
 
     pub fn quantile_row(&self, c: f64) -> Panel {
         let nrows = self.nrows();
         let mut out = Array2::from_elem((nrows, 1), f64::NAN);
         for r in 0..nrows {
-            let mut vals: Vec<f64> =
-                (0..self.ncols()).map(|j| self.data[[r, j]]).filter(|x| !x.is_nan()).collect();
+            let mut vals: Vec<f64> = (0..self.ncols())
+                .map(|j| self.data[[r, j]])
+                .filter(|x| !x.is_nan())
+                .collect();
             if vals.is_empty() {
                 continue;
             }
@@ -291,7 +341,11 @@ impl Panel {
             let frac = pos - lo as f64;
             out[[r, 0]] = vals[lo] * (1.0 - frac) + vals[hi] * frac;
         }
-        Panel { dates: self.dates.clone(), symbols: vec!["quantile".into()], data: out }
+        Panel {
+            dates: self.dates.clone(),
+            symbols: vec!["quantile".into()],
+            data: out,
+        }
     }
 }
 
@@ -323,7 +377,14 @@ mod tests {
         let p = Panel::from_rows(
             (0..6).map(|i| 20240102 + i).collect(),
             vec!["A".into()],
-            vec![vec![10.0], vec![11.0], vec![10.0], vec![12.0], vec![13.0], vec![12.0]],
+            vec![
+                vec![10.0],
+                vec![11.0],
+                vec![10.0],
+                vec![12.0],
+                vec![13.0],
+                vec![12.0],
+            ],
         )
         .unwrap();
         let r = p.rsi(3);

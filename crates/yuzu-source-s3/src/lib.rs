@@ -83,7 +83,10 @@ impl ObjectSource for S3Source {
 
 impl ObjectSink for S3Source {
     fn put(&self, key: &str, bytes: &[u8]) -> Result<(), DataError> {
-        let url = self.bucket.put_object(Some(&self.creds), key).sign(SIGN_TTL);
+        let url = self
+            .bucket
+            .put_object(Some(&self.creds), key)
+            .sign(SIGN_TTL);
         match ureq::put(url.as_str()).send(bytes) {
             Ok(_) => Ok(()),
             Err(e) => Err(DataError::Io(format!("PUT {key}: {e}"))),
