@@ -39,7 +39,7 @@
 mod dsl;
 pub mod spec;
 
-pub use dsl::{format, parse, ParseError};
+pub use dsl::{format, lint, parse, parse_analyzed, Analysis, Lint, ParseError};
 pub use spec::Expr;
 
 /// Machine-readable op vocabulary: the catalog of callable ops (canonical names,

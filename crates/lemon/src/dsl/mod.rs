@@ -12,6 +12,7 @@
 //! - [`print`] — the canonical formatter: JSON `Expr` → indented DSL text.
 
 mod lex;
+mod lint;
 pub mod ops;
 mod parse;
 mod print;
@@ -32,7 +33,8 @@ impl std::fmt::Display for ParseError {
 
 impl std::error::Error for ParseError {}
 
-pub use parse::parse;
+pub use lint::{lint, Lint};
+pub use parse::{parse, parse_analyzed, Analysis};
 pub use print::format;
 
 #[cfg(test)]
