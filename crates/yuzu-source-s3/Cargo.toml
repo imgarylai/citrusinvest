@@ -5,7 +5,10 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 readme.workspace = true
+rust-version.workspace = true
 description = "S3-compatible ObjectSource for yuzu-data, reading objects over SigV4-presigned HTTPS GETs."
+keywords = ["s3", "backtesting", "finance", "market-data"]
+categories = ["finance"]
 
 [dependencies]
 rusty-s3 = "0.10.0"

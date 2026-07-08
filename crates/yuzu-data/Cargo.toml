@@ -5,7 +5,10 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 readme.workspace = true
+rust-version.workspace = true
 description = "Native I/O layer: reads gzip CSV price and fundamental files into yuzu-core panels."
+keywords = ["backtesting", "finance", "market-data", "csv", "trading"]
+categories = ["finance"]
 
 [dependencies]
 yuzu-core = { path = "../yuzu-core", version = "0.1.1" }
