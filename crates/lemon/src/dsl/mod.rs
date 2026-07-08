@@ -1,6 +1,15 @@
 //! Human-writable DSL ⇄ JSON `Expr` tree. `parse` lowers DSL text to the same
 //! `serde_json::Value` the engine deserializes into [`crate::spec::Expr`];
 //! `print` renders a tree back to DSL text (flat — no `let` reconstruction).
+//!
+//! Sub-modules:
+//! - [`lex`] — tokenizer: numbers (with `_`/`e`), strings (no escapes), `#`
+//!   comments, identifiers, operators, `let`.
+//! - [`parse`] — recursive-descent + Pratt parser; handles `let` inlining,
+//!   positional-then-keyword call args, and `Const` promotion of bare numbers.
+//! - [`ops`] — the op vocabulary: surface names ⇄ `Expr` op tags and field
+//!   layout (the single source both `parse` and `print` consult).
+//! - [`print`] — the canonical formatter: JSON `Expr` → indented DSL text.
 
 mod lex;
 mod ops;

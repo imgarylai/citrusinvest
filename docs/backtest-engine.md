@@ -155,31 +155,40 @@ Element-wise conventions:
 
 ## DSL vocabulary
 
-Semantics are pinned by golden fixtures (committed expected outputs). The table below names ops
-by their semantics; the **Lemon surface names** map through `lemon/src/dsl/ops.rs`
-(e.g. `average` → `sma`/`average`, `rank_cs` → `rank`).
+> **Surface syntax is documented in [`lemon.md`](./lemon.md)** — the authoritative
+> reference for how a strategy is *written*: lexical rules, operators and
+> precedence, the `let`/call grammar, and the **complete op table** (DSL names,
+> arguments, defaults). This section covers only the **engine-side semantics** of
+> a few ops that need pinning down; don't duplicate the op list here.
+
+Semantics are pinned by golden fixtures (committed expected outputs). The table
+below names ops by their engine behavior; the DSL surface names map through
+`lemon/src/dsl/ops.rs` (e.g. the `Average` op is written `sma` / `average`; the
+`Rank` op is written `rank`).
 
 | Op                                 | Meaning                                                                                                               |
 | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `average(n)`                       | `rolling(n, min_periods=floor(n/2)).mean()` (min ≥ 1 obs)                                                             |
+| `Average` (`sma`) `(n)`            | `rolling(n, min_periods=floor(n/2)).mean()` (min ≥ 1 obs)                                                             |
 | `rise(n)` / `fall(n)`              | `self > self.shift(n)` / `self < self.shift(n)`                                                                       |
 | `is_largest(n)` / `is_smallest(n)` | per-row top/bottom `n` over non-NaN cells; NaN never selected; ties break by column order (stable)                    |
 | `is_entry` / `is_exit`             | rising / falling edge of a bool series (`shift` fills `false`)                                                        |
 | `sustain(nwindow, nsatisfy)`       | `rolling(nwindow).sum() >= nsatisfy` over a bool frame                                                                |
-| `exit_when(exit)`                  | entry/exit forward-fill state machine                                                                                 |
 | `hold_until(exit, …)`              | rank-priority rotation with `nstocks_limit` + optional stop_loss / take_profit / trail_stop (the one sequential loop) |
 | `rebalance(freq)`                  | downsample to last obs per W / ME / QE period (or explicit dates)                                                     |
-| `rank_cs(pct, ascending)`          | cross-sectional rank (axis=1), average ties                                                                           |
-| `quantile_row(c)`                  | per-row quantile across columns, linear interpolation                                                                 |
-| arithmetic / comparison / logical  | `+ - * /`, `> >= < <= == !=`, `& \| !`, scalar variants                                                               |
+| `rank(pct, ascending)`             | cross-sectional rank (axis=1), average ties                                                                           |
+| arithmetic / comparison / logical  | `+ - * /`; comparisons `> >= < <=` → `1`/`0`; logical `and` / `or`; scalar variants                                  |
 
-`exit_when` and `quantile_row` are implemented as `Panel` ops (golden-tested) but
-are not yet exposed as `Expr` AST variants / DSL surface names.
+**Surface-syntax notes** (see `lemon.md`): the DSL has **no** `==`, `!=`, `&`,
+`|`, or `!` — logical AND/OR are the words `and` / `or`, and there is no equality
+operator. `exit_when` and `quantile_row` are implemented as `Panel` ops
+(golden-tested) but are **not** exposed as `Expr` AST variants or DSL surface
+names — they are not callable from lemon.
 
 OHLCV technical indicators (`atr`, `natr`, `cci`, `aroon`, `stoch`, `adx`/`±di`,
 `obv`, `mfi`, `willr`, and `vwap` = rolling-`n` `Σ(tp·vol)/Σvol` over typical
 price `(H+L+C)/3`) live in `ops/ta.rs`; the per-op reference is the pairing of
-`lemon/src/spec.rs` (Expr fields) with `lemon/src/dsl/ops.rs` (DSL names).
+`lemon/src/spec.rs` (Expr fields) with `lemon/src/dsl/ops.rs` (DSL names), and the
+author-facing table in `lemon.md`.
 
 ---
 
