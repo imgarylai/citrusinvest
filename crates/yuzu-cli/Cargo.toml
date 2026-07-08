@@ -1,7 +1,12 @@
 [package]
 name = "yuzu-cli"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+description = "Native batch backtest runner CLI over a locally-synced price mirror."
+publish = false
 
 [lib]
 name = "yuzu_cli"
@@ -12,8 +17,8 @@ name = "yuzu-cli"
 path = "src/main.rs"
 
 [dependencies]
-yuzu-core = { path = "../yuzu-core" }
-yuzu-data = { path = "../yuzu-data" }
+yuzu-core = { path = "../yuzu-core", version = "0.1.0" }
+yuzu-data = { path = "../yuzu-data", version = "0.1.0" }
 clap = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true }
