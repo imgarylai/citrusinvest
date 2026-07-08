@@ -146,6 +146,10 @@ enum Cmd {
         /// Out-of-sample window length in trading days.
         #[arg(long, default_value_t = 126)]
         test_days: usize,
+        /// Indicator warmup rows carried into each window (default: auto —
+        /// the largest window argument found in any variant).
+        #[arg(long)]
+        warmup_days: Option<usize>,
         /// Metric used to pick the in-sample winner.
         #[arg(long, value_enum, default_value_t = SortArg::Sharpe)]
         sort: SortArg,
@@ -237,6 +241,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             grid,
             train_days,
             test_days,
+            warmup_days,
             sort,
         } => {
             let cfg = common.config();
@@ -250,6 +255,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     train_days,
                     test_days,
                     sort_by: sort.into(),
+                    warmup_days,
                 },
                 &cfg,
             )?;

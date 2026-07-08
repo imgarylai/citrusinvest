@@ -157,6 +157,7 @@ fn walkforward_picks_in_sample_winner_and_chains_oos_equity() {
             train_days: 4,
             test_days: 3,
             sort_by: SortKey::TotalReturn,
+            warmup_days: None,
         },
         &Default::default(),
     )
@@ -182,8 +183,69 @@ fn walkforward_picks_in_sample_winner_and_chains_oos_equity() {
             train_days: 50,
             test_days: 3,
             sort_by: SortKey::Sharpe,
+            warmup_days: None,
         },
         &Default::default(),
     )
     .is_err());
+}
+
+#[test]
+fn max_lookback_finds_largest_window_arg() {
+    let spec: serde_json::Value = serde_json::from_str(
+        r#"{"op":"And",
+            "l":{"op":"Gt","l":{"op":"Data","name":"close"},
+                 "r":{"op":"Average","of":{"op":"Data","name":"close"},"n":4}},
+            "r":{"op":"Sustain","of":{"op":"Data","name":"sig"},"nwindow":20,"nsatisfy":3}}"#,
+    )
+    .unwrap();
+    assert_eq!(yuzu_cli::max_lookback(&spec), 20);
+    assert_eq!(
+        yuzu_cli::max_lookback(&serde_json::json!({"op":"Data","name":"x"})),
+        0
+    );
+}
+
+#[test]
+fn walkforward_warmup_captures_returns_cold_start_misses() {
+    let dir = long_fixture("wf_warmup");
+    // close > sma(close, 4): on ever-rising AAA this is true wherever the SMA
+    // exists. Cold-started windows lose the first rows to SMA warmup.
+    let variants = vec![(
+        "sma4".to_string(),
+        r#"{"op":"Gt","l":{"op":"Data","name":"close"},
+            "r":{"op":"Average","of":{"op":"Data","name":"close"},"n":4}}"#
+            .to_string(),
+    )];
+    let run = |warmup_days| {
+        yuzu_cli::run_walkforward(
+            &dir,
+            &variants,
+            &yuzu_cli::WalkForwardParams {
+                from: 20240102,
+                to: 20240113,
+                train_days: 4,
+                test_days: 3,
+                sort_by: SortKey::TotalReturn,
+                warmup_days,
+            },
+            &Default::default(),
+        )
+        .unwrap()
+    };
+    let cold = run(Some(0));
+    let warm = run(None); // auto -> max_lookback = 4
+
+    // same OOS date axis either way, strictly increasing (no duplicated
+    // boundary rows)
+    assert_eq!(warm.dates, cold.dates);
+    assert!(warm.dates.windows(2).all(|w| w[0] < w[1]));
+    // warmup means the signal is live from the first test day AND the
+    // boundary-day return is priced -> strictly more OOS return on a riser.
+    assert!(
+        warm.total_return > cold.total_return + 1e-9,
+        "warm {} vs cold {}",
+        warm.total_return,
+        cold.total_return
+    );
 }
