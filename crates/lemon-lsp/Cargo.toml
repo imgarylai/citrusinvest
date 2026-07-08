@@ -1,0 +1,20 @@
+[package]
+name = "lemon-lsp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+rust-version.workspace = true
+description = "Language Server Protocol server for the lemon strategy DSL."
+publish = false
+
+[[bin]]
+name = "lemon-lsp"
+path = "src/main.rs"
+
+[dependencies]
+lemon = { package = "lemon-lang", path = "../lemon", version = "0.1.1" }
+serde_json = { workspace = true }
+tower-lsp = "0.20.0"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std"] }
