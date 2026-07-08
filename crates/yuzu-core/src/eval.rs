@@ -194,6 +194,7 @@ pub fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
         Le { l, r } => num_binop(l, r, ctx, |x, y| bool_to_f64(x <= y))?,
         And { l, r } => eval(l, ctx)?.and(&eval(r, ctx)?),
         Or { l, r } => eval(l, ctx)?.or(&eval(r, ctx)?),
+        Not { of } => eval(of, ctx)?.not(),
         Add { l, r } => num_binop(l, r, ctx, |x, y| x + y)?,
         Sub { l, r } => num_binop(l, r, ctx, |x, y| x - y)?,
         Mul { l, r } => num_binop(l, r, ctx, |x, y| x * y)?,
@@ -417,6 +418,22 @@ mod tests {
         assert!(b.sharpe.p05 <= b.sharpe.p95);
         let json = serde_json::to_string(&r).unwrap();
         assert!(json.contains("\"bootstrap\""));
+    }
+
+    #[test]
+    fn not_inverts_booleans_with_nan_falsy() {
+        let sig = Panel::new(
+            vec![20240102],
+            vec!["A".into(), "B".into(), "C".into()],
+            array![[1.0, 0.0, f64::NAN]],
+        )
+        .unwrap();
+        let c = EvalContext::new(HashMap::from([("sig".to_string(), sig)]));
+        let spec = r#"{"op":"Not","of":{"op":"Data","name":"sig"}}"#;
+        let got = run_strategy(spec, &c).unwrap();
+        assert_eq!(got.data[[0, 0]], 0.0); // not true
+        assert_eq!(got.data[[0, 1]], 1.0); // not false
+        assert_eq!(got.data[[0, 2]], 1.0); // NaN is falsy -> not NaN = 1
     }
 
     #[test]

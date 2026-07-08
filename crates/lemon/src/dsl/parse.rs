@@ -91,18 +91,27 @@ impl<'a> Parser<'a> {
 
     fn expr(&mut self, min_bp: u8) -> Result<Value, ParseError> {
         // prefix
-        let mut lhs = if let TokenKind::Op(op) = &self.peek().kind {
-            let op = op.clone();
-            if let Some(tag) = ops::prefix_tag(&op) {
-                self.next();
-                let operand = self.expr(7)?; // prefix binds tight
-                let of = promote(operand).map_err(|m| self.err(m))?;
-                json!({ "op": tag, "of": of })
-            } else {
-                return Err(self.err(format!("unexpected operator `{op}`")));
+        let mut lhs = match &self.peek().kind {
+            TokenKind::Op(op) => {
+                let op = op.clone();
+                if let Some(tag) = ops::prefix_tag(&op) {
+                    self.next();
+                    let operand = self.expr(7)?; // prefix binds tight
+                    let of = promote(operand).map_err(|m| self.err(m))?;
+                    json!({ "op": tag, "of": of })
+                } else {
+                    return Err(self.err(format!("unexpected operator `{op}`")));
+                }
             }
-        } else {
-            self.primary()?
+            // `not` binds looser than comparisons, tighter than `and`:
+            // `not a > b` is `not (a > b)`; `not a and b` is `(not a) and b`.
+            TokenKind::Ident(s) if s == "not" => {
+                self.next();
+                let operand = self.expr(5)?;
+                let of = promote(operand).map_err(|m| self.err(m))?;
+                json!({ "op": "Not", "of": of })
+            }
+            _ => self.primary()?,
         };
 
         loop {
@@ -412,6 +421,34 @@ mod tests {
             json!({"op":"Add",
                 "l":{"op":"Mul","l":{"op":"Const","value":2},"r":{"op":"Data","name":"x"}},
                 "r":{"op":"Data","name":"y"}})
+        );
+    }
+
+    #[test]
+    fn not_binds_between_and_and_comparisons() {
+        // not a > b  ==  not (a > b)
+        assert_eq!(
+            p("not a > b"),
+            json!({"op":"Not","of":{"op":"Gt",
+                "l":{"op":"Data","name":"a"},"r":{"op":"Data","name":"b"}}})
+        );
+        // not a and b  ==  (not a) and b
+        assert_eq!(
+            p("not a and b"),
+            json!({"op":"And",
+                "l":{"op":"Not","of":{"op":"Data","name":"a"}},
+                "r":{"op":"Data","name":"b"}})
+        );
+        // double negation nests
+        assert_eq!(
+            p("not not a"),
+            json!({"op":"Not","of":{"op":"Not","of":{"op":"Data","name":"a"}}})
+        );
+        // parenthesized operand
+        assert_eq!(
+            p("not (a and b)"),
+            json!({"op":"Not","of":{"op":"And",
+                "l":{"op":"Data","name":"a"},"r":{"op":"Data","name":"b"}}})
         );
     }
 

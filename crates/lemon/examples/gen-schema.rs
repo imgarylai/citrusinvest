@@ -104,13 +104,23 @@ fn build_catalog() -> Value {
         }));
     }
 
-    // Unary operator: negation.
+    // Unary operators: negation and logical NOT.
     ops.push(json!({
         "name": "-",
         "tag": "Neg",
         "form": "operator",
         "unary": true,
         "description": "Negation (-`of`).",
+        "args": [
+            { "name": "of", "kind": "expr", "required": true }
+        ]
+    }));
+    ops.push(json!({
+        "name": "not",
+        "tag": "Not",
+        "form": "operator",
+        "unary": true,
+        "description": "Logical NOT of a boolean panel (NaN is falsy, so `not` of NaN is 1).",
         "args": [
             { "name": "of", "kind": "expr", "required": true }
         ]

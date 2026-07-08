@@ -150,6 +150,8 @@ pub enum Expr {
     And { l: Box<Expr>, r: Box<Expr> },
     /// Logical OR of two boolean panels.
     Or { l: Box<Expr>, r: Box<Expr> },
+    /// Logical NOT of a boolean panel (NaN is falsy, so `not` of NaN is 1).
+    Not { of: Box<Expr> },
     /// Element-wise `l` + `r`.
     Add { l: Box<Expr>, r: Box<Expr> },
     /// Element-wise `l` − `r`.
