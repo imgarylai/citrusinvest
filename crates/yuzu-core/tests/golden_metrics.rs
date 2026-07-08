@@ -1,10 +1,15 @@
 mod golden_harness;
-use yuzu_core::metrics;
 use golden_harness::load_golden;
+use yuzu_core::metrics;
 
 fn eq_dates(name: &str) -> (Vec<f64>, Vec<i32>) {
     let v = load_golden(name);
-    let equity = v["equity"].as_array().unwrap().iter().map(|x| x.as_f64().unwrap()).collect();
+    let equity = v["equity"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x.as_f64().unwrap())
+        .collect();
     let dates = v["dates"]
         .as_array()
         .unwrap()

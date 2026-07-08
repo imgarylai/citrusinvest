@@ -26,7 +26,13 @@ fn neutralize_industry_matches_reference() {
         .symbols
         .iter()
         .cloned()
-        .zip(v["industry"].as_array().unwrap().iter().map(|s| s.as_str().unwrap().to_string()))
+        .zip(
+            v["industry"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|s| s.as_str().unwrap().to_string()),
+        )
         .collect();
     let got = factor.neutralize_industry(&industry, true);
     assert_panel_eq(&got, &expected("neutralize_industry"), 1e-9);
@@ -40,7 +46,13 @@ fn industry_rank_matches_reference() {
         .symbols
         .iter()
         .cloned()
-        .zip(v["industry"].as_array().unwrap().iter().map(|s| s.as_str().unwrap().to_string()))
+        .zip(
+            v["industry"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|s| s.as_str().unwrap().to_string()),
+        )
         .collect();
     let got = factor.industry_rank(&industry, None);
     assert_panel_eq(&got, &expected("industry_rank"), 1e-9);
@@ -54,7 +66,13 @@ fn groupby_category_matches_reference() {
         .symbols
         .iter()
         .cloned()
-        .zip(v["industry"].as_array().unwrap().iter().map(|s| s.as_str().unwrap().to_string()))
+        .zip(
+            v["industry"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|s| s.as_str().unwrap().to_string()),
+        )
         .collect();
     for agg in ["mean", "sum", "std"] {
         let got = factor.groupby_category(&industry, agg).unwrap();
@@ -71,7 +89,13 @@ fn groupby_category_rejects_invalid_agg() {
         .symbols
         .iter()
         .cloned()
-        .zip(v["industry"].as_array().unwrap().iter().map(|s| s.as_str().unwrap().to_string()))
+        .zip(
+            v["industry"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|s| s.as_str().unwrap().to_string()),
+        )
         .collect();
     assert!(factor.groupby_category(&industry, "invalid").is_err());
 }

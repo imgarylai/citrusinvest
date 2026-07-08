@@ -10,8 +10,14 @@ impl Panel {
     fn binary(&self, other: &Panel, f: impl Fn(f64, f64) -> f64) -> Panel {
         let (a, b) = align(self, other);
         let mut out = a.data.clone();
-        Zip::from(&mut out).and(&b.data).for_each(|o, &y| *o = f(*o, y));
-        Panel { dates: a.dates, symbols: a.symbols, data: out }
+        Zip::from(&mut out)
+            .and(&b.data)
+            .for_each(|o, &y| *o = f(*o, y));
+        Panel {
+            dates: a.dates,
+            symbols: a.symbols,
+            data: out,
+        }
     }
 
     pub fn add(&self, o: &Panel) -> Panel {
@@ -55,16 +61,28 @@ impl Panel {
 
     pub fn not(&self) -> Panel {
         let data = self.data.mapv(|x| bool_to_f64(!is_true(x)));
-        Panel { dates: self.dates.clone(), symbols: self.symbols.clone(), data }
+        Panel {
+            dates: self.dates.clone(),
+            symbols: self.symbols.clone(),
+            data,
+        }
     }
 
     pub fn scalar_gt(&self, v: f64) -> Panel {
         let data = self.data.mapv(|x| bool_to_f64(x > v));
-        Panel { dates: self.dates.clone(), symbols: self.symbols.clone(), data }
+        Panel {
+            dates: self.dates.clone(),
+            symbols: self.symbols.clone(),
+            data,
+        }
     }
     pub fn scalar_mul(&self, v: f64) -> Panel {
         let data = self.data.mapv(|x| x * v);
-        Panel { dates: self.dates.clone(), symbols: self.symbols.clone(), data }
+        Panel {
+            dates: self.dates.clone(),
+            symbols: self.symbols.clone(),
+            data,
+        }
     }
     pub fn neg(&self) -> Panel {
         self.scalar_mul(-1.0)
@@ -79,21 +97,33 @@ impl Panel {
     /// `cell <op> v` for every cell — panel on the left, scalar on the right.
     pub fn scalar_rhs(&self, v: f64, f: impl Fn(f64, f64) -> f64) -> Panel {
         let data = self.data.mapv(|x| f(x, v));
-        Panel { dates: self.dates.clone(), symbols: self.symbols.clone(), data }
+        Panel {
+            dates: self.dates.clone(),
+            symbols: self.symbols.clone(),
+            data,
+        }
     }
 
     /// `v <op> cell` for every cell — scalar on the left, panel on the right
     /// (needed for non-commutative ops like `1 / pe`).
     pub fn scalar_lhs(&self, v: f64, f: impl Fn(f64, f64) -> f64) -> Panel {
         let data = self.data.mapv(|x| f(v, x));
-        Panel { dates: self.dates.clone(), symbols: self.symbols.clone(), data }
+        Panel {
+            dates: self.dates.clone(),
+            symbols: self.symbols.clone(),
+            data,
+        }
     }
 
     /// Round each cell up to the nearest integer; `NaN` stays `NaN` (like
     /// `np.ceil`, used for qcut bucketing).
     pub fn ceil(&self) -> Panel {
         let data = self.data.mapv(|x| x.ceil());
-        Panel { dates: self.dates.clone(), symbols: self.symbols.clone(), data }
+        Panel {
+            dates: self.dates.clone(),
+            symbols: self.symbols.clone(),
+            data,
+        }
     }
 
     /// Keep cells of `self` where `by` is truthy (`1.0`), else `NaN` — a
@@ -106,7 +136,11 @@ impl Panel {
                 *o = f64::NAN;
             }
         });
-        Panel { dates: a.dates, symbols: a.symbols, data: out }
+        Panel {
+            dates: a.dates,
+            symbols: a.symbols,
+            data: out,
+        }
     }
 }
 

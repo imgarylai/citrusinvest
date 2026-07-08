@@ -36,15 +36,40 @@ pub enum Expr {
     /// Rolling maximum of `of` over `n` days.
     RollingMax { of: Box<Expr>, n: usize },
     /// Average True Range over `n` days from high/low/close.
-    Atr { high: Box<Expr>, low: Box<Expr>, close: Box<Expr>, n: usize },
+    Atr {
+        high: Box<Expr>,
+        low: Box<Expr>,
+        close: Box<Expr>,
+        n: usize,
+    },
     /// Normalized ATR (percent) over `n` days.
-    Natr { high: Box<Expr>, low: Box<Expr>, close: Box<Expr>, n: usize },
+    Natr {
+        high: Box<Expr>,
+        low: Box<Expr>,
+        close: Box<Expr>,
+        n: usize,
+    },
     /// Williams %R over `n` days.
-    WillR { high: Box<Expr>, low: Box<Expr>, close: Box<Expr>, n: usize },
+    WillR {
+        high: Box<Expr>,
+        low: Box<Expr>,
+        close: Box<Expr>,
+        n: usize,
+    },
     /// Commodity Channel Index over `n` days.
-    Cci { high: Box<Expr>, low: Box<Expr>, close: Box<Expr>, n: usize },
+    Cci {
+        high: Box<Expr>,
+        low: Box<Expr>,
+        close: Box<Expr>,
+        n: usize,
+    },
     /// Stochastic %K over `n` days.
-    StochK { high: Box<Expr>, low: Box<Expr>, close: Box<Expr>, n: usize },
+    StochK {
+        high: Box<Expr>,
+        low: Box<Expr>,
+        close: Box<Expr>,
+        n: usize,
+    },
     /// Stochastic %D: `d`-day average of %K over `n` days.
     StochD {
         high: Box<Expr>,
@@ -59,11 +84,26 @@ pub enum Expr {
     /// Aroon Down over `n` days from low.
     AroonDown { low: Box<Expr>, n: usize },
     /// Average Directional Index over `n` days.
-    Adx { high: Box<Expr>, low: Box<Expr>, close: Box<Expr>, n: usize },
+    Adx {
+        high: Box<Expr>,
+        low: Box<Expr>,
+        close: Box<Expr>,
+        n: usize,
+    },
     /// Plus Directional Indicator (+DI) over `n` days.
-    PlusDi { high: Box<Expr>, low: Box<Expr>, close: Box<Expr>, n: usize },
+    PlusDi {
+        high: Box<Expr>,
+        low: Box<Expr>,
+        close: Box<Expr>,
+        n: usize,
+    },
     /// Minus Directional Indicator (−DI) over `n` days.
-    MinusDi { high: Box<Expr>, low: Box<Expr>, close: Box<Expr>, n: usize },
+    MinusDi {
+        high: Box<Expr>,
+        low: Box<Expr>,
+        close: Box<Expr>,
+        n: usize,
+    },
     /// On-Balance Volume from close and volume.
     Obv { close: Box<Expr>, volume: Box<Expr> },
     /// Money Flow Index over `n` days.
@@ -89,7 +129,11 @@ pub enum Expr {
     /// 1 for the `n` lowest values per row (cross-section), else 0.
     IsSmallest { of: Box<Expr>, n: usize },
     /// 1 where `of` held true at least `nsatisfy` times within the last `nwindow` rows.
-    Sustain { of: Box<Expr>, nwindow: usize, nsatisfy: Option<usize> },
+    Sustain {
+        of: Box<Expr>,
+        nwindow: usize,
+        nsatisfy: Option<usize>,
+    },
     /// 1 on the row where `of` turns false→true (rising edge).
     IsEntry { of: Box<Expr> },
     /// 1 on the row where `of` turns true→false (falling edge).
@@ -152,11 +196,24 @@ pub enum Expr {
         on: Option<Box<Expr>>,
     },
     /// Cross-sectionally regress `of` against the `by` factors, optionally adding a constant.
-    Neutralize { of: Box<Expr>, by: Vec<Expr>, #[serde(default = "default_true")] add_const: bool },
+    Neutralize {
+        of: Box<Expr>,
+        by: Vec<Expr>,
+        #[serde(default = "default_true")]
+        add_const: bool,
+    },
     /// Neutralize `of` within each industry/sector.
-    NeutralizeIndustry { of: Box<Expr>, #[serde(default = "default_true")] add_const: bool },
+    NeutralizeIndustry {
+        of: Box<Expr>,
+        #[serde(default = "default_true")]
+        add_const: bool,
+    },
     /// Rank `of` within each industry, optionally limited to `categories`.
-    IndustryRank { of: Box<Expr>, #[serde(default)] categories: Option<Vec<String>> },
+    IndustryRank {
+        of: Box<Expr>,
+        #[serde(default)]
+        categories: Option<Vec<String>>,
+    },
     /// Aggregate `of` within each industry using `agg` (e.g. mean).
     GroupbyCategory { of: Box<Expr>, agg: String },
 }

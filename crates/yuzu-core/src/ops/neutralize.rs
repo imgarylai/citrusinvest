@@ -12,9 +12,18 @@ impl Panel {
     /// Reindex another panel's values onto `self`'s exact (dates, symbols) grid,
     /// NaN where a cell is absent. Lets per-row ops assume a shared axis.
     pub(crate) fn project_onto(&self, dates: &[i32], symbols: &[String]) -> Array2<f64> {
-        let row_of: HashMap<i32, usize> = self.dates.iter().enumerate().map(|(i, &d)| (d, i)).collect();
-        let col_of: HashMap<&str, usize> =
-            self.symbols.iter().enumerate().map(|(i, s)| (s.as_str(), i)).collect();
+        let row_of: HashMap<i32, usize> = self
+            .dates
+            .iter()
+            .enumerate()
+            .map(|(i, &d)| (d, i))
+            .collect();
+        let col_of: HashMap<&str, usize> = self
+            .symbols
+            .iter()
+            .enumerate()
+            .map(|(i, s)| (s.as_str(), i))
+            .collect();
         let mut out = Array2::from_elem((dates.len(), symbols.len()), f64::NAN);
         for (r, d) in dates.iter().enumerate() {
             let Some(&sr) = row_of.get(d) else { continue };
@@ -71,7 +80,9 @@ impl Panel {
                 }
                 y[i] = self.data[[r, c]];
             }
-            let Some(beta) = solve_ols(&x, &y) else { continue };
+            let Some(beta) = solve_ols(&x, &y) else {
+                continue;
+            };
             for (i, &c) in valid.iter().enumerate() {
                 let mut fitted = 0.0;
                 for j in 0..kcols {
@@ -80,7 +91,11 @@ impl Panel {
                 out[[r, c]] = y[i] - fitted;
             }
         }
-        Panel { dates: self.dates.clone(), symbols: self.symbols.clone(), data: out }
+        Panel {
+            dates: self.dates.clone(),
+            symbols: self.symbols.clone(),
+            data: out,
+        }
     }
 
     /// Group `valid_cols` by their industry. Columns missing from `industry`
@@ -96,14 +111,20 @@ impl Panel {
         let mut order: Vec<&str> = Vec::new();
         let mut groups: HashMap<&str, Vec<usize>> = HashMap::new();
         for &c in valid_cols {
-            let cat = industry.get(&self.symbols[c]).map(String::as_str).unwrap_or(OTHER);
+            let cat = industry
+                .get(&self.symbols[c])
+                .map(String::as_str)
+                .unwrap_or(OTHER);
             groups.entry(cat).or_insert_with(|| {
                 order.push(cat);
                 Vec::new()
             });
             groups.get_mut(cat).unwrap().push(c);
         }
-        order.into_iter().map(|cat| (cat, groups.remove(cat).unwrap())).collect()
+        order
+            .into_iter()
+            .map(|cat| (cat, groups.remove(cat).unwrap()))
+            .collect()
     }
 
     /// `neutralize_industry`: residual of regressing the factor on industry
@@ -112,11 +133,17 @@ impl Panel {
     /// fewer than 2 distinct industries are present.
     /// ponytail: industry-dummy OLS residual == within-group demean for any
     /// `add_const`; `add_const` is kept for API parity but does not change values.
-    pub fn neutralize_industry(&self, industry: &HashMap<String, String>, _add_const: bool) -> Panel {
+    pub fn neutralize_industry(
+        &self,
+        industry: &HashMap<String, String>,
+        _add_const: bool,
+    ) -> Panel {
         let (nrows, ncols) = self.data.dim();
         let mut out = Array2::from_elem((nrows, ncols), f64::NAN);
         for r in 0..nrows {
-            let valid: Vec<usize> = (0..ncols).filter(|&c| self.data[[r, c]].is_finite()).collect();
+            let valid: Vec<usize> = (0..ncols)
+                .filter(|&c| self.data[[r, c]].is_finite())
+                .collect();
             if valid.len() < 2 {
                 continue;
             }
@@ -131,7 +158,11 @@ impl Panel {
                 }
             }
         }
-        Panel { dates: self.dates.clone(), symbols: self.symbols.clone(), data: out }
+        Panel {
+            dates: self.dates.clone(),
+            symbols: self.symbols.clone(),
+            data: out,
+        }
     }
 
     /// `industry_rank`: per date, percentile-rank within each industry
@@ -147,7 +178,9 @@ impl Panel {
         let allow = |cat: &str| categories.is_none_or(|cs| cs.iter().any(|c| c == cat));
         let mut out = Array2::from_elem((nrows, ncols), f64::NAN);
         for r in 0..nrows {
-            let valid: Vec<usize> = (0..ncols).filter(|&c| self.data[[r, c]].is_finite()).collect();
+            let valid: Vec<usize> = (0..ncols)
+                .filter(|&c| self.data[[r, c]].is_finite())
+                .collect();
             for (cat, cols) in self.group_cols_by_industry(industry, &valid) {
                 if !allow(cat) {
                     continue;
@@ -170,7 +203,11 @@ impl Panel {
                 }
             }
         }
-        Panel { dates: self.dates.clone(), symbols: self.symbols.clone(), data: out }
+        Panel {
+            dates: self.dates.clone(),
+            symbols: self.symbols.clone(),
+            data: out,
+        }
     }
 
     /// `groupby_category().<agg>()`: group columns by sector and aggregate
@@ -187,7 +224,12 @@ impl Panel {
         let mut cats: Vec<String> = self
             .symbols
             .iter()
-            .map(|s| industry.get(s).cloned().unwrap_or_else(|| OTHER.to_string()))
+            .map(|s| {
+                industry
+                    .get(s)
+                    .cloned()
+                    .unwrap_or_else(|| OTHER.to_string())
+            })
             .collect::<std::collections::BTreeSet<_>>()
             .into_iter()
             .collect();
@@ -197,7 +239,11 @@ impl Panel {
             .map(|cat| {
                 (0..self.ncols())
                     .filter(|&c| {
-                        industry.get(&self.symbols[c]).map(String::as_str).unwrap_or(OTHER) == cat
+                        industry
+                            .get(&self.symbols[c])
+                            .map(String::as_str)
+                            .unwrap_or(OTHER)
+                            == cat
                     })
                     .collect()
             })
@@ -207,8 +253,11 @@ impl Panel {
         let mut data = Array2::from_elem((nrows, cats.len()), f64::NAN);
         for r in 0..nrows {
             for (g, cols) in cat_cols.iter().enumerate() {
-                let vals: Vec<f64> =
-                    cols.iter().map(|&c| self.data[[r, c]]).filter(|v| v.is_finite()).collect();
+                let vals: Vec<f64> = cols
+                    .iter()
+                    .map(|&c| self.data[[r, c]])
+                    .filter(|v| v.is_finite())
+                    .collect();
                 if vals.is_empty() {
                     continue;
                 }
@@ -233,7 +282,9 @@ fn aggregate(agg: &str, vals: &[f64]) -> Result<f64, crate::error::EngineError> 
             var.sqrt()
         }
         other => {
-            return Err(crate::error::EngineError::Eval(format!("bad groupby agg '{other}'")));
+            return Err(crate::error::EngineError::Eval(format!(
+                "bad groupby agg '{other}'"
+            )));
         }
     })
 }

@@ -28,12 +28,20 @@ fn fall_1_matches_reference() {
 
 #[test]
 fn is_largest_1_matches_reference() {
-    assert_panel_eq(&input("is_largest_1").is_largest(1), &expected("is_largest_1"), 0.0);
+    assert_panel_eq(
+        &input("is_largest_1").is_largest(1),
+        &expected("is_largest_1"),
+        0.0,
+    );
 }
 
 #[test]
 fn is_smallest_2_matches_reference() {
-    assert_panel_eq(&input("is_smallest_2").is_smallest(2), &expected("is_smallest_2"), 0.0);
+    assert_panel_eq(
+        &input("is_smallest_2").is_smallest(2),
+        &expected("is_smallest_2"),
+        0.0,
+    );
 }
 
 #[test]
@@ -62,31 +70,54 @@ fn hold_until_n1_matches_reference() {
     let inp = input("hold_until_n1");
     let entries = inp.gt(&inp.average(2));
     let exits = inp.lt(&inp.average(2));
-    let opts = HoldUntilOpts { nstocks_limit: Some(1), ..Default::default() };
-    assert_panel_eq(&entries.hold_until(&exits, &opts), &expected("hold_until_n1"), 0.0);
+    let opts = HoldUntilOpts {
+        nstocks_limit: Some(1),
+        ..Default::default()
+    };
+    assert_panel_eq(
+        &entries.hold_until(&exits, &opts),
+        &expected("hold_until_n1"),
+        0.0,
+    );
 }
 
 #[test]
 fn rebalance_w_matches_reference() {
     use yuzu_core::ops::rebalance::Freq;
-    assert_panel_eq(&input("rebalance_W").rebalance_freq(Freq::Weekly), &expected("rebalance_W"), 1e-9);
+    assert_panel_eq(
+        &input("rebalance_W").rebalance_freq(Freq::Weekly),
+        &expected("rebalance_W"),
+        1e-9,
+    );
 }
 
 #[test]
 fn rebalance_me_matches_reference() {
     use yuzu_core::ops::rebalance::Freq;
-    assert_panel_eq(&input("rebalance_ME").rebalance_freq(Freq::MonthEnd), &expected("rebalance_ME"), 1e-9);
+    assert_panel_eq(
+        &input("rebalance_ME").rebalance_freq(Freq::MonthEnd),
+        &expected("rebalance_ME"),
+        1e-9,
+    );
 }
 
 #[test]
 fn rebalance_qe_matches_reference() {
     use yuzu_core::ops::rebalance::Freq;
-    assert_panel_eq(&input("rebalance_QE").rebalance_freq(Freq::QuarterEnd), &expected("rebalance_QE"), 1e-9);
+    assert_panel_eq(
+        &input("rebalance_QE").rebalance_freq(Freq::QuarterEnd),
+        &expected("rebalance_QE"),
+        1e-9,
+    );
 }
 
 #[test]
 fn quantile_50_matches_reference() {
-    assert_panel_eq(&input("quantile_50").quantile_row(0.5), &expected("quantile_50"), 1e-9);
+    assert_panel_eq(
+        &input("quantile_50").quantile_row(0.5),
+        &expected("quantile_50"),
+        1e-9,
+    );
 }
 
 #[test]
@@ -111,7 +142,11 @@ fn hold_until_stops_matches_reference() {
         price: Some(price),
         ..Default::default()
     };
-    assert_panel_eq(&entry.hold_until(&exit, &opts), &panel_from_json(&v, "expected"), 0.0);
+    assert_panel_eq(
+        &entry.hold_until(&exit, &opts),
+        &panel_from_json(&v, "expected"),
+        0.0,
+    );
 }
 
 #[test]
@@ -127,5 +162,9 @@ fn hold_until_trail_stop_matches_reference() {
         price: Some(price),
         ..Default::default()
     };
-    assert_panel_eq(&entry.hold_until(&exit, &opts), &panel_from_json(&v, "expected"), 0.0);
+    assert_panel_eq(
+        &entry.hold_until(&exit, &opts),
+        &panel_from_json(&v, "expected"),
+        0.0,
+    );
 }

@@ -81,8 +81,14 @@ pub fn handle_rebuild<S: ObjectSource + ObjectSink + Sync>(
     req: &RebuildRequest,
     dirs: &DataDirs,
 ) -> Result<RebuildSummary, String> {
-    rebuild_combined_panels(source, &req.symbols, &dirs.prices, &dirs.fundamentals, &dirs.panels)
-        .map_err(|e| e.to_string())
+    rebuild_combined_panels(
+        source,
+        &req.symbols,
+        &dirs.prices,
+        &dirs.fundamentals,
+        &dirs.panels,
+    )
+    .map_err(|e| e.to_string())
 }
 
 /// Map a `Data` series name to an OHLCV field (None ⇒ not a price series).
@@ -128,10 +134,10 @@ pub fn handle_backtest<S: ObjectSource + Sync>(
     let mut names = BTreeSet::new();
     collect_series(&req.spec, &mut names);
     names.insert(req.price_key.clone()); // price panel must be present even if unreferenced
-    // Always load high/low so per-trade MAE/MFE can be computed even when the
-    // strategy never references them. They come from the same prices/{sym}.csv.gz
-    // as close, so availability tracks close; a missing file yields a NaN column
-    // and the engine degrades that trade's mae/mfe to None.
+                                         // Always load high/low so per-trade MAE/MFE can be computed even when the
+                                         // strategy never references them. They come from the same prices/{sym}.csv.gz
+                                         // as close, so availability tracks close; a missing file yields a NaN column
+                                         // and the engine degrades that trade's mae/mfe to None.
     names.insert("high".to_string());
     names.insert("low".to_string());
 
@@ -158,8 +164,15 @@ pub fn handle_backtest<S: ObjectSource + Sync>(
                 load_panel(source, &req.symbols, field, req.from, req.to, &dirs.prices)
                     .map_err(|e| e.to_string())
             } else {
-                load_fundamental_panel(source, &req.symbols, name, req.from, req.to, &dirs.fundamentals)
-                    .map_err(|e| e.to_string())
+                load_fundamental_panel(
+                    source,
+                    &req.symbols,
+                    name,
+                    req.from,
+                    req.to,
+                    &dirs.fundamentals,
+                )
+                .map_err(|e| e.to_string())
             }
         })?;
         panels.insert(name.clone(), p);
@@ -287,9 +300,30 @@ mod tests {
         // Single symbol with DISTINCT intraday high/low; close-only spec below never
         // references high/low — so non-None mae/mfe proves they were force-loaded.
         let prices = vec![
-            OhlcvRow { day: days[0], adj_open: 10.0, adj_high: 10.0, adj_low: 9.0, adj_close: 10.0, volume: 1000.0 },
-            OhlcvRow { day: days[1], adj_open: 11.0, adj_high: 13.0, adj_low: 11.0, adj_close: 11.0, volume: 1000.0 },
-            OhlcvRow { day: days[2], adj_open: 12.0, adj_high: 12.0, adj_low: 12.0, adj_close: 12.0, volume: 1000.0 },
+            OhlcvRow {
+                day: days[0],
+                adj_open: 10.0,
+                adj_high: 10.0,
+                adj_low: 9.0,
+                adj_close: 10.0,
+                volume: 1000.0,
+            },
+            OhlcvRow {
+                day: days[1],
+                adj_open: 11.0,
+                adj_high: 13.0,
+                adj_low: 11.0,
+                adj_close: 11.0,
+                volume: 1000.0,
+            },
+            OhlcvRow {
+                day: days[2],
+                adj_open: 12.0,
+                adj_high: 12.0,
+                adj_low: 12.0,
+                adj_close: 12.0,
+                volume: 1000.0,
+            },
         ];
         let funds: Vec<FundamentalRow> = days.iter().map(|d| frow(*d, 8.0, 0.0)).collect();
         write_symbol(&dir, "AAA", &prices, &funds);
@@ -311,11 +345,21 @@ mod tests {
         };
 
         let report = handle_backtest(&source, &req, &DataDirs::default()).unwrap();
-        let t = report.trades.iter().find(|t| t.symbol == "AAA").expect("AAA trade");
+        let t = report
+            .trades
+            .iter()
+            .find(|t| t.symbol == "AAA")
+            .expect("AAA trade");
         // ep = close day0 = 10; long, open trade over all 3 days.
         // MFE from high 13 (day1) → 0.3; MAE from low 9 (day0) → -0.1.
-        assert!((t.mfe.unwrap() - 0.3).abs() < 1e-9, "mfe from force-loaded high");
-        assert!((t.mae.unwrap() - (-0.1)).abs() < 1e-9, "mae from force-loaded low");
+        assert!(
+            (t.mfe.unwrap() - 0.3).abs() < 1e-9,
+            "mfe from force-loaded high"
+        );
+        assert!(
+            (t.mae.unwrap() - (-0.1)).abs() < 1e-9,
+            "mae from force-loaded low"
+        );
     }
 
     #[test]
@@ -365,15 +409,21 @@ mod tests {
         std::fs::create_dir_all(dir.join("panels")).unwrap();
         let days = [20240102, 20240103];
         for (sym, base, pe) in [("RBA", 10.0, 8.0), ("RBB", 20.0, 15.0)] {
-            let prices: Vec<_> = days.iter().enumerate().map(|(i, d)| ohlcv(*d, base + i as f64)).collect();
+            let prices: Vec<_> = days
+                .iter()
+                .enumerate()
+                .map(|(i, d)| ohlcv(*d, base + i as f64))
+                .collect();
             let funds: Vec<_> = days.iter().map(|d| frow(*d, pe, 0.0)).collect();
             write_symbol(&dir, sym, &prices, &funds);
         }
         let source = LocalSource::new(&dir);
-        let req = RebuildRequest { symbols: vec!["RBA".into(), "RBB".into()] };
+        let req = RebuildRequest {
+            symbols: vec!["RBA".into(), "RBB".into()],
+        };
         let summary = handle_rebuild(&source, &req, &DataDirs::default()).unwrap();
         assert!(summary.fields >= 6); // 5 OHLCV + fundamentals
-        // the combined close panel now exists and loads
+                                      // the combined close panel now exists and loads
         assert!(source.get("panels/close.csv.gz").unwrap().is_some());
     }
 
@@ -394,7 +444,8 @@ mod tests {
         let source = LocalSource::new(&dir);
         let syms = vec!["CMBA".to_string(), "CMBB".to_string()];
         // build the combined panels the loader will now prefer
-        yuzu_data::rebuild_combined_panels(&source, &syms, "prices", "fundamentals", "panels").unwrap();
+        yuzu_data::rebuild_combined_panels(&source, &syms, "prices", "fundamentals", "panels")
+            .unwrap();
         // delete per-symbol sources so only the combined files remain — forces the
         // combined-first path (fallback now has nothing to load).
         std::fs::remove_dir_all(dir.join("prices")).unwrap();
@@ -410,6 +461,9 @@ mod tests {
             price_key: "close".into(),
         };
         let report = handle_backtest(&source, &req, &DataDirs::default()).unwrap();
-        assert!(!report.equity.is_empty(), "equity curve should be non-empty");
+        assert!(
+            !report.equity.is_empty(),
+            "equity curve should be non-empty"
+        );
     }
 }

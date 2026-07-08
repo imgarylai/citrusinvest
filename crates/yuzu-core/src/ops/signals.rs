@@ -15,7 +15,11 @@ impl Panel {
         }
         // normalize to bool
         let data = out.mapv(|x| bool_to_f64(is_true(x)));
-        Panel { dates: self.dates.clone(), symbols: self.symbols.clone(), data }
+        Panel {
+            dates: self.dates.clone(),
+            symbols: self.symbols.clone(),
+            data,
+        }
     }
 
     pub fn is_entry(&self) -> Panel {
@@ -44,7 +48,11 @@ impl Panel {
                 out[[r, c]] = bool_to_f64(sum >= need as f64);
             }
         }
-        Panel { dates: self.dates.clone(), symbols: self.symbols.clone(), data: out }
+        Panel {
+            dates: self.dates.clone(),
+            symbols: self.symbols.clone(),
+            data: out,
+        }
     }
 
     pub fn exit_when(&self, exit: &Panel) -> Panel {
@@ -63,6 +71,10 @@ impl Panel {
                 out[[r, c]] = bool_to_f64(state == 1.0);
             }
         }
-        Panel { dates: self.dates.clone(), symbols: self.symbols.clone(), data: out }
+        Panel {
+            dates: self.dates.clone(),
+            symbols: self.symbols.clone(),
+            data: out,
+        }
     }
 }

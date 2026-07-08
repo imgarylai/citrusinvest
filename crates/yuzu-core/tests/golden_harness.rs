@@ -1,7 +1,7 @@
-use yuzu_core::panel::Panel;
 use ndarray::Array2;
 use std::fs;
 use std::path::PathBuf;
+use yuzu_core::panel::Panel;
 
 pub fn load_golden(name: &str) -> serde_json::Value {
     let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -19,21 +19,40 @@ pub fn panel_from_json(v: &serde_json::Value, key: &str) -> Panel {
     // quantile_row collapses to one column ("expected_symbols"). Fall back to the
     // shared top-level "dates"/"symbols" when no override is present.
     let dates_key = format!("{key}_dates");
-    let dates_val = if v.get(&dates_key).is_some() { &v[&dates_key] } else { &v["dates"] };
-    let dates: Vec<i32> =
-        dates_val.as_array().unwrap().iter().map(|d| date_to_i32(d.as_str().unwrap())).collect();
+    let dates_val = if v.get(&dates_key).is_some() {
+        &v[&dates_key]
+    } else {
+        &v["dates"]
+    };
+    let dates: Vec<i32> = dates_val
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|d| date_to_i32(d.as_str().unwrap()))
+        .collect();
     let symbols_key = format!("{key}_symbols");
-    let symbols_val =
-        if v.get(&symbols_key).is_some() { &v[&symbols_key] } else { &v["symbols"] };
-    let symbols: Vec<String> =
-        symbols_val.as_array().unwrap().iter().map(|s| s.as_str().unwrap().to_string()).collect();
+    let symbols_val = if v.get(&symbols_key).is_some() {
+        &v[&symbols_key]
+    } else {
+        &v["symbols"]
+    };
+    let symbols: Vec<String> = symbols_val
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s.as_str().unwrap().to_string())
+        .collect();
     let rows = v[key].as_array().unwrap();
     let nrows = rows.len();
     let ncols = symbols.len();
     let mut data = Array2::from_elem((nrows, ncols), f64::NAN);
     for (r, row) in rows.iter().enumerate() {
         for (c, cell) in row.as_array().unwrap().iter().enumerate() {
-            data[[r, c]] = if cell.is_null() { f64::NAN } else { cell.as_f64().unwrap() };
+            data[[r, c]] = if cell.is_null() {
+                f64::NAN
+            } else {
+                cell.as_f64().unwrap()
+            };
         }
     }
     Panel::new(dates, symbols, data).unwrap()

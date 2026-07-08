@@ -5,6 +5,10 @@
 //! No network, no platform deps: f64 matrices in, `Panel` out. Compiles to both
 //! native and WASM. See `docs/backtest-engine.md` for the full overview.
 
+// Numeric kernels index matrices directly; index loops read clearer than
+// iterator chains here.
+#![allow(clippy::needless_range_loop)]
+
 pub mod align;
 pub mod backtest;
 pub mod error;
@@ -16,6 +20,6 @@ pub mod report;
 
 pub use lemon::spec;
 
-pub use eval::run_strategy;
 pub use eval::run_backtest;
+pub use eval::run_strategy;
 pub use eval::EvalContext;

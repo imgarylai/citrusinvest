@@ -1,7 +1,7 @@
 mod golden_harness;
+use golden_harness::{load_golden, panel_from_json};
 use yuzu_core::backtest::{run, BacktestConfig};
 use yuzu_core::panel::Panel;
-use golden_harness::{load_golden, panel_from_json};
 
 fn cfg(v: &serde_json::Value) -> BacktestConfig {
     BacktestConfig {
@@ -19,7 +19,10 @@ fn check(name: &str) {
     let want = v["equity"].as_array().unwrap();
     assert_eq!(r.equity.len(), want.len());
     for (i, w) in want.iter().enumerate() {
-        assert!((r.equity[i] - w.as_f64().unwrap()).abs() < 1e-9, "equity[{i}]");
+        assert!(
+            (r.equity[i] - w.as_f64().unwrap()).abs() < 1e-9,
+            "equity[{i}]"
+        );
     }
 }
 
@@ -46,7 +49,7 @@ fn trades_recorded() {
     assert_eq!(aaa[0].exit_date, Some(20240104));
     assert_eq!(aaa[1].exit_date, None); // re-entered day 4, never closed
     assert_eq!(aaa[1].entry_date, 20240108); // re-entry day 4
-    // first trade closed AAA 10 -> 12 with zero fees: ret = 0.2
+                                             // first trade closed AAA 10 -> 12 with zero fees: ret = 0.2
     assert!((aaa[0].ret - 0.2).abs() < 1e-9);
     assert_eq!(aaa[0].period, 2);
 }

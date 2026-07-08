@@ -2,8 +2,8 @@
 //! human-writable text syntax. `parse` lowers `.lemon` source to the JSON `Expr`
 //! tree the engine evaluates; `format` renders a tree back to source.
 
-pub mod spec;
 mod dsl;
+pub mod spec;
 
-pub use dsl::{parse, format, ParseError};
+pub use dsl::{format, parse, ParseError};
 pub use spec::Expr;

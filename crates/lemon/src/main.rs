@@ -73,7 +73,11 @@ fn main() -> ExitCode {
             }
         }
     }
-    if failed { ExitCode::FAILURE } else { ExitCode::SUCCESS }
+    if failed {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    }
 }
 
 #[cfg(test)]
@@ -83,8 +87,10 @@ mod tests {
     #[test]
     fn formats_valid_and_reports_errors() {
         // Nested call breaks; round-trips through the canonical printer.
-        assert_eq!(format_source("x.lemon", "rebalance(is_largest(sma(close,5),10))").unwrap(),
-            "rebalance(\n  is_largest(\n    sma(close, 5),\n    10\n  )\n)");
+        assert_eq!(
+            format_source("x.lemon", "rebalance(is_largest(sma(close,5),10))").unwrap(),
+            "rebalance(\n  is_largest(\n    sma(close, 5),\n    10\n  )\n)"
+        );
         // Parse error is labelled with the file path and 1-based position.
         let err = format_source("x.lemon", "sma(close,").unwrap_err();
         assert!(err.starts_with("x.lemon:"), "got: {err}");

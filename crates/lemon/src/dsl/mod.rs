@@ -32,14 +32,18 @@ mod tests {
 
     #[test]
     fn parse_error_displays_with_position() {
-        let e = ParseError { line: 3, col: 7, message: "bad token".into() };
+        let e = ParseError {
+            line: 3,
+            col: 7,
+            message: "bad token".into(),
+        };
         assert_eq!(e.to_string(), "3:7: bad token");
     }
 }
 
 #[cfg(test)]
 mod roundtrip {
-    use super::{parse, format};
+    use super::{format, parse};
     use crate::spec::Expr;
     use serde_json::{json, Value};
 
@@ -94,7 +98,11 @@ mod roundtrip {
         for tree in corpus() {
             let once = format(&tree);
             let reparsed = parse(&once).unwrap();
-            assert_eq!(format(&reparsed), once, "format not idempotent for `{once}`");
+            assert_eq!(
+                format(&reparsed),
+                once,
+                "format not idempotent for `{once}`"
+            );
         }
     }
 }

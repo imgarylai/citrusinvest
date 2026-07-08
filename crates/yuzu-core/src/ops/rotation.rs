@@ -110,7 +110,11 @@ impl Panel {
         }
 
         let data = ret.mapv(bool_to_f64_from_unit);
-        Panel { dates: entry.dates, symbols: entry.symbols, data }
+        Panel {
+            dates: entry.dates,
+            symbols: entry.symbols,
+            data,
+        }
     }
 }
 
@@ -120,13 +124,23 @@ fn bool_to_f64_from_unit(x: f64) -> f64 {
 
 fn normalize_ranking(r: &Array2<f64>) -> Array2<f64> {
     let finite: Vec<f64> = r.iter().copied().filter(|x| x.is_finite()).collect();
-    let (min, max) = finite.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &x| {
-        (lo.min(x), hi.max(x))
-    });
+    let (min, max) = finite
+        .iter()
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &x| {
+            (lo.min(x), hi.max(x))
+        });
     let span = max - min;
-    r.mapv(|x| if !x.is_finite() || span == 0.0 { 0.0 } else { (x - min) / span })
+    r.mapv(|x| {
+        if !x.is_finite() || span == 0.0 {
+            0.0
+        } else {
+            (x - min) / span
+        }
+    })
 }
 
+// Helper fns below the tests are intentional; keeping the module here reads best.
+#[allow(clippy::items_after_test_module)]
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -175,7 +189,11 @@ fn apply_price_stops(
     let price = price.expect("price required when stop rules enabled");
     let n = ret.ncols();
     for c in 0..n {
-        let is_entry = if i > 1 { ret[[i - 2, c]] == 0.0 } else { ret[[i - 1, c]] == 1.0 };
+        let is_entry = if i > 1 {
+            ret[[i - 2, c]] == 0.0
+        } else {
+            ret[[i - 1, c]] == 1.0
+        };
         let waiting = entry_price[c].is_nan() && ret[[i - 1, c]] == 1.0;
         if is_entry || waiting {
             entry_price[c] = price[[i, c]];

@@ -14,12 +14,12 @@ pub fn run_backtest(input_json: &str) -> Result<String, JsValue> {
     run_backtest_json(input_json).map_err(|e| JsValue::from_str(&e))
 }
 
-use yuzu_core::backtest::BacktestConfig;
-use yuzu_core::panel::Panel;
-use yuzu_core::{run_backtest as run_backtest_core, EvalContext};
 use ndarray::Array2;
 use serde::Deserialize;
 use std::collections::HashMap;
+use yuzu_core::backtest::BacktestConfig;
+use yuzu_core::panel::Panel;
+use yuzu_core::{run_backtest as run_backtest_core, EvalContext};
 
 #[derive(Deserialize)]
 struct PanelJson {
@@ -68,7 +68,10 @@ pub fn run_backtest_json(input_json: &str) -> Result<String, String> {
     for (name, p) in input.panels {
         panels.insert(name, panel_from_json(p)?);
     }
-    let ctx = EvalContext { panels, industry: input.industry };
+    let ctx = EvalContext {
+        panels,
+        industry: input.industry,
+    };
     let spec_str = serde_json::to_string(&input.spec).map_err(|e| e.to_string())?;
     let cfg = BacktestConfig {
         fee_ratio: input.config.fee_ratio,

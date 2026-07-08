@@ -1,9 +1,9 @@
 mod golden_harness;
+use golden_harness::{assert_panel_eq, load_golden, panel_from_json};
+use std::collections::HashMap;
 use yuzu_core::panel::Panel;
 use yuzu_core::run_strategy;
 use yuzu_core::EvalContext;
-use golden_harness::{assert_panel_eq, load_golden, panel_from_json};
-use std::collections::HashMap;
 
 #[test]
 fn ma_crossover_hold_until_matches_reference() {
