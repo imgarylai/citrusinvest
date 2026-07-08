@@ -1,5 +1,5 @@
 //! [`Expr`]: the serializable strategy AST. A JSON tree (tagged by `"op"`) that the
-//! website and the batch runner both emit; [`crate::eval`] walks it against a data
+//! website and the batch runner both emit; the engine's evaluator walks it against a data
 //! context to produce a position matrix.
 
 use serde::Deserialize;
