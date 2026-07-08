@@ -563,6 +563,7 @@ pub static ALL_OP_TAGS: &[&str] = &[
     "Le",
     "And",
     "Or",
+    "Not",
     "Add",
     "Sub",
     "Mul",
@@ -703,6 +704,7 @@ mod tests {
             let known = ROWS.iter().any(|r| r.sig.tag == *tag)
                 || binop_symbol_for_tag(tag).is_some()
                 || *tag == "Neg"
+                || *tag == "Not"
                 || *tag == "Const"
                 || *tag == "Data";
             assert!(known, "op `{tag}` has no DSL handler");

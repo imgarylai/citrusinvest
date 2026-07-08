@@ -26,6 +26,7 @@ fn format_at(expr: &Value, depth: usize) -> String {
             .to_string(),
         "Const" => literal(expr.get("value").unwrap_or(&Value::Null)),
         "Neg" => format!("(-{})", format_at(child(expr, "of"), depth)),
+        "Not" => format!("(not {})", format_at(child(expr, "of"), depth)),
         "Ceil" => format!("ceil({})", format_at(child(expr, "of"), depth)),
         _ => {
             if let Some(sym) = ops::binop_symbol_for_tag(tag) {
@@ -144,6 +145,14 @@ mod tests {
             format(&json!({"op":"Average","of":{"op":"Data","name":"close"},"n":2})),
             "sma(close, 2)"
         );
+    }
+
+    #[test]
+    fn prints_not_and_round_trips() {
+        let v = json!({"op":"Not","of":{"op":"Gt",
+            "l":{"op":"Data","name":"a"},"r":{"op":"Const","value":1}}});
+        assert_eq!(format(&v), "(not (a > 1))");
+        assert_eq!(super::super::parse(&format(&v)).unwrap(), v);
     }
 
     #[test]
