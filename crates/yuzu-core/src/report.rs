@@ -61,6 +61,10 @@ pub struct Report {
     /// (NaN → JSON null before the window fills).
     pub rolling_sharpe: Vec<f64>,
     pub rolling_volatility: Vec<f64>,
+    /// Bootstrap confidence bands — present only when
+    /// `BacktestConfig::bootstrap_samples > 0` (attached by `run_backtest`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bootstrap: Option<crate::bootstrap::BootstrapSummary>,
     pub trades: Vec<Trade>,
     pub metrics: Metrics,
 }
@@ -122,6 +126,7 @@ pub fn build_report_with_benchmark(run: BacktestRun, benchmark: Option<Vec<f64>>
         yearly_returns,
         rolling_sharpe,
         rolling_volatility,
+        bootstrap: None,
         trades: run.trades,
         metrics,
     }

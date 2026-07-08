@@ -304,6 +304,9 @@ pub fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
 use crate::backtest::{run, BacktestConfig};
 use crate::report::{benchmark_equity, build_report_with_benchmark, Report};
 
+/// Fixed seed for the report bootstrap — same input, same bands, every run.
+const BOOTSTRAP_SEED: u64 = 0x00C1_7A05;
+
 pub fn run_backtest(
     spec_json: &str,
     ctx: &EvalContext,
@@ -336,7 +339,17 @@ pub fn run_backtest(
         }
         None => None,
     };
-    Ok(build_report_with_benchmark(out, benchmark))
+    let mut report = build_report_with_benchmark(out, benchmark);
+    if cfg.bootstrap_samples > 0 {
+        report.bootstrap = crate::bootstrap::bootstrap(
+            &report.dates,
+            &report.equity,
+            cfg.bootstrap_samples,
+            cfg.bootstrap_block,
+            BOOTSTRAP_SEED,
+        );
+    }
+    Ok(report)
 }
 
 #[cfg(test)]
@@ -392,6 +405,18 @@ mod tests {
             ..Default::default()
         };
         assert!(run_backtest(spec, &ctx, "close", &bad).is_err());
+
+        // bootstrap_samples > 0 attaches confidence bands to the report.
+        let boot = BacktestConfig {
+            bootstrap_samples: 50,
+            ..Default::default()
+        };
+        let r = run_backtest(spec, &ctx, "close", &boot).unwrap();
+        let b = r.bootstrap.as_ref().unwrap();
+        assert_eq!(b.n_samples, 50);
+        assert!(b.sharpe.p05 <= b.sharpe.p95);
+        let json = serde_json::to_string(&r).unwrap();
+        assert!(json.contains("\"bootstrap\""));
     }
 
     #[test]

@@ -48,6 +48,10 @@ struct ConfigJson {
     delist_haircut: f64,
     #[serde(default)]
     benchmark_key: Option<String>,
+    #[serde(default)]
+    bootstrap_samples: usize,
+    #[serde(default)]
+    bootstrap_block: usize,
 }
 
 #[derive(Deserialize)]
@@ -95,6 +99,8 @@ pub fn run_backtest_json(input_json: &str) -> Result<String, String> {
         delist_after: input.config.delist_after,
         delist_haircut: input.config.delist_haircut,
         benchmark_key: input.config.benchmark_key,
+        bootstrap_samples: input.config.bootstrap_samples,
+        bootstrap_block: input.config.bootstrap_block,
     };
     let report =
         run_backtest_core(&spec_str, &ctx, &input.price_key, &cfg).map_err(|e| e.to_string())?;

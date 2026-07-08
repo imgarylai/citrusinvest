@@ -11,6 +11,7 @@
 
 pub mod align;
 pub mod backtest;
+pub mod bootstrap;
 pub mod error;
 pub mod eval;
 pub mod metrics;
