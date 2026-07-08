@@ -261,9 +261,116 @@ pub fn avg_exposure(exposure: &[f64]) -> f64 {
     exposure.iter().sum::<f64>() / exposure.len() as f64
 }
 
+// ---- benchmark-relative metrics ------------------------------------------
+// All take the strategy and benchmark equity curves (same length, aligned by
+// row); daily-return pairs where either side is NaN are dropped.
+
+/// Paired daily returns (strategy, benchmark), NaN pairs removed.
+fn paired_returns(equity: &[f64], bench: &[f64]) -> (Vec<f64>, Vec<f64>) {
+    let r = to_returns(equity);
+    let b = to_returns(bench);
+    let mut rs = Vec::new();
+    let mut bs = Vec::new();
+    for i in 0..r.len().min(b.len()) {
+        if !r[i].is_nan() && !b[i].is_nan() {
+            rs.push(r[i]);
+            bs.push(b[i]);
+        }
+    }
+    (rs, bs)
+}
+
+/// CAPM beta: cov(r, b) / var(b) over paired daily returns (ddof = 1).
+pub fn beta(equity: &[f64], bench: &[f64]) -> f64 {
+    let (rs, bs) = paired_returns(equity, bench);
+    let n = rs.len() as f64;
+    if n < 2.0 {
+        return f64::NAN;
+    }
+    let (rm, _) = mean_std(&rs);
+    let (bm, bstd) = mean_std(&bs);
+    let cov = rs
+        .iter()
+        .zip(&bs)
+        .map(|(r, b)| (r - rm) * (b - bm))
+        .sum::<f64>()
+        / (n - 1.0);
+    let var = bstd * bstd;
+    if var == 0.0 {
+        return f64::NAN;
+    }
+    cov / var
+}
+
+/// Annualized CAPM alpha (rf = 0): `(mean(r) - beta * mean(b)) * 252`.
+pub fn alpha(equity: &[f64], bench: &[f64]) -> f64 {
+    let (rs, bs) = paired_returns(equity, bench);
+    let beta = beta(equity, bench);
+    if beta.is_nan() {
+        return f64::NAN;
+    }
+    let (rm, _) = mean_std(&rs);
+    let (bm, _) = mean_std(&bs);
+    (rm - beta * bm) * 252.0
+}
+
+/// Annualized tracking error: `std(r - b, ddof = 1) * sqrt(252)`.
+pub fn tracking_error(equity: &[f64], bench: &[f64]) -> f64 {
+    let (rs, bs) = paired_returns(equity, bench);
+    let diff: Vec<f64> = rs.iter().zip(&bs).map(|(r, b)| r - b).collect();
+    let (_, std) = mean_std(&diff);
+    std * 252.0_f64.sqrt()
+}
+
+/// Information ratio: `mean(r - b) / std(r - b, ddof = 1) * sqrt(252)`.
+pub fn information_ratio(equity: &[f64], bench: &[f64]) -> f64 {
+    let (rs, bs) = paired_returns(equity, bench);
+    let diff: Vec<f64> = rs.iter().zip(&bs).map(|(r, b)| r - b).collect();
+    let (mean, std) = mean_std(&diff);
+    (mean / std.max(1e-6)) * 252.0_f64.sqrt()
+}
+
+/// Benchmark total return over its first/last non-NaN observations.
+pub fn benchmark_return(bench: &[f64]) -> f64 {
+    let first = bench.iter().copied().find(|x| !x.is_nan());
+    let last = bench.iter().rev().copied().find(|x| !x.is_nan());
+    match (first, last) {
+        (Some(f), Some(l)) if f != 0.0 => l / f - 1.0,
+        _ => f64::NAN,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn benchmark_relative_metrics() {
+        // Strategy daily returns are exactly 2x the benchmark's.
+        let bench = [1.0, 1.01, 1.0201, 1.01, 1.0201];
+        let mut eq = vec![1.0];
+        for i in 1..bench.len() {
+            let b = bench[i] / bench[i - 1] - 1.0;
+            let prev = *eq.last().unwrap();
+            eq.push(prev * (1.0 + 2.0 * b));
+        }
+        assert!((beta(&eq, &bench) - 2.0).abs() < 1e-9, "beta");
+        assert!(alpha(&eq, &bench).abs() < 1e-9, "alpha ~ 0");
+
+        // Identical curves: beta 1, zero tracking error and IR.
+        assert!((beta(&bench, &bench) - 1.0).abs() < 1e-12);
+        assert!(tracking_error(&bench, &bench).abs() < 1e-12);
+        assert!(information_ratio(&bench, &bench).abs() < 1e-9);
+
+        // Flat benchmark: no variance -> beta NaN.
+        let flat = [1.0, 1.0, 1.0];
+        assert!(beta(&bench[..3], &flat).is_nan());
+
+        // Benchmark total return ignores leading/trailing NaN.
+        let with_nan = [f64::NAN, 1.0, 1.1, f64::NAN];
+        assert!((benchmark_return(&with_nan) - 0.1).abs() < 1e-12);
+        assert!(benchmark_return(&[f64::NAN]).is_nan());
+    }
 
     #[test]
     fn returns_drawdown_and_totals() {

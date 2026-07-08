@@ -44,6 +44,11 @@ pub struct BacktestConfig {
     /// `0.0` = exit at the last valid price, `1.0` = total loss. Shorts gain
     /// symmetrically. Only used when `delist_after > 0`.
     pub delist_haircut: f64,
+    /// Name of a series in the `EvalContext` to compare against (e.g. a panel
+    /// holding SPY closes). When set, `run_backtest` adds a rebased benchmark
+    /// curve and benchmark-relative metrics (alpha/beta/excess/tracking
+    /// error/information ratio) to the report. The NAV loop ignores it.
+    pub benchmark_key: Option<String>,
 }
 
 impl Default for BacktestConfig {
@@ -57,6 +62,7 @@ impl Default for BacktestConfig {
             max_participation: 0.0,
             delist_after: 0,
             delist_haircut: 0.0,
+            benchmark_key: None,
         }
     }
 }
