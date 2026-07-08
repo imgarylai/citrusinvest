@@ -1,0 +1,115 @@
+name: publish vscode extension
+
+# Publish the Lemon VS Code extension on a `vscode-v*` tag (or manual dispatch):
+# generate its changelog from Conventional Commits with git-cliff, then publish
+# to the VS Marketplace (Entra ID via GitHub OIDC — no stored PAT) and to
+# Open VSX (classic token; skipped if OVSX_PAT is unset). The .vsix is also
+# attached to a GitHub Release.
+#
+# One-time owner setup (see the PR / issue #28):
+#   - Entra ID app + federated credential trusting this repo, granted publish
+#     rights on the `citrusinvest` Marketplace publisher. Store its
+#     AZURE_CLIENT_ID and AZURE_TENANT_ID as repo secrets.
+#   - Open VSX (optional): Eclipse publisher agreement + namespace, token in
+#     the OVSX_PAT secret.
+on:
+  push:
+    tags: ["vscode-v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish, e.g. 0.1.0 (tag vscode-v0.1.0 should exist)"
+        required: true
+        type: string
+
+permissions:
+  contents: write # create the GitHub Release
+  id-token: write # OIDC token for Entra ID (Marketplace)
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # A GitHub Environment gives the OIDC token a stable `sub`
+    # (repo:imgarylai/citrusinvest:environment:release) to match the Entra
+    # federated credential against — tag refs can't be wildcard-matched.
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so git-cliff sees every commit + tag
+
+      - name: Resolve version + tag
+        id: v
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            version="${{ github.event.inputs.version }}"
+            tag="vscode-v${version}"
+          else
+            tag="${GITHUB_REF_NAME}"
+            version="${tag#vscode-v}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff
+
+      - name: Generate changelog
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Config filters to `(vscode)`-scoped commits and segments by vscode-v*
+          # tags. Full changelog ships in the .vsix (Marketplace "Changelog" tab);
+          # the latest section becomes the GitHub Release body.
+          git cliff --config editors/vscode/cliff.toml -o editors/vscode/CHANGELOG.md
+          git cliff --config editors/vscode/cliff.toml --latest -o RELEASE_NOTES.md
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build .vsix
+        working-directory: editors/vscode
+        run: |
+          set -euo pipefail
+          npm ci
+          npm version "${{ steps.v.outputs.version }}" --no-git-tag-version --allow-same-version
+          npx @vscode/vsce package -o "lemon-lang-${{ steps.v.outputs.version }}.vsix"
+
+      - name: Azure login (OIDC, for Marketplace)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
+
+      - name: Publish to VS Marketplace
+        working-directory: editors/vscode
+        run: npx @vscode/vsce publish --azure-credential --packagePath "lemon-lang-${{ steps.v.outputs.version }}.vsix"
+
+      - name: Publish to Open VSX
+        working-directory: editors/vscode
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          set -euo pipefail
+          if [ -z "${OVSX_PAT:-}" ]; then
+            echo "OVSX_PAT not set — skipping Open VSX publish."
+            exit 0
+          fi
+          npx ovsx publish "lemon-lang-${{ steps.v.outputs.version }}.vsix" -p "$OVSX_PAT"
+
+      - name: GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="${{ steps.v.outputs.tag }}"
+          vsix="editors/vscode/lemon-lang-${{ steps.v.outputs.version }}.vsix"
+          gh release create "$tag" --title "Lemon extension ${{ steps.v.outputs.version }}" \
+            --notes-file RELEASE_NOTES.md "$vsix" --repo "$GITHUB_REPOSITORY" \
+            || gh release upload "$tag" "$vsix" --clobber --repo "$GITHUB_REPOSITORY"

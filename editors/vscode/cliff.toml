@@ -1,0 +1,28 @@
+# git-cliff config for the Lemon VS Code extension changelog.
+# Scoped to `(vscode)` Conventional-Commit commits and segmented by `vscode-v*`
+# tags. The publish workflow runs `git cliff --config editors/vscode/cliff.toml`.
+
+[changelog]
+header = "# Changelog\n\n"
+body = """
+{% if version %}## [{{ version | replace(from="vscode-v", to="") }}] - {{ timestamp | date(format="%Y-%m-%d") }}{% else %}## [Unreleased]{% endif %}
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | split(pat="-->") | last | trim }}
+{% for commit in commits %}- {{ commit.message | upper_first }}
+{% endfor %}{% endfor %}
+"""
+trim = true
+
+[git]
+conventional_commits = true
+filter_commits = true          # drop commits that no parser keeps
+tag_pattern = "vscode-v[0-9]*"
+commit_parsers = [
+  { message = "^feat\\(vscode\\)", group = "<!-- 0 -->Features" },
+  { message = "^fix\\(vscode\\)", group = "<!-- 1 -->Bug Fixes" },
+  { message = "^perf\\(vscode\\)", group = "<!-- 2 -->Performance" },
+  { message = "^refactor\\(vscode\\)", group = "<!-- 3 -->Refactor" },
+  { message = "^docs?\\(vscode\\)", group = "<!-- 4 -->Documentation" },
+  { message = "^(chore|ci|build)\\(vscode\\)", group = "<!-- 6 -->Miscellaneous" },
+  { message = ".*", skip = true },
+]
