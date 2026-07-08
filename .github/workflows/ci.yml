@@ -24,6 +24,10 @@ jobs:
         run: cargo clippy --workspace -- -D warnings
       - name: Test
         run: cargo test --workspace
+      - name: Clippy (yuzu-data without default features / no parquet)
+        run: cargo clippy -p yuzu-data --no-default-features -- -D warnings
+      - name: Test (yuzu-data without default features / no parquet)
+        run: cargo test -p yuzu-data --no-default-features
 
   coverage:
     runs-on: ubuntu-latest

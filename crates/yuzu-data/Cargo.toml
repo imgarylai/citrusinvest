@@ -6,8 +6,8 @@ license.workspace = true
 repository.workspace = true
 readme.workspace = true
 rust-version.workspace = true
-description = "Native I/O layer: reads gzip CSV price and fundamental files into yuzu-core panels."
-keywords = ["backtesting", "finance", "market-data", "csv", "trading"]
+description = "Native I/O layer: reads CSV, gzip CSV, and Parquet price and fundamental files into yuzu-core panels."
+keywords = ["backtesting", "finance", "market-data", "parquet", "trading"]
 categories = ["finance"]
 
 [dependencies]
@@ -15,3 +15,19 @@ yuzu-core = { path = "../yuzu-core", version = "0.1.1" }
 ndarray.workspace = true
 flate2.workspace = true
 rayon.workspace = true
+# Optional: Apache Parquet reading (pulls the arrow stack). Off by default so the
+# published lib and default builds stay lean (CSV/gzip need no extra deps). MSRV
+# 1.85 for parquet 57+, within the workspace's 1.86.
+parquet = { version = "57", default-features = false, features = ["arrow", "snap", "zstd", "lz4"], optional = true }
+arrow-array = { version = "57", default-features = false, optional = true }
+arrow-cast = { version = "57", default-features = false, optional = true }
+arrow-schema = { version = "57", default-features = false, optional = true }
+bytes = { version = "1", optional = true }
+
+[features]
+# Parquet is on by default so reading `.parquet` inputs works out of the box.
+# Consumers that only need CSV/gzip and want to avoid the arrow stack can opt out
+# with `default-features = false`.
+default = ["parquet"]
+# Read Apache Parquet price/fundamental/panel files in addition to CSV & gzip CSV.
+parquet = ["dep:parquet", "dep:arrow-array", "dep:arrow-cast", "dep:arrow-schema", "dep:bytes"]

@@ -11,28 +11,29 @@ use yuzu_core::report::Report;
 use yuzu_core::{run_backtest, EvalContext};
 use yuzu_data::{load_panel, Field, LocalSource, PRICES_DIR};
 
-/// Symbols that have a `prices/<sym>.csv.gz` file under `root`, sorted.
+/// Symbols with a per-symbol price file under `root/prices`, sorted and
+/// de-duplicated. Recognizes `.csv.gz`, `.parquet`, and `.csv`; the
+/// loaders detect the actual format from content.
 pub fn list_symbols(root: &Path) -> std::io::Result<Vec<String>> {
-    let mut out = Vec::new();
+    // `.csv.gz` before `.csv` so a gzip file isn't mis-stripped to "<sym>.csv".
+    const EXTS: &[&str] = &[".csv.gz", ".parquet", ".csv"];
+    let mut syms = std::collections::BTreeSet::new();
     let prices = root.join(PRICES_DIR);
     if !prices.exists() {
-        return Ok(out);
+        return Ok(Vec::new());
     }
     for entry in std::fs::read_dir(prices)? {
         let entry = entry?;
         if !entry.file_type()?.is_file() {
             continue;
         }
-        if let Some(sym) = entry
-            .file_name()
-            .to_str()
-            .and_then(|n| n.strip_suffix(".csv.gz"))
-        {
-            out.push(sym.to_string());
+        if let Some(name) = entry.file_name().to_str() {
+            if let Some(sym) = EXTS.iter().find_map(|ext| name.strip_suffix(ext)) {
+                syms.insert(sym.to_string());
+            }
         }
     }
-    out.sort();
-    Ok(out)
+    Ok(syms.into_iter().collect())
 }
 
 /// Load the close panel for every symbol under `root` into an `EvalContext`.

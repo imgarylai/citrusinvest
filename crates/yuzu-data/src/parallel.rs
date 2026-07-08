@@ -10,7 +10,24 @@ use rayon::prelude::*;
 use rayon::{ThreadPool, ThreadPoolBuilder};
 
 use crate::error::DataError;
+use crate::format::CANDIDATE_EXTS;
 use crate::source::ObjectSource;
+
+/// Fetch a per-symbol object, probing the candidate extensions in priority order
+/// (`.csv.gz` first for backward compatibility). Returns the first that exists,
+/// or `None` if the symbol has no file in any supported format.
+fn get_symbol<S: ObjectSource>(
+    source: &S,
+    dir: &str,
+    sym: &str,
+) -> Result<Option<Vec<u8>>, DataError> {
+    for ext in CANDIDATE_EXTS {
+        if let Some(bytes) = source.get(&format!("{dir}/{sym}{ext}"))? {
+            return Ok(Some(bytes));
+        }
+    }
+    Ok(None)
+}
 
 /// Shared pool for overlapping object-store GETs. Sized for I/O concurrency (many
 /// in-flight network reads), NOT CPU count — the fetches are network-bound, so a
@@ -47,9 +64,8 @@ where
         symbols
             .par_iter()
             .map(|sym| {
-                let key = format!("{dir}/{sym}.csv.gz");
                 let mut map = HashMap::new();
-                if let Some(bytes) = source.get(&key)? {
+                if let Some(bytes) = get_symbol(source, dir, sym)? {
                     match parse(&bytes) {
                         Ok(rows) => {
                             for (d, v) in rows {
@@ -58,7 +74,7 @@ where
                                 }
                             }
                         }
-                        Err(e) => eprintln!("[yuzu-data] {key} parse failed: {e}"),
+                        Err(e) => eprintln!("[yuzu-data] {dir}/{sym} parse failed: {e}"),
                     }
                 }
                 Ok(map)
@@ -67,13 +83,21 @@ where
     })
 }
 
-/// Fetch every key concurrently, returning raw bytes in input order (`None` for an
-/// absent key). Lets a caller read each object once and parse it many times.
-pub(crate) fn fetch_raw<S: ObjectSource + Sync>(
+/// Fetch one object per symbol concurrently (probing the candidate extensions,
+/// `.csv.gz` first), returning raw bytes in input order (`None` if the symbol has
+/// no file in any supported format). Used by the panel rebuild to read each
+/// per-symbol source once regardless of its stored format.
+pub(crate) fn fetch_symbols<S: ObjectSource + Sync>(
     source: &S,
-    keys: &[String],
+    dir: &str,
+    symbols: &[String],
 ) -> Result<Vec<Option<Vec<u8>>>, DataError> {
-    io_pool().install(|| keys.par_iter().map(|k| source.get(k)).collect())
+    io_pool().install(|| {
+        symbols
+            .par_iter()
+            .map(|sym| get_symbol(source, dir, sym))
+            .collect()
+    })
 }
 
 #[cfg(test)]
@@ -83,19 +107,16 @@ mod tests {
     use std::fs;
 
     #[test]
-    fn fetch_raw_returns_bytes_in_order_with_none_for_missing() {
-        let dir = std::env::temp_dir().join("yuzu_data_fetch_raw");
+    fn fetch_symbols_probes_extensions_in_order_with_none_for_missing() {
+        let dir = std::env::temp_dir().join("yuzu_data_fetch_symbols");
         let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
-        fs::write(dir.join("a.bin"), b"AA").unwrap();
-        fs::write(dir.join("b.bin"), b"BB").unwrap();
+        fs::create_dir_all(dir.join("prices")).unwrap();
+        // gzip CSV for AAA, plain CSV for BBB, nothing for CCC
+        fs::write(dir.join("prices/AAA.csv.gz"), b"GZ").unwrap();
+        fs::write(dir.join("prices/BBB.csv"), b"CSV").unwrap();
         let src = LocalSource::new(&dir);
-        let keys = vec![
-            "a.bin".to_string(),
-            "missing.bin".to_string(),
-            "b.bin".to_string(),
-        ];
-        let got = fetch_raw(&src, &keys).unwrap();
-        assert_eq!(got, vec![Some(b"AA".to_vec()), None, Some(b"BB".to_vec())]);
+        let syms = vec!["AAA".to_string(), "CCC".to_string(), "BBB".to_string()];
+        let got = fetch_symbols(&src, "prices", &syms).unwrap();
+        assert_eq!(got, vec![Some(b"GZ".to_vec()), None, Some(b"CSV".to_vec())]);
     }
 }

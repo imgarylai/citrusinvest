@@ -9,10 +9,12 @@ use yuzu_core::panel::Panel;
 /// point (e.g. `YUZU_PRICES_DIR`) for a custom layout — the engine stays generic.
 pub const PRICES_DIR: &str = "prices";
 
-/// Read `{dir}/{symbol}.csv.gz` for each symbol, extract `field`, filter to
-/// `[from, to]` (inclusive, YYYYMMDD), and assemble a Panel: rows = sorted union
-/// of all kept days, columns = `symbols` in the given order. Missing cells (and
-/// symbols with no file) are NaN. `dir` defaults to [`PRICES_DIR`] at call sites.
+/// Read the per-symbol price file for each symbol (probing `.csv.gz`, then
+/// `.parquet` when that feature is on, then `.csv`; format detected from
+/// content), extract `field`, filter to `[from, to]` (inclusive, YYYYMMDD), and
+/// assemble a Panel: rows = sorted union of all kept days, columns = `symbols` in
+/// the given order. Missing cells (and symbols with no file) are NaN. `dir`
+/// defaults to [`PRICES_DIR`] at call sites.
 pub fn load_panel<S: ObjectSource + Sync>(
     source: &S,
     symbols: &[String],
@@ -96,6 +98,73 @@ mod tests {
         // a different field comes from the same files
         let high = load_panel(&src, &syms, Field::AdjHigh, 20240102, 20240104, PRICES_DIR).unwrap();
         assert_eq!(high.data[[0, 0]], 11.0); // AAPL high = close + 1
+    }
+
+    #[test]
+    fn loads_plain_csv_files_alongside_gzip() {
+        // A `.csv` (uncompressed) file must load via the same path (probed after
+        // `.csv.gz`), so a mixed mirror works.
+        let dir = std::env::temp_dir().join("yuzu_data_loader_plaincsv");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("prices")).unwrap();
+        fs::write(
+            dir.join("prices/AAPL.csv"),
+            "day,adj_open,adj_high,adj_low,adj_close,volume\n\
+             2024-01-02,9,11,9,10,100\n\
+             2024-01-03,10,12,10,11,100\n",
+        )
+        .unwrap();
+        let src = LocalSource::new(&dir);
+        let syms = vec!["AAPL".to_string()];
+        let close =
+            load_panel(&src, &syms, Field::AdjClose, 20240102, 20240103, PRICES_DIR).unwrap();
+        assert_eq!(close.dates, vec![20240102, 20240103]);
+        assert_eq!(close.data[[0, 0]], 10.0);
+        assert_eq!(close.data[[1, 0]], 11.0);
+    }
+
+    #[cfg(feature = "parquet")]
+    #[test]
+    fn loads_parquet_files_through_the_same_path() {
+        use arrow_array::{ArrayRef, Float64Array, Int32Array, RecordBatch};
+        use arrow_schema::{DataType, Field as AField, Schema};
+        use parquet::arrow::ArrowWriter;
+        use std::sync::Arc;
+
+        let dir = std::env::temp_dir().join("yuzu_data_loader_parquet");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("prices")).unwrap();
+
+        let schema = Arc::new(Schema::new(vec![
+            AField::new("day", DataType::Int32, false),
+            AField::new("adj_close", DataType::Float64, true),
+            AField::new("volume", DataType::Float64, true),
+        ]));
+        let batch = RecordBatch::try_new(
+            schema.clone(),
+            vec![
+                Arc::new(Int32Array::from(vec![20240102, 20240103])) as ArrayRef,
+                Arc::new(Float64Array::from(vec![10.0, 11.0])) as ArrayRef,
+                Arc::new(Float64Array::from(vec![100.0, 200.0])) as ArrayRef,
+            ],
+        )
+        .unwrap();
+        let mut buf = Vec::new();
+        let mut w = ArrowWriter::try_new(&mut buf, schema, None).unwrap();
+        w.write(&batch).unwrap();
+        w.close().unwrap();
+        fs::write(dir.join("prices/NVDA.parquet"), buf).unwrap();
+
+        let src = LocalSource::new(&dir);
+        let syms = vec!["NVDA".to_string()];
+        let close =
+            load_panel(&src, &syms, Field::AdjClose, 20240102, 20240103, PRICES_DIR).unwrap();
+        assert_eq!(close.dates, vec![20240102, 20240103]);
+        assert_eq!(close.data[[0, 0]], 10.0);
+        assert_eq!(close.data[[1, 0]], 11.0);
+        // a different field comes from the same parquet file
+        let vol = load_panel(&src, &syms, Field::Volume, 20240102, 20240103, PRICES_DIR).unwrap();
+        assert_eq!(vol.data[[1, 0]], 200.0);
     }
 
     #[test]

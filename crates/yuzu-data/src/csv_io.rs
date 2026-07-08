@@ -3,10 +3,9 @@
 //! extracts one chosen [`Field`] column into `(day, value)` rows.
 
 use crate::error::DataError;
-use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use std::io::{Read, Write};
+use std::io::Write;
 
 /// One row of adjusted OHLCV for a trading day.
 #[derive(Debug, Clone, PartialEq)]
@@ -40,6 +39,17 @@ impl Field {
             Field::Volume => 5,
         }
     }
+
+    /// Column name (matches the CSV header and the Parquet column name).
+    pub fn name(self) -> &'static str {
+        match self {
+            Field::AdjOpen => "adj_open",
+            Field::AdjHigh => "adj_high",
+            Field::AdjLow => "adj_low",
+            Field::AdjClose => "adj_close",
+            Field::Volume => "volume",
+        }
+    }
 }
 
 fn date_to_i32(s: &str) -> Result<i32, DataError> {
@@ -52,14 +62,20 @@ fn i32_to_date(d: i32) -> String {
     format!("{:04}-{:02}-{:02}", d / 10000, d / 100 % 100, d % 100)
 }
 
-/// gunzip + parse the OHLCV CSV (header optional, oldest-first), extracting
-/// `(YYYYMMDD, <field>)` for the chosen field.
-pub fn parse_series(gz: &[u8], field: Field) -> Result<Vec<(i32, f64)>, DataError> {
-    let mut text = String::new();
-    GzDecoder::new(gz)
-        .read_to_string(&mut text)
-        .map_err(|e| DataError::Io(e.to_string()))?;
-    let col = field.col();
+/// Parse the OHLCV data for `field` into `(YYYYMMDD, value)` rows. The buffer's
+/// format is detected from its content: gzip CSV, plain CSV, or — with the
+/// `parquet` feature — Apache Parquet. CSV is header-optional, oldest-first.
+pub fn parse_series(bytes: &[u8], field: Field) -> Result<Vec<(i32, f64)>, DataError> {
+    #[cfg(feature = "parquet")]
+    if crate::format::Format::detect(bytes) == crate::format::Format::Parquet {
+        return crate::parquet_io::read_series(bytes, field.name());
+    }
+    let text = crate::format::read_csv_text(bytes)?;
+    parse_series_csv(&text, field.col())
+}
+
+/// Extract column `col` (0 = `day`) from decoded OHLCV CSV text.
+fn parse_series_csv(text: &str, col: usize) -> Result<Vec<(i32, f64)>, DataError> {
     let mut out = Vec::new();
     for line in text.lines() {
         let line = line.trim();
