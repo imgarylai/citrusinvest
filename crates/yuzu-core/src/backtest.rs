@@ -34,6 +34,16 @@ pub struct BacktestConfig {
     /// volume panel and `initial_capital > 0`. `0.0` (the default) disables it.
     /// The cap is measured against `initial_capital`, not compounded equity.
     pub max_participation: f64,
+    /// After this many consecutive missing-price rows a symbol is treated as
+    /// delisted: the position is force-closed at its last valid price (less
+    /// `delist_haircut`) and re-entry is blocked until prices resume. `0` (the
+    /// default) keeps the legacy behavior (a dead position freezes at its last
+    /// value — survivorship-friendly, beware).
+    pub delist_after: usize,
+    /// Fraction of a force-closed position's value written off on delisting:
+    /// `0.0` = exit at the last valid price, `1.0` = total loss. Shorts gain
+    /// symmetrically. Only used when `delist_after > 0`.
+    pub delist_haircut: f64,
 }
 
 impl Default for BacktestConfig {
@@ -45,6 +55,8 @@ impl Default for BacktestConfig {
             slippage_ratio: 0.0,
             initial_capital: 0.0,
             max_participation: 0.0,
+            delist_after: 0,
+            delist_haircut: 0.0,
         }
     }
 }
@@ -87,6 +99,36 @@ pub(crate) fn cap_weights_by_liquidity(
         let cap = max_participation * dv / initial_capital;
         *w = w.clamp(-cap, cap);
     }
+}
+
+/// Delisting scan over the price panel. Returns `(dead, confirm)`, both
+/// dates × symbols booleans: `confirm` is true on the row where a symbol's
+/// NaN-price run first reaches `delist_after` (the forced-exit day); `dead` is
+/// true from that row until prices resume. `None` when `delist_after == 0`.
+fn scan_delistings(px: &Panel, delist_after: usize) -> Option<(Array2<bool>, Array2<bool>)> {
+    if delist_after == 0 {
+        return None;
+    }
+    let (nrows, n) = (px.nrows(), px.ncols());
+    let mut dead = Array2::from_elem((nrows, n), false);
+    let mut confirm = Array2::from_elem((nrows, n), false);
+    for c in 0..n {
+        let mut nan_run = 0usize;
+        for r in 0..nrows {
+            if px.data[[r, c]].is_nan() {
+                nan_run += 1;
+                if nan_run == delist_after {
+                    confirm[[r, c]] = true;
+                }
+                if nan_run >= delist_after {
+                    dead[[r, c]] = true;
+                }
+            } else {
+                nan_run = 0;
+            }
+        }
+    }
+    Some((dead, confirm))
 }
 
 /// Project `other` onto `grid`'s (dates × symbols), NaN where a cell is absent.
@@ -185,6 +227,7 @@ pub fn run(
     let n = px.ncols();
     let nrows = px.nrows();
     let dates = px.dates.clone();
+    let delist = scan_delistings(&px, cfg.delist_after);
 
     // Forward-fill positions down rows; record rebalance days (the ffilled raw
     // allocation changed) and the row-normalized target weights. Weights are only
@@ -200,6 +243,15 @@ pub fn run(
                 let v = pos.data[[r, c]];
                 if !v.is_nan() {
                     last[c] = v;
+                }
+                // A confirmed-dead symbol can't be held or entered; zeroing the
+                // raw allocation also makes the confirmation row a rebalance
+                // event, so the NAV loop applies the forced exit. Re-entry after
+                // a relisting needs the position panel to re-assert a value.
+                if let Some((dead, _)) = &delist {
+                    if dead[[r, c]] {
+                        last[c] = 0.0;
+                    }
                 }
             }
             // rebalance event = first row, or the ffilled raw allocation changed.
@@ -258,6 +310,29 @@ pub fn run(
                 drift[c] /= factor;
             }
         }
+        // Delisting confirmation: write the position down by the haircut and
+        // move the remainder to cash BEFORE the rebalance is costed — a forced
+        // exit is not a trade, so it pays no fee/tax/slippage (the target row
+        // is already zero for the dead symbol, so it adds no turnover either).
+        if let Some((_, confirm)) = &delist {
+            let mut loss = 0.0;
+            for c in 0..n {
+                if confirm[[r, c]] && drift[c] != 0.0 {
+                    loss += drift[c] * cfg.delist_haircut;
+                    drift[c] = 0.0;
+                }
+            }
+            if loss != 0.0 {
+                value *= 1.0 - loss;
+                // surviving weights are unchanged in dollars but equity shrank
+                let f = 1.0 - loss;
+                if f != 0.0 {
+                    for w in drift.iter_mut() {
+                        *w /= f;
+                    }
+                }
+            }
+        }
         // Weights drift between rebalances. Only on a rebalance day do we reset to
         // the target and pay turnover cost; otherwise the drifted weights carry over
         // with no cost (buy at change-points, hold
@@ -276,7 +351,11 @@ pub fn run(
     let mut trades: Vec<Trade> = Vec::new();
     for c in 0..n {
         let mut open: Option<(usize, f64)> = None; // (entry_row, entry_price)
+        let mut last_valid_px = f64::NAN;
         for r in 0..nrows {
+            if !px.data[[r, c]].is_nan() {
+                last_valid_px = px.data[[r, c]];
+            }
             let held = target[[r, c]] != 0.0;
             let entry_now = held && open.is_none();
             let exit_now = !held && open.is_some();
@@ -284,15 +363,28 @@ pub fn run(
                 open = Some((r, px.data[[r, c]]));
             } else if exit_now {
                 let (er, ep) = open.take().unwrap();
-                let xp = px.data[[r, c]];
+                // A delisting exit fills at the last valid price less the
+                // haircut and pays no exit-leg costs (nothing traded).
+                let delisted = delist
+                    .as_ref()
+                    .map(|(_, confirm)| confirm[[r, c]])
+                    .unwrap_or(false);
+                let xp = if delisted {
+                    last_valid_px * (1.0 - cfg.delist_haircut)
+                } else {
+                    px.data[[r, c]]
+                };
                 let gross = if ep == 0.0 || ep.is_nan() || xp.is_nan() {
                     1.0
                 } else {
                     xp / ep
                 };
-                let net = (1.0 - cfg.fee_ratio - cfg.slippage_ratio)
-                    * gross
-                    * (1.0 - cfg.fee_ratio - cfg.tax_ratio - cfg.slippage_ratio);
+                let exit_leg = if delisted {
+                    1.0
+                } else {
+                    1.0 - cfg.fee_ratio - cfg.tax_ratio - cfg.slippage_ratio
+                };
+                let net = (1.0 - cfg.fee_ratio - cfg.slippage_ratio) * gross * exit_leg;
                 let dir = target[[er, c]].signum();
                 let (mae, mfe) = excursion(&hi, &lo, er, r, c, ep, dir);
                 trades.push(Trade {
@@ -491,6 +583,72 @@ mod tests {
         .unwrap();
         let r4 = run(&pos, &px, None, None, Some(&vol_nan), &cfg);
         assert!((r4.exposure[0] - 1.0).abs() < 1e-12, "NaN dv -> no cap");
+    }
+
+    #[test]
+    fn delisting_forces_exit_with_haircut() {
+        use crate::panel::Panel;
+        let dates = vec![20240102, 20240103, 20240104, 20240105, 20240108];
+        let syms = vec!["A".to_string(), "B".to_string()];
+        // Both held from day 0. B's prices vanish from day 2 on (delisted).
+        let pos = Panel::from_rows(dates.clone(), syms.clone(), vec![vec![1.0, 1.0]; 5]).unwrap();
+        let px = Panel::from_rows(
+            dates.clone(),
+            syms.clone(),
+            vec![
+                vec![10.0, 10.0],
+                vec![10.0, 10.0],
+                vec![10.0, f64::NAN],
+                vec![10.0, f64::NAN],
+                vec![10.0, f64::NAN],
+            ],
+        )
+        .unwrap();
+
+        // Legacy (delist_after = 0): B freezes at its last value, equity flat.
+        let r0 = run(&pos, &px, None, None, None, &BacktestConfig::default());
+        assert!((r0.equity[4] - 1.0).abs() < 1e-12, "legacy freezes");
+        assert!(r0
+            .trades
+            .iter()
+            .all(|t| t.symbol != "B" || t.exit_date.is_none()));
+
+        // delist_after = 2 confirms on day 3 (rows 2,3 NaN). Full haircut:
+        // B was half the book -> equity halves; B's trade is a -100% loss.
+        let cfg = BacktestConfig {
+            delist_after: 2,
+            delist_haircut: 1.0,
+            ..Default::default()
+        };
+        let r = run(&pos, &px, None, None, None, &cfg);
+        assert!((r.equity[2] - 1.0).abs() < 1e-12, "before confirmation");
+        assert!((r.equity[3] - 0.5).abs() < 1e-12, "haircut hits equity");
+        assert!((r.equity[4] - 0.5).abs() < 1e-12);
+        let b = r
+            .trades
+            .iter()
+            .find(|t| t.symbol == "B" && t.exit_date.is_some())
+            .unwrap();
+        assert_eq!(b.exit_date, Some(20240105));
+        assert!((b.ret - (-1.0)).abs() < 1e-12, "total loss, ret {}", b.ret);
+        // Surviving symbol A is now the whole book.
+        assert!((r.exposure[3] - 1.0).abs() < 1e-12);
+
+        // Haircut 0: forced exit at the last valid price -> no equity impact,
+        // B's trade closes flat (entered and exited at 10).
+        let cfg0 = BacktestConfig {
+            delist_after: 2,
+            delist_haircut: 0.0,
+            ..Default::default()
+        };
+        let r2 = run(&pos, &px, None, None, None, &cfg0);
+        assert!((r2.equity[4] - 1.0).abs() < 1e-12);
+        let b2 = r2
+            .trades
+            .iter()
+            .find(|t| t.symbol == "B" && t.exit_date.is_some())
+            .unwrap();
+        assert!(b2.ret.abs() < 1e-12, "flat exit, ret {}", b2.ret);
     }
 
     #[test]
