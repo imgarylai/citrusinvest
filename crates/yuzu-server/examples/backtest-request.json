@@ -1,0 +1,22 @@
+{
+  "_comment": "Example POST /backtest body. Mirrors the momentum+value+market_cap / IsLargest 20 / monthly-rebalance strategy that OOM'd the 128MB Worker. `symbols`/`from`/`to` are illustrative — fill with the real universe. Run: YUZU_DATA_DIR=<dir-with-prices/+fundamentals/> yuzu-server, then curl -XPOST :8080/backtest -d @backtest-request.json",
+  "spec": {
+    "op": "Rebalance",
+    "freq": "ME",
+    "of": {
+      "op": "IsLargest",
+      "n": 20,
+      "of": {
+        "op": "Add",
+        "l": { "op": "Rank", "of": { "op": "PctChange", "of": { "op": "Data", "name": "close" }, "n": 20 } },
+        "r": { "op": "Rank", "of": { "op": "Data", "name": "market_cap" } }
+      }
+    }
+  },
+  "symbols": ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA"],
+  "from": 20200102,
+  "to": 20240101,
+  "fee_ratio": 0.001,
+  "position_limit": 0.0,
+  "price_key": "close"
+}

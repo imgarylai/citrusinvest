@@ -1,0 +1,239 @@
+//! Cross-sectional neutralization & industry grouping ops.
+//! `neutralize` runs a per-date OLS and returns residuals; the industry ops
+//! reduce to per-date group arithmetic (see each method).
+
+use crate::align::align;
+use crate::ops::linalg::solve_ols;
+use crate::panel::Panel;
+use ndarray::Array2;
+use std::collections::HashMap;
+
+impl Panel {
+    /// Reindex another panel's values onto `self`'s exact (dates, symbols) grid,
+    /// NaN where a cell is absent. Lets per-row ops assume a shared axis.
+    pub(crate) fn project_onto(&self, dates: &[i32], symbols: &[String]) -> Array2<f64> {
+        let row_of: HashMap<i32, usize> = self.dates.iter().enumerate().map(|(i, &d)| (d, i)).collect();
+        let col_of: HashMap<&str, usize> =
+            self.symbols.iter().enumerate().map(|(i, s)| (s.as_str(), i)).collect();
+        let mut out = Array2::from_elem((dates.len(), symbols.len()), f64::NAN);
+        for (r, d) in dates.iter().enumerate() {
+            let Some(&sr) = row_of.get(d) else { continue };
+            for (c, s) in symbols.iter().enumerate() {
+                if let Some(&sc) = col_of.get(s.as_str()) {
+                    out[[r, c]] = self.data[[sr, sc]];
+                }
+            }
+        }
+        out
+    }
+
+    /// `neutralize`: per date, OLS-regress the factor on `neutralizers`
+    /// (plus an intercept when `add_const`), return residuals. A date is all-NaN
+    /// when fewer than `neutralizers.len() + 1` cells are valid across the factor
+    /// and every neutralizer.
+    pub fn neutralize(&self, neutralizers: &[Panel], add_const: bool) -> Panel {
+        // Project every neutralizer onto self's grid (align first so a differing
+        // axis still resolves by label, then snap to self's exact grid).
+        let projected: Vec<Array2<f64>> = neutralizers
+            .iter()
+            .map(|n| {
+                let (_, n2) = align(self, n);
+                n2.project_onto(&self.dates, &self.symbols)
+            })
+            .collect();
+
+        let (nrows, ncols) = self.data.dim();
+        let nfac = neutralizers.len();
+        let mut out = Array2::from_elem((nrows, ncols), f64::NAN);
+        let kcols = nfac + usize::from(add_const);
+
+        for r in 0..nrows {
+            // valid columns: factor and every neutralizer present
+            let valid: Vec<usize> = (0..ncols)
+                .filter(|&c| {
+                    self.data[[r, c]].is_finite() && projected.iter().all(|p| p[[r, c]].is_finite())
+                })
+                .collect();
+            if valid.len() < nfac + 1 {
+                continue; // row stays NaN
+            }
+            let m = valid.len();
+            let mut x = Array2::<f64>::zeros((m, kcols));
+            let mut y = vec![0.0f64; m];
+            for (i, &c) in valid.iter().enumerate() {
+                let mut k = 0;
+                if add_const {
+                    x[[i, 0]] = 1.0;
+                    k = 1;
+                }
+                for (f, p) in projected.iter().enumerate() {
+                    x[[i, k + f]] = p[[r, c]];
+                }
+                y[i] = self.data[[r, c]];
+            }
+            let Some(beta) = solve_ols(&x, &y) else { continue };
+            for (i, &c) in valid.iter().enumerate() {
+                let mut fitted = 0.0;
+                for j in 0..kcols {
+                    fitted += x[[i, j]] * beta[j];
+                }
+                out[[r, c]] = y[i] - fitted;
+            }
+        }
+        Panel { dates: self.dates.clone(), symbols: self.symbols.clone(), data: out }
+    }
+
+    /// Group `valid_cols` by their industry. Columns missing from `industry`
+    /// fall into "其他" (the default "other" bucket) —
+    /// but for US single-sector data every tracked symbol has a sector.
+    /// Returns groups in first-seen column order (stable).
+    pub(crate) fn group_cols_by_industry<'a>(
+        &self,
+        industry: &'a HashMap<String, String>,
+        valid_cols: &[usize],
+    ) -> Vec<(&'a str, Vec<usize>)> {
+        const OTHER: &str = "其他";
+        let mut order: Vec<&str> = Vec::new();
+        let mut groups: HashMap<&str, Vec<usize>> = HashMap::new();
+        for &c in valid_cols {
+            let cat = industry.get(&self.symbols[c]).map(String::as_str).unwrap_or(OTHER);
+            groups.entry(cat).or_insert_with(|| {
+                order.push(cat);
+                Vec::new()
+            });
+            groups.get_mut(cat).unwrap().push(c);
+        }
+        order.into_iter().map(|cat| (cat, groups.remove(cat).unwrap())).collect()
+    }
+
+    /// `neutralize_industry`: residual of regressing the factor on industry
+    /// dummies. That residual is algebraically the within-industry demean, so we
+    /// compute it directly. A date is all-NaN when fewer than 2 cells are valid or
+    /// fewer than 2 distinct industries are present.
+    /// ponytail: industry-dummy OLS residual == within-group demean for any
+    /// `add_const`; `add_const` is kept for API parity but does not change values.
+    pub fn neutralize_industry(&self, industry: &HashMap<String, String>, _add_const: bool) -> Panel {
+        let (nrows, ncols) = self.data.dim();
+        let mut out = Array2::from_elem((nrows, ncols), f64::NAN);
+        for r in 0..nrows {
+            let valid: Vec<usize> = (0..ncols).filter(|&c| self.data[[r, c]].is_finite()).collect();
+            if valid.len() < 2 {
+                continue;
+            }
+            let groups = self.group_cols_by_industry(industry, &valid);
+            if groups.len() < 2 {
+                continue;
+            }
+            for (_, cols) in &groups {
+                let mean = cols.iter().map(|&c| self.data[[r, c]]).sum::<f64>() / cols.len() as f64;
+                for &c in cols {
+                    out[[r, c]] = self.data[[r, c]] - mean;
+                }
+            }
+        }
+        Panel { dates: self.dates.clone(), symbols: self.symbols.clone(), data: out }
+    }
+
+    /// `industry_rank`: per date, percentile-rank within each industry
+    /// (pandas `rank(pct=True)`, average ties → `avg_rank / group_size`). When
+    /// `categories` is `Some`, only those industries are ranked; every other
+    /// symbol (and any NaN cell) is NaN.
+    pub fn industry_rank(
+        &self,
+        industry: &HashMap<String, String>,
+        categories: Option<&[String]>,
+    ) -> Panel {
+        let (nrows, ncols) = self.data.dim();
+        let allow = |cat: &str| categories.is_none_or(|cs| cs.iter().any(|c| c == cat));
+        let mut out = Array2::from_elem((nrows, ncols), f64::NAN);
+        for r in 0..nrows {
+            let valid: Vec<usize> = (0..ncols).filter(|&c| self.data[[r, c]].is_finite()).collect();
+            for (cat, cols) in self.group_cols_by_industry(industry, &valid) {
+                if !allow(cat) {
+                    continue;
+                }
+                let n = cols.len() as f64;
+                for &c in &cols {
+                    let v = self.data[[r, c]];
+                    // average rank: (#less + (#equal + 1)/2) ; pct = rank / n
+                    let mut less = 0.0;
+                    let mut equal = 0.0;
+                    for &c2 in &cols {
+                        let v2 = self.data[[r, c2]];
+                        if v2 < v {
+                            less += 1.0;
+                        } else if v2 == v {
+                            equal += 1.0;
+                        }
+                    }
+                    out[[r, c]] = (less + (equal + 1.0) / 2.0) / n;
+                }
+            }
+        }
+        Panel { dates: self.dates.clone(), symbols: self.symbols.clone(), data: out }
+    }
+
+    /// `groupby_category().<agg>()`: group columns by sector and aggregate
+    /// per date. Result columns are the sorted distinct sectors. NaN cells are
+    /// skipped; a group with no valid cell that date yields NaN. `std` is the
+    /// sample standard deviation (ddof=1), matching pandas.
+    pub fn groupby_category(
+        &self,
+        industry: &HashMap<String, String>,
+        agg: &str,
+    ) -> Result<Panel, crate::error::EngineError> {
+        const OTHER: &str = "其他";
+        // sorted distinct categories present among self's symbols
+        let mut cats: Vec<String> = self
+            .symbols
+            .iter()
+            .map(|s| industry.get(s).cloned().unwrap_or_else(|| OTHER.to_string()))
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        cats.sort();
+        let cat_cols: Vec<Vec<usize>> = cats
+            .iter()
+            .map(|cat| {
+                (0..self.ncols())
+                    .filter(|&c| {
+                        industry.get(&self.symbols[c]).map(String::as_str).unwrap_or(OTHER) == cat
+                    })
+                    .collect()
+            })
+            .collect();
+
+        let nrows = self.nrows();
+        let mut data = Array2::from_elem((nrows, cats.len()), f64::NAN);
+        for r in 0..nrows {
+            for (g, cols) in cat_cols.iter().enumerate() {
+                let vals: Vec<f64> =
+                    cols.iter().map(|&c| self.data[[r, c]]).filter(|v| v.is_finite()).collect();
+                if vals.is_empty() {
+                    continue;
+                }
+                data[[r, g]] = aggregate(agg, &vals)?;
+            }
+        }
+        Panel::new(self.dates.clone(), cats, data)
+    }
+}
+
+fn aggregate(agg: &str, vals: &[f64]) -> Result<f64, crate::error::EngineError> {
+    let n = vals.len() as f64;
+    Ok(match agg {
+        "sum" => vals.iter().sum(),
+        "mean" => vals.iter().sum::<f64>() / n,
+        "std" => {
+            if vals.len() < 2 {
+                return Ok(f64::NAN); // pandas std of one value is NaN (ddof=1)
+            }
+            let mean = vals.iter().sum::<f64>() / n;
+            let var = vals.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / (n - 1.0);
+            var.sqrt()
+        }
+        other => {
+            return Err(crate::error::EngineError::Eval(format!("bad groupby agg '{other}'")));
+        }
+    })
+}

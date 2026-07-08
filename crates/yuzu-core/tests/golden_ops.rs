@@ -1,0 +1,131 @@
+mod golden_harness;
+use golden_harness::{assert_panel_eq, load_golden, panel_from_json};
+
+use yuzu_core::ops::rotation::HoldUntilOpts;
+use yuzu_core::panel::Panel;
+
+fn input(name: &str) -> Panel {
+    panel_from_json(&load_golden(name), "input")
+}
+fn expected(name: &str) -> Panel {
+    panel_from_json(&load_golden(name), "expected")
+}
+
+#[test]
+fn average_2_matches_reference() {
+    assert_panel_eq(&input("average_2").average(2), &expected("average_2"), 1e-9);
+}
+
+#[test]
+fn rise_1_matches_reference() {
+    assert_panel_eq(&input("rise_1").rise(1), &expected("rise_1"), 0.0);
+}
+
+#[test]
+fn fall_1_matches_reference() {
+    assert_panel_eq(&input("fall_1").fall(1), &expected("fall_1"), 0.0);
+}
+
+#[test]
+fn is_largest_1_matches_reference() {
+    assert_panel_eq(&input("is_largest_1").is_largest(1), &expected("is_largest_1"), 0.0);
+}
+
+#[test]
+fn is_smallest_2_matches_reference() {
+    assert_panel_eq(&input("is_smallest_2").is_smallest(2), &expected("is_smallest_2"), 0.0);
+}
+
+#[test]
+fn sustain_2_matches_reference() {
+    // fixture: expected = RAW.rise(1).sustain(2); reproduce from the RAW input.
+    let inp = input("sustain_2");
+    assert_panel_eq(&inp.rise(1).sustain(2, None), &expected("sustain_2"), 0.0);
+}
+
+#[test]
+fn is_entry_matches_reference() {
+    let inp = input("is_entry");
+    let cond = inp.gt(&inp.average(2));
+    assert_panel_eq(&cond.is_entry(), &expected("is_entry"), 0.0);
+}
+
+#[test]
+fn is_exit_matches_reference() {
+    let inp = input("is_exit");
+    let cond = inp.gt(&inp.average(2));
+    assert_panel_eq(&cond.is_exit(), &expected("is_exit"), 0.0);
+}
+
+#[test]
+fn hold_until_n1_matches_reference() {
+    let inp = input("hold_until_n1");
+    let entries = inp.gt(&inp.average(2));
+    let exits = inp.lt(&inp.average(2));
+    let opts = HoldUntilOpts { nstocks_limit: Some(1), ..Default::default() };
+    assert_panel_eq(&entries.hold_until(&exits, &opts), &expected("hold_until_n1"), 0.0);
+}
+
+#[test]
+fn rebalance_w_matches_reference() {
+    use yuzu_core::ops::rebalance::Freq;
+    assert_panel_eq(&input("rebalance_W").rebalance_freq(Freq::Weekly), &expected("rebalance_W"), 1e-9);
+}
+
+#[test]
+fn rebalance_me_matches_reference() {
+    use yuzu_core::ops::rebalance::Freq;
+    assert_panel_eq(&input("rebalance_ME").rebalance_freq(Freq::MonthEnd), &expected("rebalance_ME"), 1e-9);
+}
+
+#[test]
+fn rebalance_qe_matches_reference() {
+    use yuzu_core::ops::rebalance::Freq;
+    assert_panel_eq(&input("rebalance_QE").rebalance_freq(Freq::QuarterEnd), &expected("rebalance_QE"), 1e-9);
+}
+
+#[test]
+fn quantile_50_matches_reference() {
+    assert_panel_eq(&input("quantile_50").quantile_row(0.5), &expected("quantile_50"), 1e-9);
+}
+
+#[test]
+fn exit_when_matches_reference() {
+    let inp = input("exit_when");
+    let cond = inp.gt(&inp.average(2));
+    let exit = inp.lt(&inp.average(2));
+    assert_panel_eq(&cond.exit_when(&exit), &expected("exit_when"), 0.0);
+}
+
+#[test]
+fn hold_until_stops_matches_reference() {
+    // take_profit fires for AAA on day 2 (130/90 = 1.44 > 1.2).
+    let v = load_golden("hold_until_stops");
+    let entry = panel_from_json(&v, "input");
+    let exit = panel_from_json(&v, "exit");
+    let price = panel_from_json(&v, "price");
+    let opts = HoldUntilOpts {
+        nstocks_limit: Some(3),
+        stop_loss: 0.1,
+        take_profit: 0.2,
+        price: Some(price),
+        ..Default::default()
+    };
+    assert_panel_eq(&entry.hold_until(&exit, &opts), &panel_from_json(&v, "expected"), 0.0);
+}
+
+#[test]
+fn hold_until_trail_stop_matches_reference() {
+    let v = load_golden("hold_until_trail");
+    let entry = panel_from_json(&v, "input");
+    let exit = panel_from_json(&v, "exit");
+    let price = panel_from_json(&v, "price");
+    let opts = HoldUntilOpts {
+        nstocks_limit: Some(3),
+        trail_stop: 0.1,
+        trail_stop_activation: 0.05,
+        price: Some(price),
+        ..Default::default()
+    };
+    assert_panel_eq(&entry.hold_until(&exit, &opts), &panel_from_json(&v, "expected"), 0.0);
+}

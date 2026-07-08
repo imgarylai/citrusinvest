@@ -1,0 +1,400 @@
+//! Standard performance metrics (CAGR, Sharpe, Sortino, max drawdown, etc.). All
+//! functions operate on a daily equity curve (`&[f64]`, base 1.0) or a daily
+//! returns slice. Conventions: annualization 252, rf = 0, std ddof = 1.
+
+use chrono::NaiveDate;
+
+pub fn to_returns(equity: &[f64]) -> Vec<f64> {
+    let mut out = vec![f64::NAN; equity.len()];
+    for i in 1..equity.len() {
+        out[i] = equity[i] / equity[i - 1] - 1.0;
+    }
+    out
+}
+
+pub fn total_return(equity: &[f64]) -> f64 {
+    if equity.is_empty() {
+        return f64::NAN;
+    }
+    equity[equity.len() - 1] / equity[0] - 1.0
+}
+
+pub fn drawdown_series(equity: &[f64]) -> Vec<f64> {
+    let mut out = vec![0.0; equity.len()];
+    let mut peak = f64::NEG_INFINITY;
+    for (i, &e) in equity.iter().enumerate() {
+        if e > peak {
+            peak = e;
+        }
+        out[i] = e / peak - 1.0;
+    }
+    out
+}
+
+pub fn max_drawdown(equity: &[f64]) -> f64 {
+    if equity.is_empty() {
+        return f64::NAN;
+    }
+    drawdown_series(equity).into_iter().fold(0.0, f64::min)
+}
+
+fn to_naive(yyyymmdd: i32) -> NaiveDate {
+    let y = yyyymmdd / 10000;
+    let m = (yyyymmdd / 100 % 100) as u32;
+    let d = (yyyymmdd % 100) as u32;
+    NaiveDate::from_ymd_opt(y, m, d).unwrap()
+}
+
+pub fn year_frac(start: i32, end: i32) -> f64 {
+    let secs = (to_naive(end) - to_naive(start)).num_seconds() as f64;
+    secs / 31_557_600.0
+}
+
+/// sample mean + std (ddof=1) over the non-NaN entries.
+fn mean_std(xs: &[f64]) -> (f64, f64) {
+    let v: Vec<f64> = xs.iter().copied().filter(|x| !x.is_nan()).collect();
+    let n = v.len() as f64;
+    if n == 0.0 {
+        return (f64::NAN, f64::NAN);
+    }
+    let mean = v.iter().sum::<f64>() / n;
+    if n < 2.0 {
+        return (mean, f64::NAN);
+    }
+    let var = v.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1.0);
+    (mean, var.sqrt())
+}
+
+pub fn cagr(equity: &[f64], dates: &[i32]) -> f64 {
+    if equity.len() < 2 || dates.len() < 2 {
+        return f64::NAN;
+    }
+    let yf = year_frac(dates[0], dates[dates.len() - 1]);
+    (equity[equity.len() - 1] / equity[0]).powf(1.0 / yf) - 1.0
+}
+
+pub fn ann_volatility(equity: &[f64]) -> f64 {
+    let (_, std) = mean_std(&to_returns(equity));
+    std * 252.0_f64.sqrt()
+}
+
+pub fn sharpe(equity: &[f64]) -> f64 {
+    let r = to_returns(equity);
+    let (mean, std) = mean_std(&r);
+    (mean / std.max(1e-6)) * 252.0_f64.sqrt()
+}
+
+pub fn sortino(equity: &[f64]) -> f64 {
+    let r = to_returns(equity);
+    // ffn: er = returns (rf=0); negative_returns = min(er[1:], 0).
+    let (mean, _) = mean_std(&r);
+    let downside: Vec<f64> =
+        r.iter().skip(1).map(|&x| if x < 0.0 { x } else { 0.0 }).collect();
+    let (_, dstd) = mean_std(&downside);
+    if dstd <= 0.0 || dstd.is_nan() {
+        return f64::NAN;
+    }
+    (mean / dstd) * 252.0_f64.sqrt()
+}
+
+pub fn calmar(equity: &[f64], dates: &[i32]) -> f64 {
+    let c = cagr(equity, dates);
+    // Short/empty input: cagr already returns NaN ("not enough data"); keep that,
+    // don't let the zero-drawdown guard below reinterpret it as "no drawdown".
+    if c.is_nan() {
+        return f64::NAN;
+    }
+    let mdd = max_drawdown(equity).abs();
+    if mdd == 0.0 {
+        return f64::INFINITY;
+    }
+    c / mdd
+}
+
+pub fn recovery_factor(equity: &[f64]) -> f64 {
+    let mdd = max_drawdown(equity).abs();
+    if mdd == 0.0 {
+        return f64::INFINITY;
+    }
+    total_return(equity) / mdd
+}
+
+/// Longest run of consecutive rows strictly below the running peak (drawdown < 0),
+/// counted in trading-day rows.
+pub fn max_drawdown_duration(equity: &[f64]) -> f64 {
+    let (mut max, mut cur) = (0u32, 0u32);
+    for d in drawdown_series(equity) {
+        if d < 0.0 {
+            cur += 1;
+            max = max.max(cur);
+        } else {
+            cur = 0;
+        }
+    }
+    max as f64
+}
+
+use crate::backtest::Trade;
+
+fn closed(trades: &[Trade]) -> Vec<&Trade> {
+    trades.iter().filter(|t| t.exit_date.is_some()).collect()
+}
+
+pub fn win_rate(trades: &[Trade]) -> f64 {
+    let c = closed(trades);
+    if c.is_empty() {
+        return f64::NAN;
+    }
+    c.iter().filter(|t| t.ret > 0.0).count() as f64 / c.len() as f64
+}
+
+pub fn profit_factor(trades: &[Trade]) -> f64 {
+    let c = closed(trades);
+    if c.is_empty() {
+        return f64::NAN;
+    }
+    let gains: f64 = c.iter().filter(|t| t.ret > 0.0).map(|t| t.ret).sum();
+    let losses: f64 = c.iter().filter(|t| t.ret < 0.0).map(|t| t.ret).sum();
+    if losses == 0.0 {
+        return f64::INFINITY;
+    }
+    gains / losses.abs()
+}
+
+pub fn expectancy(trades: &[Trade]) -> f64 {
+    let c = closed(trades);
+    if c.is_empty() {
+        return f64::NAN;
+    }
+    c.iter().map(|t| t.ret).sum::<f64>() / c.len() as f64
+}
+
+pub fn avg_holding_period(trades: &[Trade]) -> f64 {
+    let c = closed(trades);
+    if c.is_empty() {
+        return f64::NAN;
+    }
+    c.iter().map(|t| t.period as f64).sum::<f64>() / c.len() as f64
+}
+
+pub fn num_trades(trades: &[Trade]) -> f64 {
+    closed(trades).len() as f64
+}
+
+pub fn avg_win(trades: &[Trade]) -> f64 {
+    let w: Vec<f64> = closed(trades).iter().map(|t| t.ret).filter(|&r| r > 0.0).collect();
+    if w.is_empty() {
+        return f64::NAN;
+    }
+    w.iter().sum::<f64>() / w.len() as f64
+}
+
+pub fn avg_loss(trades: &[Trade]) -> f64 {
+    let l: Vec<f64> = closed(trades).iter().map(|t| t.ret).filter(|&r| r < 0.0).collect();
+    if l.is_empty() {
+        return f64::NAN;
+    }
+    l.iter().sum::<f64>() / l.len() as f64
+}
+
+pub fn payoff_ratio(trades: &[Trade]) -> f64 {
+    let (aw, al) = (avg_win(trades), avg_loss(trades));
+    if aw.is_nan() || al.is_nan() {
+        return f64::NAN;
+    }
+    aw / al.abs()
+}
+
+pub fn best_trade(trades: &[Trade]) -> f64 {
+    let c = closed(trades);
+    if c.is_empty() {
+        return f64::NAN;
+    }
+    c.iter().map(|t| t.ret).fold(f64::NEG_INFINITY, f64::max)
+}
+
+pub fn worst_trade(trades: &[Trade]) -> f64 {
+    let c = closed(trades);
+    if c.is_empty() {
+        return f64::NAN;
+    }
+    c.iter().map(|t| t.ret).fold(f64::INFINITY, f64::min)
+}
+
+pub fn max_consecutive_losses(trades: &[Trade]) -> f64 {
+    let mut c = closed(trades);
+    c.sort_by_key(|t| t.exit_date); // closed -> Some; chronological
+    let (mut max, mut cur) = (0u32, 0u32);
+    for t in c {
+        if t.ret < 0.0 {
+            cur += 1;
+            max = max.max(cur);
+        } else {
+            cur = 0;
+        }
+    }
+    max as f64
+}
+
+pub fn time_in_market(exposure: &[f64]) -> f64 {
+    if exposure.is_empty() {
+        return f64::NAN;
+    }
+    exposure.iter().filter(|&&e| e > 0.0).count() as f64 / exposure.len() as f64
+}
+
+pub fn avg_exposure(exposure: &[f64]) -> f64 {
+    if exposure.is_empty() {
+        return f64::NAN;
+    }
+    exposure.iter().sum::<f64>() / exposure.len() as f64
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn returns_drawdown_and_totals() {
+        let eq = [1.0, 1.02, 1.01, 1.05];
+        let r = to_returns(&eq);
+        assert!(r[0].is_nan());
+        assert!((r[1] - 0.02).abs() < 1e-12);
+        assert!((total_return(&eq) - 0.05).abs() < 1e-12);
+        // drawdown: peak 1.02 then 1.01 -> -0.009803...
+        let dd = drawdown_series(&eq);
+        assert_eq!(dd[0], 0.0);
+        assert!((dd[2] - (1.01 / 1.02 - 1.0)).abs() < 1e-12);
+        assert!((max_drawdown(&eq) - (1.01 / 1.02 - 1.0)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn empty_and_single_inputs() {
+        assert!(max_drawdown(&[]).is_nan());
+        assert!(total_return(&[]).is_nan());
+        let one = to_returns(&[1.0]);
+        assert_eq!(one.len(), 1);
+        assert!(one[0].is_nan());
+        assert_eq!(drawdown_series(&[1.0]), vec![0.0]);
+    }
+
+    #[test]
+    fn cagr_and_calmar_guard_short_input() {
+        assert!(cagr(&[1.0], &[20240102]).is_nan());
+        assert!(calmar(&[1.0], &[20240102]).is_nan());
+    }
+
+    #[test]
+    fn calmar_guards_zero_drawdown() {
+        // flat curve: cagr=0 and max_drawdown=0 -> 0/0 = NaN without a guard.
+        // mirror recovery_factor and return +inf for the no-drawdown case.
+        assert!(calmar(&[1.0, 1.0, 1.0], &[20240102, 20240103, 20240104]).is_infinite());
+    }
+
+    #[test]
+    fn trade_level_metrics() {
+        use crate::backtest::Trade;
+        let t = |ret: f64, period: u32| Trade {
+            symbol: "X".into(),
+            entry_date: 20240102,
+            exit_date: Some(20240105),
+            ret,
+            period,
+            mae: None,
+            mfe: None,
+        };
+        let trades = vec![t(0.10, 3), t(-0.05, 2), t(0.20, 5)];
+        assert!((win_rate(&trades) - 2.0 / 3.0).abs() < 1e-12);
+        assert!((profit_factor(&trades) - (0.30 / 0.05)).abs() < 1e-12);
+        assert!((expectancy(&trades) - (0.25 / 3.0)).abs() < 1e-12);
+        assert!((avg_holding_period(&trades) - (10.0 / 3.0)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn extended_trade_level_metrics() {
+        use crate::backtest::Trade;
+        let t = |ret: f64, exit: i32| Trade {
+            symbol: "X".into(),
+            entry_date: 20240102,
+            exit_date: Some(exit),
+            ret,
+            period: 1,
+            mae: None,
+            mfe: None,
+        };
+        // chronological by exit_date: +0.10, -0.05, -0.20, +0.30, -0.10
+        let trades = vec![
+            t(0.10, 20240105),
+            t(-0.05, 20240106),
+            t(-0.20, 20240107),
+            t(0.30, 20240108),
+            t(-0.10, 20240109),
+        ];
+        assert_eq!(num_trades(&trades), 5.0);
+        assert!((avg_win(&trades) - (0.40 / 2.0)).abs() < 1e-12); // (0.10+0.30)/2
+        assert!((avg_loss(&trades) - (-0.35 / 3.0)).abs() < 1e-12); // (-0.05-0.20-0.10)/3
+        assert!((payoff_ratio(&trades) - (0.20 / (0.35 / 3.0))).abs() < 1e-12);
+        assert!((best_trade(&trades) - 0.30).abs() < 1e-12);
+        assert!((worst_trade(&trades) + 0.20).abs() < 1e-12);
+        // losses at exits 106,107 are consecutive (run 2); 109 is a lone run -> max 2.
+        assert_eq!(max_consecutive_losses(&trades), 2.0);
+    }
+
+    #[test]
+    fn trade_metrics_handle_empty_and_one_sided() {
+        use crate::backtest::Trade;
+        let win = vec![Trade {
+            symbol: "X".into(),
+            entry_date: 20240102,
+            exit_date: Some(20240103),
+            ret: 0.1,
+            period: 1,
+            mae: None,
+            mfe: None,
+        }];
+        assert_eq!(num_trades(&[]), 0.0);
+        assert!(avg_win(&[]).is_nan());
+        assert!(avg_loss(&win).is_nan()); // no losers
+        assert!(payoff_ratio(&win).is_nan()); // loss side empty
+        assert!(best_trade(&[]).is_nan());
+        assert_eq!(max_consecutive_losses(&win), 0.0);
+    }
+
+    #[test]
+    fn max_consecutive_losses_sorts_by_exit_date() {
+        use crate::backtest::Trade;
+        // Array order is NOT chronological: exit dates 105, 103, 104.
+        // Chronological by exit_date: 103 (win), 104 (loss), 105 (loss) -> streak 2.
+        // Without the exit_date sort, array order gives loss, win(reset), loss -> 1.
+        // Asserting 2 therefore fails if the sort is ever dropped.
+        let t = |ret: f64, exit: i32| Trade {
+            symbol: "X".into(),
+            entry_date: 20240102,
+            exit_date: Some(exit),
+            ret,
+            period: 1,
+            mae: None,
+            mfe: None,
+        };
+        let trades = vec![t(-0.1, 20240105), t(0.2, 20240103), t(-0.1, 20240104)];
+        assert_eq!(max_consecutive_losses(&trades), 2.0);
+    }
+
+    #[test]
+    fn equity_and_exposure_metrics() {
+        // peak 1.0 then underwater rows 1,2,3 (0.9,0.8,0.9), recover at row4.
+        let eq = [1.0, 0.9, 0.8, 0.9, 1.0];
+        // total_return = 0.0; max_drawdown = 0.8/1.0 - 1 = -0.2 -> recovery 0/0.2 = 0.
+        assert!((recovery_factor(&eq) - 0.0).abs() < 1e-12);
+        assert_eq!(max_drawdown_duration(&eq), 3.0); // 3 consecutive rows below peak
+
+        // recovery_factor returns +inf when there is no drawdown.
+        assert!(recovery_factor(&[1.0, 1.1, 1.2]).is_infinite());
+
+        let exposure = [1.0, 0.0, 0.5, 0.5];
+        assert!((time_in_market(&exposure) - 0.75).abs() < 1e-12); // 3 of 4 rows > 0
+        assert!((avg_exposure(&exposure) - 0.5).abs() < 1e-12); // (1+0+0.5+0.5)/4
+        assert!(time_in_market(&[]).is_nan());
+        assert!(avg_exposure(&[]).is_nan());
+    }
+}

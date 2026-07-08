@@ -1,0 +1,18 @@
+[package]
+name = "yuzu-source-s3"
+version = "0.0.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rusty-s3 = "0.10.0"
+# default-features=false drops the `gzip` feature: ureq must NOT transparently
+# decompress responses. Objects are stored gzip (`.csv.gz`) and the loaders
+# gunzip them — if some are tagged `Content-Encoding: gzip`, auto-decompress
+# would hand the loader plain bytes and break `GzDecoder`. `rustls` keeps TLS +
+# webpki roots for the HTTPS GETs.
+ureq = { version = "3.3.0", default-features = false, features = ["rustls"] }
+yuzu-data = { path = "../yuzu-data" }
+
+[dev-dependencies]
+flate2.workspace = true
