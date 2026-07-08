@@ -260,6 +260,7 @@ pub fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
                         "W" => Freq::Weekly,
                         "ME" => Freq::MonthEnd,
                         "QE" => Freq::QuarterEnd,
+                        "YE" => Freq::YearEnd,
                         other => return Err(EngineError::Eval(format!("bad freq '{other}'"))),
                     };
                     p.rebalance_freq(f)
@@ -419,6 +420,22 @@ mod tests {
         assert!(b.sharpe.p05 <= b.sharpe.p95);
         let json = serde_json::to_string(&r).unwrap();
         assert!(json.contains("\"bootstrap\""));
+    }
+
+    #[test]
+    fn rebalance_ye_keeps_last_obs_per_year() {
+        let x = Panel::new(
+            vec![20230103, 20231229, 20240102, 20241231],
+            vec!["A".into()],
+            array![[1.0], [2.0], [3.0], [4.0]],
+        )
+        .unwrap();
+        let c = EvalContext::new(HashMap::from([("x".to_string(), x)]));
+        let spec = r#"{"op":"Rebalance","of":{"op":"Data","name":"x"},"freq":"YE"}"#;
+        let got = run_strategy(spec, &c).unwrap();
+        assert_eq!(got.dates, vec![20231229, 20241231]);
+        assert_eq!(got.data[[0, 0]], 2.0);
+        assert_eq!(got.data[[1, 0]], 4.0);
     }
 
     #[test]
