@@ -302,6 +302,30 @@ Then, if `position_limit > 0`, each weight is clamped to `±position_limit`
 (sign-preserving per-position cap, leaving the residual in cash). `position_limit
 = 0` (the default) disables the cap.
 
+Then, if the **liquidity cap** is active (`initial_capital > 0`,
+`max_participation > 0`, and a `volume` panel is present in the context), each
+weight is further clamped so the implied dollar position stays within the
+symbol's tradable dollar volume:
+
+```
+|w[c]| <= max_participation * price[c] * volume[c] / initial_capital
+```
+
+Cells with NaN dollar volume (missing volume/price data) pass through uncapped —
+data gaps aren't liquidity. The cap is measured against `initial_capital`, not
+compounded equity.
+
+**Delisting.** When `delist_after > 0`, a symbol whose price is missing for
+that many consecutive rows is treated as delisted on the row the streak is
+confirmed: the position is written down by `delist_haircut` (shorts gain
+symmetrically), the remainder moves to cash with **no trading cost** (a forced
+exit is not a trade), and the symbol cannot be held or re-entered until prices
+resume. The closed trade fills at the last valid price × `(1 − delist_haircut)`
+with no exit-leg fees. `delist_after = 0` (the default) keeps the legacy
+behavior — a dead position freezes at its last value forever, which
+systematically hides delisting losses; set it (e.g. `10`) for honest results on
+universes containing delisted names.
+
 **Step 3 — NAV loop.**
 Starting from `equity[0] = 1.0` (minus day-0 entry cost), for each subsequent
 day:
@@ -320,14 +344,19 @@ Cost is charged as a multiplicative hit on NAV:
 ```
 turnover = Σ |target[c] - drift[c]|
 sells    = Σ max(drift[c] - target[c], 0)
-cost     = fee_ratio * turnover + tax_ratio * sells
+cost     = (fee_ratio + slippage_ratio) * turnover + tax_ratio * sells
 value   *= (1 - cost)
 ```
 
-No slippage model.
+`slippage_ratio` is a flat per-leg haircut on turnover — a crude stand-in for
+spread/impact (e.g. `0.0005` = 5 bps per trade leg). Closed-trade net returns
+carry it on both legs too.
 
 **`BacktestConfig` defaults:** `fee_ratio = 0.0`, `tax_ratio = 0.0`,
-`position_limit = 0.0` (uncapped).
+`position_limit = 0.0` (uncapped), `slippage_ratio = 0.0`,
+`initial_capital = 0.0` / `max_participation = 0.0` (liquidity cap off),
+`delist_after = 0` (delisting handling off), `delist_haircut = 0.0`,
+`benchmark_key = None`.
 
 ---
 
@@ -359,6 +388,19 @@ golden-tested.
 | `time_in_market`       | fraction of rows with gross exposure > 0                                     |
 | `avg_exposure`         | mean per-day gross exposure (`Σ|weight|`)                                    |
 
+**Benchmark-relative metrics** (emitted only when `benchmark_key` is set; the
+benchmark series is forward-filled onto the report dates and rebased to 1.0 at
+its first observation):
+
+| Metric              | Definition                                                        |
+| ------------------- | ----------------------------------------------------------------- |
+| `benchmark_return`  | benchmark total return over its first/last observations           |
+| `beta`              | `cov(r, b) / var(b)` over paired daily returns (ddof = 1)         |
+| `alpha`             | annualized CAPM alpha, rf = 0: `(mean(r) − beta · mean(b)) · 252` |
+| `excess_return`     | `total_return − benchmark_return`                                 |
+| `tracking_error`    | `std(r − b, ddof = 1) · sqrt(252)`                                |
+| `information_ratio` | `mean(r − b) / std(r − b, ddof = 1) · sqrt(252)`                  |
+
 Global conventions: annualization factor **252**, risk-free rate **0**,
 `std` uses **ddof = 1**.
 `year_frac = (end − start).total_seconds() / 31_557_600` (Julian year).
@@ -382,6 +424,7 @@ renders charts and tables.
   "dates":    [20240102, 20240103, ...],   // i32 YYYYMMDD, one per price row
   "equity":   [1.0, 1.02, ...],            // NAV, same length as dates
   "drawdown": [0.0, -0.01, ...],           // fraction below peak, same length
+  "benchmark": [1.0, 1.01, ...],           // rebased benchmark curve — only when benchmark_key is set
   "trades": [
     {
       "symbol":     "AAPL",
@@ -415,7 +458,14 @@ renders charts and tables.
     "recovery_factor":     2.25,
     "max_drawdown_duration": 34,
     "time_in_market":      0.78,
-    "avg_exposure":        0.64
+    "avg_exposure":        0.64,
+    // only when benchmark_key is set:
+    "benchmark_return":    0.11,
+    "alpha":               0.06,
+    "beta":                0.85,
+    "excess_return":       0.07,
+    "tracking_error":      0.09,
+    "information_ratio":   0.78
   }
 }
 ```
@@ -441,9 +491,10 @@ renders charts and tables.
 These items are explicit scope cuts, not gaps:
 
 - **Advanced cost semantics** (`touched_exit` / `retain_cost_when_rebalance` / `stop_trading_next_period`) — the engine currently uses the simplified model described above.
+- **Volume-aware slippage** — `slippage_ratio` is a flat per-leg haircut; an impact model that scales with participation is future work.
 - **Portfolio optimization** (mean-variance, risk parity, etc.).
 - **Monthly / yearly metric tiers** (rolling windows, calendar buckets).
-- **Alpha / beta** — requires a benchmark series (not yet wired in).
+- **Walk-forward / parameter-grid tooling** — `yuzu-cli sweep` ranks hand-supplied variants; grid generation and in/out-of-sample splits are future work.
 
 Per-trade **MAE / MFE** (maximum adverse / favorable excursion) and factor
 **neutralization** (`neutralize` / `neutralize_industry` / `industry_rank` /

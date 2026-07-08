@@ -36,6 +36,18 @@ struct ConfigJson {
     tax_ratio: f64,
     #[serde(default)]
     position_limit: f64,
+    #[serde(default)]
+    slippage_ratio: f64,
+    #[serde(default)]
+    initial_capital: f64,
+    #[serde(default)]
+    max_participation: f64,
+    #[serde(default)]
+    delist_after: usize,
+    #[serde(default)]
+    delist_haircut: f64,
+    #[serde(default)]
+    benchmark_key: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -77,7 +89,12 @@ pub fn run_backtest_json(input_json: &str) -> Result<String, String> {
         fee_ratio: input.config.fee_ratio,
         tax_ratio: input.config.tax_ratio,
         position_limit: input.config.position_limit,
-        ..Default::default()
+        slippage_ratio: input.config.slippage_ratio,
+        initial_capital: input.config.initial_capital,
+        max_participation: input.config.max_participation,
+        delist_after: input.config.delist_after,
+        delist_haircut: input.config.delist_haircut,
+        benchmark_key: input.config.benchmark_key,
     };
     let report =
         run_backtest_core(&spec_str, &ctx, &input.price_key, &cfg).map_err(|e| e.to_string())?;
@@ -105,6 +122,29 @@ mod tests {
         assert_eq!(v["equity"].as_array().unwrap().len(), 3);
         let total = v["metrics"]["total_return"].as_f64().unwrap();
         assert!((total - 0.2).abs() < 1e-9, "total_return {total}");
+    }
+
+    #[test]
+    fn new_config_fields_flow_through_to_the_report() {
+        // slippage shows up in equity; benchmark_key adds the benchmark block.
+        let input = r#"{
+            "spec": { "op": "Data", "name": "signal" },
+            "panels": {
+                "signal": { "dates": [20240102,20240103,20240104], "symbols": ["A"], "data": [[1.0],[1.0],[1.0]] },
+                "close":  { "dates": [20240102,20240103,20240104], "symbols": ["A"], "data": [[10.0],[11.0],[12.0]] },
+                "spy":    { "dates": [20240102,20240103,20240104], "symbols": ["SPY"], "data": [[100.0],[101.0],[102.0]] }
+            },
+            "price_key": "close",
+            "config": { "slippage_ratio": 0.001, "benchmark_key": "spy" }
+        }"#;
+        let out = run_backtest_json(input).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(v["benchmark"].as_array().unwrap().len(), 3);
+        assert!(v["metrics"]["alpha"].is_number());
+        assert!(v["metrics"]["information_ratio"].is_number());
+        // day-0 entry pays slippage on turnover 1.0
+        let eq0 = v["equity"][0].as_f64().unwrap();
+        assert!((eq0 - 0.999).abs() < 1e-12, "slippage applied: {eq0}");
     }
 
     #[test]

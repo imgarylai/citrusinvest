@@ -37,13 +37,42 @@ pub fn list_symbols(root: &Path) -> std::io::Result<Vec<String>> {
 
 /// Load the close panel for every symbol under `root` into an `EvalContext`.
 /// (Scope a run to a subset by syncing only those files into the data dir.)
-pub(crate) fn load_close(root: &Path, from: i32, to: i32) -> Result<EvalContext, String> {
+/// Adds the volume panel when the config's liquidity cap is active, and a
+/// "benchmark" panel (that symbol's closes) when `cfg.benchmark_key` names a
+/// symbol that isn't already a loaded panel.
+pub(crate) fn load_ctx(
+    root: &Path,
+    from: i32,
+    to: i32,
+    cfg: &BacktestConfig,
+) -> Result<EvalContext, String> {
     let syms = list_symbols(root).map_err(|e| e.to_string())?;
     let src = LocalSource::new(root);
-    let panel = load_panel(&src, &syms, Field::AdjClose, from, to, PRICES_DIR)
-        .map_err(|e| e.to_string())?;
     let mut panels = HashMap::new();
-    panels.insert("close".to_string(), panel);
+    let close = load_panel(&src, &syms, Field::AdjClose, from, to, PRICES_DIR)
+        .map_err(|e| e.to_string())?;
+    panels.insert("close".to_string(), close);
+    if cfg.max_participation > 0.0 && cfg.initial_capital > 0.0 {
+        let volume = load_panel(&src, &syms, Field::Volume, from, to, PRICES_DIR)
+            .map_err(|e| e.to_string())?;
+        panels.insert("volume".to_string(), volume);
+    }
+    // The CLI treats benchmark_key as a SYMBOL: its closes are loaded as a
+    // one-column panel under that key (e.g. --benchmark SPY).
+    if let Some(sym) = &cfg.benchmark_key {
+        if !panels.contains_key(sym) {
+            let bench = load_panel(
+                &src,
+                std::slice::from_ref(sym),
+                Field::AdjClose,
+                from,
+                to,
+                PRICES_DIR,
+            )
+            .map_err(|e| e.to_string())?;
+            panels.insert(sym.clone(), bench);
+        }
+    }
     Ok(EvalContext {
         panels,
         industry: HashMap::new(),
@@ -96,22 +125,18 @@ pub fn run_sweep(
     variants: &[(String, String)],
     from: i32,
     to: i32,
-    fee_ratio: f64,
+    cfg: &BacktestConfig,
     sort_by: SortKey,
 ) -> Vec<SweepEntry> {
-    let ctx = match load_close(root, from, to) {
+    let ctx = match load_ctx(root, from, to, cfg) {
         Ok(v) => v,
         Err(e) => return variants.iter().map(|(n, _)| failed(n, e.clone())).collect(),
-    };
-    let cfg = BacktestConfig {
-        fee_ratio,
-        ..Default::default()
     };
 
     let mut board: Vec<SweepEntry> = variants
         .par_iter()
         .map(
-            |(name, spec)| match run_backtest(spec, &ctx, "close", &cfg) {
+            |(name, spec)| match run_backtest(spec, &ctx, "close", cfg) {
                 Ok(r) => SweepEntry {
                     name: name.clone(),
                     ok: true,
@@ -154,12 +179,8 @@ pub fn run_single(
     spec_json: &str,
     from: i32,
     to: i32,
-    fee_ratio: f64,
+    cfg: &BacktestConfig,
 ) -> Result<Report, String> {
-    let ctx = load_close(root, from, to)?;
-    let cfg = BacktestConfig {
-        fee_ratio,
-        ..Default::default()
-    };
-    run_backtest(spec_json, &ctx, "close", &cfg).map_err(|e| e.to_string())
+    let ctx = load_ctx(root, from, to, cfg)?;
+    run_backtest(spec_json, &ctx, "close", cfg).map_err(|e| e.to_string())
 }
