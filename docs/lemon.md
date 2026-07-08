@@ -82,8 +82,8 @@ boolean cannot stand alone as an expression.
 
 ### Keywords and punctuation
 
-The only reserved word is `let`. The logical operators `and` / `or` are also
-words but are lexed as identifiers and recognized positionally. Punctuation:
+The only reserved word is `let`. The logical operators `and` / `or` / `not`
+are also words but are lexed as identifiers and recognized positionally. Punctuation:
 `(` `)` `[` `]` `,` `=` and the operator characters below.
 
 Any other character (`$`, `@`, `!`, `&`, `|`, `%`, `;`, `{`, `}`, `.` outside a
@@ -101,21 +101,24 @@ boolean convention). Precedence, **lowest to highest**:
 | ---------- | ---------------- | ------------------------------- | ------ |
 | 1 (lowest) | `or`             | logical OR                      | left   |
 | 2          | `and`            | logical AND                     | left   |
+| 2.5        | `not`            | logical NOT (prefix)            | —      |
 | 3          | `>` `<` `>=` `<=`| comparisons → `1`/`0`           | left   |
 | 4          | `+` `-`          | add / subtract                  | left   |
 | 5          | `*` `/`          | multiply / divide               | left   |
 | 6 (highest)| unary `-`        | negation (prefix)               | —      |
 
 So `a and b or c` parses as `(a and b) or c`, and `2 * x + y` parses as
-`(2 * x) + y`.
+`(2 * x) + y`. `not` binds looser than comparisons and tighter than `and`:
+`not a > b` is `not (a > b)`, and `not a and b` is `(not a) and b`. NaN is
+falsy, so `not` of NaN is `1` (matching `and`/`or`).
 
 ### Operators that do NOT exist
 
-There is **no `==`, no `!=`, no `&`, no `|`, and no `!`.** Logical AND/OR are the
-**words** `and` / `or`. Equality is deliberately absent — you compare with
-`>` / `<` / `>=` / `<=`. Typing `==`, `&`, `|`, or `!` is a parse or lex error,
-so a strategy that "looks right" from another language will fail loudly rather
-than silently misbehave.
+There is **no `==`, no `!=`, no `&`, no `|`, and no `!`.** Logical AND / OR /
+NOT are the **words** `and` / `or` / `not`. Equality is deliberately absent —
+you compare with `>` / `<` / `>=` / `<=`. Typing `==`, `&`, `|`, or `!` is a
+parse or lex error, so a strategy that "looks right" from another language will
+fail loudly rather than silently misbehave.
 
 ---
 
@@ -275,6 +278,7 @@ These take price/volume series explicitly (so you decide which series feed them)
 | `is_smallest` | `of`, `n`                                    | `1` for the `n` lowest values in each row, else `0`.                    |
 | `rank`        | `of`, `pct?`=`true`, `ascending?`=`true`     | Cross-sectional rank per row. `pct=true` → `0..1` percentile; `ascending=true` → smallest ranks lowest. |
 | `mask`        | `of`, `by`                                   | Keep `of` only where `by` is true; drop (NaN) elsewhere.                |
+| `normalize_row` | `of`                                       | Scale each row so gross weight (Σ\|w\|) is 1 — explicit portfolio weights. NaN preserved; zero rows unchanged. |
 | `industry_rank`| `of`, `categories?`                         | Rank `of` within each industry; optionally restrict to `categories` (list of strings). |
 | `groupby_category`| `of`, `agg`                             | Aggregate `of` within each industry using `agg` (e.g. `"mean"`); `agg` is a required string. |
 
@@ -286,7 +290,7 @@ These take price/volume series explicitly (so you decide which series feed them)
 | `is_entry`   | `of`                                                                                                   | `1` on the row where `of` turns false→true (rising edge).                                      |
 | `is_exit`    | `of`                                                                                                   | `1` on the row where `of` turns true→false (falling edge).                                     |
 | `hold_until` | `entry`, `exit`, `nstocks_limit?`, `rank?`, `stop_loss?`, `take_profit?`, `trail_stop?`, `trail_stop_activation?` | Stateful rotation: enter on `entry`, exit on `exit`, hold up to `nstocks_limit` names prioritized by `rank`, with optional stop/take/trailing exits. See gotchas: `rank` is an **expression**, the stop fields are **numbers**. |
-| `rebalance`  | `of`, `freq?`, `on?`                                                                                   | Hold `of`, refreshing on calendar `freq` (`"W"`/`"ME"`/`"QE"`) or on rows where the `on` expression is true. |
+| `rebalance`  | `of`, `freq?`, `on?`                                                                                   | Hold `of`, refreshing on calendar `freq` (`"W"`/`"ME"`/`"QE"`/`"YE"`) or on rows where the `on` expression is true. |
 
 ### Neutralization
 
@@ -316,9 +320,9 @@ These are not written as calls but are still nodes in the tree:
 | `close`, `pe`, …     | `Data`                             | A raw input series by name (bare identifier).  |
 | `42`, `0.5`, `5e8`   | `Const`                            | A constant scalar, broadcast across the panel. A bare number used as an operand is auto-promoted to a `Const`. |
 
-That is the complete surface: **50 op tags** total in the engine — the leaves
-`Data` and `Const`, the 10 operator ops above, `Neg`, and the 37 function-style
-calls in the tables. (`exit_when` and `quantile_row` are engine-internal `Panel`
+That is the complete surface: **52 op tags** total in the engine — the leaves
+`Data` and `Const`, the 10 operator ops above, the prefix ops `Neg` and `not`,
+and the 38 function-style calls in the tables. (`exit_when` and `quantile_row` are engine-internal `Panel`
 operations and are **not** callable from lemon.)
 
 ---
@@ -394,8 +398,8 @@ for size and raw cheapness."
 ## 6. Sharp edges & gotchas
 
 - **No equality operator.** There is no `==` or `!=`. Compare with
-  `> < >= <=`. Logical AND/OR are the words `and` / `or` — not `&` / `|`, which
-  are lexer errors. `!` does not exist either.
+  `> < >= <=`. Logical AND/OR/NOT are the words `and` / `or` / `not` — not
+  `&` / `|` / `!`, which are lexer errors.
 - **Typos become silent `Data` leaves.** Any unknown bare identifier is treated
   as a series reference with no parse-time validation. `clsoe > 2` parses fine
   and fails only at engine eval. The valid series set is the engine's, not
@@ -435,6 +439,24 @@ printf '%s' 'close > sma(close, 2)' | cargo run -q -p lemon-lang --bin lemon -- 
 It prints the canonical (re-indented) form on success, or `line:col: message` on
 a parse error with a non-zero exit code. `lemon fmt -w file.lemon` formats files
 in place.
+
+### Linting
+
+`lemon lint` reports the two mistakes the parser cannot catch — **unknown
+series names** (a typo like `clsoe` parses fine as a `Data` leaf and only fails
+at engine eval) and **unused `let` bindings** (inlined at parse time, so they
+vanish silently):
+
+```sh
+printf '%s' 'clsoe > 1' | cargo run -q -p lemon-lang --bin lemon -- lint --series close,pe
+# <stdin>:1:1: warning: unknown series `clsoe` — did you mean `close`?
+```
+
+Pass the valid series set with `--series a,b,c` or `--series-file path` (one
+name per line, `#` comments); without it only the unused-`let` check runs.
+Exit code is non-zero when there are warnings. The same checks are exposed to
+the web editor via `lemon-wasm`'s `lint(src, series_json)` export and to Rust
+callers as `lemon::lint(src, known_series)`.
 
 ---
 

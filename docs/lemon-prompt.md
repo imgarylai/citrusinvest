@@ -16,8 +16,9 @@ boolean "hold this symbol" panel or a selection/rotation.
 - **Data series** = bare identifiers: `close`, `open`, `high`, `low`, `volume`, `pe`, `roe`,
   `market_cap`, `revenue_growth`, … (an unknown identifier is silently treated as a data series).
 - **Operators**, lowest→highest precedence, all left-associative:
-  `or` · `and` · `>` `<` `>=` `<=` · `+` `-` · `*` `/` · unary `-`.
-  Comparisons yield `1`/`0`. **There is NO `==`, `!=`, `&`, `|`, `!`** — use `and`/`or` and `>=`/`<=`.
+  `or` · `and` · `not` (prefix) · `>` `<` `>=` `<=` · `+` `-` · `*` `/` · unary `-`.
+  Comparisons yield `1`/`0`. `not a > b` is `not (a > b)`.
+  **There is NO `==`, `!=`, `&`, `|`, `!`** — use `and`/`or`/`not` and `>=`/`<=`.
 - **Calls**: `fn(pos1, pos2, key=value)` — positional args first, then keyword args.
   List literals `[a, b]` appear **only** as call arguments.
 - **`let`**: `let x = sma(close, 50)` then reuse `x`; inlined at parse time; no re-binding.
@@ -37,12 +38,13 @@ boolean "hold this symbol" panel or a selection/rotation.
 
 **Cross-section & selection** (per row, across symbols): `is_largest(of, n)` / `is_smallest(of, n)`
 (top/bottom n) · `rank(of, pct?=true, ascending?=true)` (percentile rank) · `mask(of, by)` (keep
-`of` where `by` is true).
+`of` where `by` is true) · `normalize_row(of)` (scale each row to unit gross weight — explicit
+portfolio weights, e.g. inverse-vol: `normalize_row(sig / std(close, 20))`).
 
 **Streaks, edges & rotation**: `sustain(of, nwindow, nsatisfy?)` · `is_entry(of)` / `is_exit(of)`
 (rising/falling edge) · `hold_until(entry, exit, nstocks_limit?, rank?, stop_loss?, take_profit?,
 trail_stop?, trail_stop_activation?)` (stateful; `rank` is an expression, the stops are numbers) ·
-`rebalance(of, freq?, on?)` (`freq` = `"W"`/`"ME"`/`"QE"`).
+`rebalance(of, freq?, on?)` (`freq` = `"W"`/`"ME"`/`"QE"`/`"YE"`).
 
 **Neutralization / industry**: `neutralize(of, by=[...], add_const?=true)` (`by` is a list) ·
 `neutralize_industry(of, add_const?=true)` · `industry_rank(of, categories?=["..."])` ·

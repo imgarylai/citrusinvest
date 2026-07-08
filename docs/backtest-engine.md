@@ -174,13 +174,14 @@ below names ops by their engine behavior; the DSL surface names map through
 | `is_entry` / `is_exit`             | rising / falling edge of a bool series (`shift` fills `false`)                                                        |
 | `sustain(nwindow, nsatisfy)`       | `rolling(nwindow).sum() >= nsatisfy` over a bool frame                                                                |
 | `hold_until(exit, …)`              | rank-priority rotation with `nstocks_limit` + optional stop_loss / take_profit / trail_stop (the one sequential loop) |
-| `rebalance(freq)`                  | downsample to last obs per W / ME / QE period (or explicit dates)                                                     |
+| `rebalance(freq)`                  | downsample to last obs per W / ME / QE / YE period (or explicit dates)                                                     |
 | `rank(pct, ascending)`             | cross-sectional rank (axis=1), average ties                                                                           |
 | arithmetic / comparison / logical  | `+ - * /`; comparisons `> >= < <=` → `1`/`0`; logical `and` / `or`; scalar variants                                  |
 
 **Surface-syntax notes** (see `lemon.md`): the DSL has **no** `==`, `!=`, `&`,
-`|`, or `!` — logical AND/OR are the words `and` / `or`, and there is no equality
-operator. `exit_when` and `quantile_row` are implemented as `Panel` ops
+`|`, or `!` — logical AND/OR/NOT are the words `and` / `or` / `not`, and there
+is no equality operator. `normalize_row` scales each row to unit gross weight
+(explicit portfolio weights, e.g. inverse-vol via `normalize_row(sig / std(close, 20))`). `exit_when` and `quantile_row` are implemented as `Panel` ops
 (golden-tested) but are **not** exposed as `Expr` AST variants or DSL surface
 names — they are not callable from lemon.
 

@@ -744,6 +744,20 @@
     "args": [
       {
         "kind": "expr",
+        "name": "of",
+        "required": true
+      }
+    ],
+    "description": "Scale each row so gross weight (sum of |w|) is 1 — turns a raw signal into explicit portfolio weights. NaN preserved; zero rows unchanged.",
+    "form": "function",
+    "name": "normalize_row",
+    "tag": "NormalizeRow"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
         "name": "entry",
         "required": true
       },
@@ -1087,6 +1101,20 @@
     "form": "operator",
     "name": "-",
     "tag": "Neg",
+    "unary": true
+  },
+  {
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      }
+    ],
+    "description": "Logical NOT of a boolean panel (NaN is falsy, so `not` of NaN is 1).",
+    "form": "operator",
+    "name": "not",
+    "tag": "Not",
     "unary": true
   }
 ]

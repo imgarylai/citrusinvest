@@ -814,6 +814,24 @@
         },
         {
           "additionalProperties": false,
+          "description": "Scale each row so gross weight (sum of |w|) is 1 — turns a raw signal into explicit portfolio weights. NaN preserved; zero rows unchanged.",
+          "properties": {
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "NormalizeRow"
+            }
+          },
+          "required": [
+            "op",
+            "of"
+          ],
+          "title": "NormalizeRow",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
           "description": "Stateful rotation: enter on `entry`, exit on `exit`, hold up to `nstocks_limit` (prioritised by `rank`), with optional stop_loss/take_profit/trail_stop/trail_stop_activation.",
           "properties": {
             "entry": {
@@ -1207,6 +1225,24 @@
             "of"
           ],
           "title": "Neg",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Logical NOT of a boolean panel (NaN is falsy, so `not` of NaN is 1).",
+          "properties": {
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "Not"
+            }
+          },
+          "required": [
+            "op",
+            "of"
+          ],
+          "title": "Not",
           "type": "object"
         }
       ]
