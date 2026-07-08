@@ -338,6 +338,14 @@ static ROWS: &[Row] = &[
         desc: "`of` kept only where `by` is true; elsewhere dropped.",
     },
     Row {
+        names: &["normalize_row"],
+        sig: OpSig {
+            tag: "NormalizeRow",
+            fields: &[Expr("of")],
+        },
+        desc: "Scale each row so gross weight (sum of |w|) is 1 — turns a raw signal into explicit portfolio weights. NaN preserved; zero rows unchanged.",
+    },
+    Row {
         names: &["hold_until"],
         sig: OpSig {
             tag: "HoldUntil",
@@ -572,6 +580,7 @@ pub static ALL_OP_TAGS: &[&str] = &[
     "Ceil",
     "Rank",
     "Mask",
+    "NormalizeRow",
     "HoldUntil",
     "Rebalance",
     "Neutralize",

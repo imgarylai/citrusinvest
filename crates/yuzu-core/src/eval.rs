@@ -195,6 +195,7 @@ pub fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
         And { l, r } => eval(l, ctx)?.and(&eval(r, ctx)?),
         Or { l, r } => eval(l, ctx)?.or(&eval(r, ctx)?),
         Not { of } => eval(of, ctx)?.not(),
+        NormalizeRow { of } => eval(of, ctx)?.normalize_row(),
         Add { l, r } => num_binop(l, r, ctx, |x, y| x + y)?,
         Sub { l, r } => num_binop(l, r, ctx, |x, y| x - y)?,
         Mul { l, r } => num_binop(l, r, ctx, |x, y| x * y)?,
@@ -418,6 +419,25 @@ mod tests {
         assert!(b.sharpe.p05 <= b.sharpe.p95);
         let json = serde_json::to_string(&r).unwrap();
         assert!(json.contains("\"bootstrap\""));
+    }
+
+    #[test]
+    fn normalize_row_makes_explicit_weights() {
+        // inverse-vol-style weighting: normalize_row over a raw signal
+        let sig = Panel::new(
+            vec![20240102],
+            vec!["A".into(), "B".into()],
+            array![[1.0, 3.0]],
+        )
+        .unwrap();
+        let c = EvalContext::new(HashMap::from([("sig".to_string(), sig)]));
+        let spec = r#"{"op":"NormalizeRow","of":{"op":"Data","name":"sig"}}"#;
+        let got = run_strategy(spec, &c).unwrap();
+        assert_eq!(got.data[[0, 0]], 0.25);
+        assert_eq!(got.data[[0, 1]], 0.75);
+        // and the lemon surface parses to the same tree
+        let parsed = lemon::parse("normalize_row(sig)").unwrap();
+        assert_eq!(parsed["op"], "NormalizeRow");
     }
 
     #[test]

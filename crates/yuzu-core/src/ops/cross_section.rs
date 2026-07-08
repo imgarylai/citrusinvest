@@ -79,3 +79,60 @@ mod tests {
         assert_eq!(r.data[[0, 2]], 0.0); // NaN never selected
     }
 }
+
+impl Panel {
+    /// Scale each row so gross weight sums to 1: `w[c] / Σ|w[row]|` over the
+    /// row's non-NaN cells. NaN cells stay NaN; a row whose gross sum is 0 (or
+    /// all-NaN) is left unchanged. Turns a raw signal into explicit portfolio
+    /// weights — e.g. `normalize_row(sig / std(close, 20))` is inverse-vol
+    /// weighting.
+    pub fn normalize_row(&self) -> Panel {
+        let (nrows, ncols) = self.data.dim();
+        let mut data = self.data.clone();
+        for r in 0..nrows {
+            let total: f64 = (0..ncols)
+                .map(|c| data[[r, c]])
+                .filter(|v| !v.is_nan())
+                .map(f64::abs)
+                .sum();
+            if total > 0.0 {
+                for c in 0..ncols {
+                    data[[r, c]] /= total;
+                }
+            }
+        }
+        Panel {
+            dates: self.dates.clone(),
+            symbols: self.symbols.clone(),
+            data,
+        }
+    }
+}
+
+#[cfg(test)]
+mod normalize_row_tests {
+    use crate::panel::Panel;
+    use ndarray::array;
+
+    #[test]
+    fn scales_rows_to_unit_gross_preserving_nan_and_zero_rows() {
+        let p = Panel::new(
+            vec![20240102, 20240103, 20240104],
+            vec!["A".into(), "B".into(), "C".into()],
+            array![
+                [1.0, 3.0, f64::NAN], // gross 4 -> 0.25, 0.75, NaN
+                [-1.0, 1.0, 2.0],     // gross 4 -> -0.25, 0.25, 0.5 (long/short)
+                [0.0, 0.0, f64::NAN]  // gross 0 -> unchanged
+            ],
+        )
+        .unwrap();
+        let n = p.normalize_row();
+        assert_eq!(n.data[[0, 0]], 0.25);
+        assert_eq!(n.data[[0, 1]], 0.75);
+        assert!(n.data[[0, 2]].is_nan());
+        assert_eq!(n.data[[1, 0]], -0.25);
+        assert_eq!(n.data[[1, 2]], 0.5);
+        assert_eq!(n.data[[2, 0]], 0.0);
+        assert!(n.data[[2, 2]].is_nan());
+    }
+}

@@ -174,6 +174,8 @@ pub enum Expr {
     },
     /// `of` kept only where `by` is true; elsewhere dropped.
     Mask { of: Box<Expr>, by: Box<Expr> },
+    /// Scale each row so gross weight (Σ|w|) is 1; NaN preserved, zero rows unchanged.
+    NormalizeRow { of: Box<Expr> },
     /// Stateful rotation: enter on `entry`, exit on `exit`, hold up to `nstocks_limit` (prioritised by `rank`), with optional stop_loss/take_profit/trail_stop/trail_stop_activation.
     HoldUntil {
         entry: Box<Expr>,
