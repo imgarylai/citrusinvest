@@ -11,7 +11,7 @@
 //!   layout (the single source both `parse` and `print` consult).
 //! - [`print`] — the canonical formatter: JSON `Expr` → indented DSL text.
 
-mod lex;
+pub(crate) mod lex;
 mod lint;
 pub mod ops;
 mod parse;

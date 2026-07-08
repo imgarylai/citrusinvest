@@ -40,7 +40,7 @@ The two wasm crates build to a repo-local `dist/` by default:
 
 ```bash
 bash scripts/build-yuzu-wasm.sh    # -> dist/yuzu   (yuzu-core backtest boundary)
-bash scripts/build-lemon-wasm.sh   # -> dist/lemon  (lemon parse/format)
+bash scripts/build-lemon-wasm.sh   # -> dist/lemon  (lemon parse/format + editor services)
 ```
 
 Override the output directory with `OUT`:
@@ -50,6 +50,30 @@ OUT=/path/to/pkg bash scripts/build-yuzu-wasm.sh
 ```
 
 (Requires `wasm-pack`.)
+
+## Editor tooling
+
+The lemon DSL ships with editor support driven by the same op catalog as the
+parser and JSON schema, so highlighting, hover, and completions never drift from
+the language:
+
+- **Language server** — `lemon-lsp`, a [tower-lsp](https://github.com/ebkalderon/tower-lsp)
+  server over stdio providing hover (op signatures + descriptions), completion
+  (op names, keyword arguments, `let`-bound names, known series), and live
+  diagnostics sourced from the DSL linter (parse errors, unused `let`s, and —
+  when the engine's series list is supplied via `initializationOptions.series` —
+  unknown-series warnings with did-you-mean suggestions). The intelligence is a
+  pure, I/O-free `lemon::services` module; the binary is a thin shim.
+
+  ```bash
+  cargo install --path crates/lemon-lsp
+  ```
+
+- **VS Code extension** — a TextMate grammar plus a client for `lemon-lsp`, under
+  [`editors/vscode`](editors/vscode).
+
+- **In-browser editor** — the same `lemon::services` core is exported through
+  `lemon-wasm` (`diagnostics` / `hover` / `completions`) for the web editor.
 
 ## Test
 

@@ -1,0 +1,80 @@
+{
+  "name": "lemon-lang",
+  "displayName": "Lemon (citrusinvest)",
+  "description": "Syntax highlighting and language server support for the lemon strategy DSL.",
+  "version": "0.1.0",
+  "publisher": "citrusinvest",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/imgarylai/citrusinvest"
+  },
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:lemon"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "lemon",
+        "aliases": [
+          "Lemon",
+          "lemon"
+        ],
+        "extensions": [
+          ".lemon"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "lemon",
+        "scopeName": "source.lemon",
+        "path": "./syntaxes/lemon.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "Lemon",
+      "properties": {
+        "lemon.server.path": {
+          "type": "string",
+          "default": "lemon-lsp",
+          "description": "Path to the lemon-lsp language server executable. Defaults to `lemon-lsp` on PATH (built with `cargo install --path crates/lemon-lsp`)."
+        },
+        "lemon.server.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable the lemon language server (hover, completion, diagnostics). Disable to use syntax highlighting only."
+        },
+        "lemon.series": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Known data-series names for your engine (e.g. [\"close\", \"pe\", \"market_cap\"]). When set, the server flags unknown/typo'd series with did-you-mean suggestions. Leave empty to skip that check."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.75.0",
+    "typescript": "^5.4.0"
+  }
+}

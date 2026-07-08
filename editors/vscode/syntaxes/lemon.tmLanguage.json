@@ -1,0 +1,112 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Lemon",
+  "scopeName": "source.lemon",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#keywords" },
+    { "include": "#constants" },
+    { "include": "#operators" },
+    { "include": "#functions" },
+    { "include": "#keyword-args" },
+    { "include": "#identifiers" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.number-sign.lemon",
+          "match": "#.*$"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.lemon",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "invalid.illegal.newline.lemon",
+          "match": "\\n"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.lemon",
+          "match": "\\b[0-9][0-9_]*(\\.[0-9_]+)?([eE][+-]?[0-9]+)?\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.lemon",
+          "match": "\\blet\\b"
+        },
+        {
+          "name": "keyword.operator.logical.lemon",
+          "match": "\\b(and|or)\\b"
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.boolean.lemon",
+          "match": "\\b(true|false)\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.comparison.lemon",
+          "match": ">=|<=|>|<"
+        },
+        {
+          "name": "keyword.operator.arithmetic.lemon",
+          "match": "[+\\-*/]"
+        },
+        {
+          "name": "keyword.operator.assignment.lemon",
+          "match": "="
+        }
+      ]
+    },
+    "functions": {
+      "patterns": [
+        {
+          "name": "support.function.builtin.lemon",
+          "match": "\\b(adx|aroon_down|aroon_up|atr|average|cci|ceil|ema|fall|groupby_category|hold_until|industry_rank|is_entry|is_exit|is_largest|is_smallest|mask|mfi|minus_di|natr|neutralize_industry|neutralize|obv|pct_change|plus_di|rank|rebalance|rise|rolling_max|rsi|sma|std|stoch_d|stoch_k|sustain|vwap|willr)\\b(?=\\s*\\()"
+        },
+        {
+          "name": "entity.name.function.lemon",
+          "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b(?=\\s*\\()"
+        }
+      ]
+    },
+    "keyword-args": {
+      "patterns": [
+        {
+          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(=)(?!=)",
+          "captures": {
+            "1": { "name": "variable.parameter.lemon" },
+            "2": { "name": "keyword.operator.assignment.lemon" }
+          }
+        }
+      ]
+    },
+    "identifiers": {
+      "patterns": [
+        {
+          "name": "variable.other.series.lemon",
+          "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b"
+        }
+      ]
+    }
+  }
+}

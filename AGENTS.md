@@ -9,7 +9,8 @@ citrusinvest is a Rust backtest engine (a Cargo workspace):
 - `yuzu-core` — pure, I/O-free backtest engine core (`run_backtest`).
 - `yuzu-data` — native data loading (reads gzip CSV price/fundamental files into panels).
 - `yuzu-source-s3` — an S3-backed data source (an `ObjectSource` impl; `LocalSource` reads local files).
-- `lemon` / `lemon-lang` — the **strategy DSL**. Strategies are written in lemon and lowered to a JSON `Expr` tree the engine evaluates.
+- `lemon` / `lemon-lang` — the **strategy DSL**. Strategies are written in lemon and lowered to a JSON `Expr` tree the engine evaluates. Its `services` module provides pure editor language services (diagnostics/hover/completions).
+- `lemon-lsp` — a thin `tower-lsp` language server over `lemon::services` (hover, completion, live diagnostics). Editor integration (incl. a VS Code extension + TextMate grammar) lives under `editors/`.
 
 ## Build · test · lint
 

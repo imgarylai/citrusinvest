@@ -14,6 +14,9 @@
 //! # Layout
 //!
 //! - [`spec`] — the serializable [`Expr`] AST (JSON, tagged by `"op"`).
+//! - [`services`] — editor language services (diagnostics, hover, completions),
+//!   pure functions of `(source, position)` that back both the WASM boundary and
+//!   the `lemon-lsp` language server.
 //! - `dsl` (private) — the text syntax: `lex` (tokenizer), `parse` (text →
 //!   JSON), `ops` (surface-name ⇄ op-tag vocabulary), `print` (JSON → text).
 //!
@@ -37,6 +40,7 @@
 //! `docs/lemon.md` in the repository.
 
 mod dsl;
+pub mod services;
 pub mod spec;
 
 pub use dsl::{format, lint, parse, parse_analyzed, Analysis, Lint, ParseError};
