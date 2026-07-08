@@ -1,6 +1,6 @@
 //! DSL text → JSON `Expr` tree (a `serde_json::Value`).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde_json::{json, Map, Value};
 
@@ -10,19 +10,52 @@ use super::ParseError;
 
 /// Lower DSL text to a JSON `Expr` tree.
 pub fn parse(src: &str) -> Result<Value, ParseError> {
+    parse_analyzed(src).map(|a| a.tree)
+}
+
+/// A parse plus the source facts the linter needs: where every bare-identifier
+/// data-series reference sits, and which `let` bindings were never used.
+pub struct Analysis {
+    pub tree: Value,
+    /// Every `Data` reference: `(name, line, col)`, in source order. Includes
+    /// references inside `let` bindings (used or not).
+    pub data_refs: Vec<(String, usize, usize)>,
+    /// `let` bindings never substituted anywhere: `(name, line, col)`.
+    pub unused_lets: Vec<(String, usize, usize)>,
+}
+
+/// Like [`parse`], returning the [`Analysis`] side-channel as well.
+pub fn parse_analyzed(src: &str) -> Result<Analysis, ParseError> {
     let toks = lex(src)?;
     let mut p = Parser {
         toks: &toks,
         pos: 0,
         env: HashMap::new(),
+        data_refs: Vec::new(),
+        let_defs: Vec::new(),
+        used_lets: HashSet::new(),
     };
-    p.program()
+    let tree = p.program()?;
+    let unused_lets = p
+        .let_defs
+        .iter()
+        .filter(|(n, _, _)| !p.used_lets.contains(n))
+        .cloned()
+        .collect();
+    Ok(Analysis {
+        tree,
+        data_refs: p.data_refs,
+        unused_lets,
+    })
 }
 
 struct Parser<'a> {
     toks: &'a [Token],
     pos: usize,
     env: HashMap<String, Value>,
+    data_refs: Vec<(String, usize, usize)>,
+    let_defs: Vec<(String, usize, usize)>,
+    used_lets: HashSet<String>,
 }
 
 impl<'a> Parser<'a> {
@@ -76,6 +109,7 @@ impl<'a> Parser<'a> {
                     message: format!("`{name}` is already defined"),
                 });
             }
+            self.let_defs.push((name.clone(), line, col));
             self.env.insert(name, value);
         }
 
@@ -157,8 +191,10 @@ impl<'a> Parser<'a> {
                 if self.peek().kind == TokenKind::LParen {
                     self.call(&name, t.line, t.col)
                 } else if let Some(bound) = self.env.get(&name) {
+                    self.used_lets.insert(name);
                     Ok(bound.clone())
                 } else {
+                    self.data_refs.push((name.clone(), t.line, t.col));
                     Ok(json!({ "op": "Data", "name": name }))
                 }
             }
