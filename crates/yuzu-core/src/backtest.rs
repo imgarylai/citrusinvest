@@ -49,6 +49,13 @@ pub struct BacktestConfig {
     /// curve and benchmark-relative metrics (alpha/beta/excess/tracking
     /// error/information ratio) to the report. The NAV loop ignores it.
     pub benchmark_key: Option<String>,
+    /// Number of circular-block-bootstrap resamples of the daily returns; the
+    /// report gains p05/p50/p95 bands for Sharpe/CAGR/max drawdown. `0` (the
+    /// default) disables it. Deterministic (fixed internal seed).
+    pub bootstrap_samples: usize,
+    /// Bootstrap block length in trading days; `0` (the default) auto-selects
+    /// `⌊√n⌋`. Only used when `bootstrap_samples > 0`.
+    pub bootstrap_block: usize,
 }
 
 impl Default for BacktestConfig {
@@ -63,6 +70,8 @@ impl Default for BacktestConfig {
             delist_after: 0,
             delist_haircut: 0.0,
             benchmark_key: None,
+            bootstrap_samples: 0,
+            bootstrap_block: 0,
         }
     }
 }

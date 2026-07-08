@@ -76,6 +76,10 @@ pub struct BacktestRequest {
     /// a dedicated "benchmark" panel — it does not need to be in `symbols`.
     #[serde(default)]
     pub benchmark_symbol: Option<String>,
+    #[serde(default)]
+    pub bootstrap_samples: usize,
+    #[serde(default)]
+    pub bootstrap_block: usize,
 }
 
 fn default_price_key() -> String {
@@ -243,6 +247,8 @@ pub fn handle_backtest<S: ObjectSource + Sync>(
         delist_after: req.delist_after,
         delist_haircut: req.delist_haircut,
         benchmark_key,
+        bootstrap_samples: req.bootstrap_samples,
+        bootstrap_block: req.bootstrap_block,
         ..Default::default()
     };
     run_backtest(&req.spec.to_string(), &ctx, &req.price_key, &cfg).map_err(|e| e.to_string())
