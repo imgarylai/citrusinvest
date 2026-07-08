@@ -1,0 +1,29 @@
+# citrusinvest
+
+> Open-source Rust backtest + strategy engine: the **yuzu** backtest core and the **lemon**
+> strategy DSL. Strategies are authored in lemon (a small text DSL) and lowered to a JSON `Expr`
+> tree that the engine evaluates into an equity curve, trades, and metrics. Pure and I/O-free;
+> compiles to native and WASM.
+
+## Docs
+
+- [Lemon language reference](docs/lemon.md): complete syntax — lexical elements, operators and
+  precedence, grammar (incl. `let`), the full op reference, worked examples, and gotchas.
+- [Lemon prompt card](docs/lemon-prompt.md): a compact, prompt-ready cheat sheet for generating lemon.
+- [Engine architecture](docs/backtest-engine.md): panels, NAV model, metrics, the `Report` JSON contract.
+- [Contributing & release flow](CONTRIBUTING.md).
+
+## API (docs.rs)
+
+- [yuzu-core](https://docs.rs/yuzu-core) — `run_backtest(spec_json, ctx, price_key, cfg) -> Report`.
+- [lemon-lang](https://docs.rs/lemon-lang) — `parse(src) -> Value`, `format(&value) -> String`.
+- [yuzu-data](https://docs.rs/yuzu-data) · [yuzu-source-s3](https://docs.rs/yuzu-source-s3)
+
+## Machine-readable (for tool-use / structured output)
+
+- [Lemon op catalog (JSON)](schema/op-catalog.json): every op, its arguments, types, and defaults.
+- [Lemon spec JSON Schema](schema/lemon-spec.schema.json): schema for the tagged `Expr` tree.
+
+## Examples
+
+- [Basic backtest](crates/yuzu-core/examples/basic_backtest.rs): panel → lemon → `run_backtest` → metrics.
