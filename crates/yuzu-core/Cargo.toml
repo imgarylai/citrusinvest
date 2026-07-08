@@ -5,7 +5,10 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 readme.workspace = true
+rust-version.workspace = true
 description = "Pure, I/O-free backtest engine core for US equity strategies."
+keywords = ["backtesting", "trading", "finance", "quant", "stocks"]
+categories = ["finance", "mathematics"]
 
 [dependencies]
 ndarray.workspace = true

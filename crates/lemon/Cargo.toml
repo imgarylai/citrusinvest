@@ -5,7 +5,10 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 readme.workspace = true
+rust-version.workspace = true
 description = "The lemon strategy DSL: parser, AST, and formatter."
+keywords = ["dsl", "trading", "strategy", "backtesting", "parser"]
+categories = ["finance", "parser-implementations"]
 
 [lib]
 name = "lemon"
