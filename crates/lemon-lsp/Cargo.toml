@@ -14,7 +14,7 @@ name = "lemon-lsp"
 path = "src/main.rs"
 
 [dependencies]
-lemon = { package = "lemon-lang", path = "../lemon", version = "0.1.1" }
+lemon = { package = "lemon-lang", path = "../lemon", version = "0.2.0" }
 serde_json = { workspace = true }
 tower-lsp = "0.20.0"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std"] }

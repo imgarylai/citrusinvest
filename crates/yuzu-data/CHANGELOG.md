@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0](https://github.com/imgarylai/citrusinvest/compare/yuzu-data-v0.1.1...yuzu-data-v0.2.0) - 2026-07-08
+
+### Added
+
+- *(lemon)* editor language services, LSP server, and VS Code extension
+- *(yuzu-data)* read Parquet and plain CSV inputs
+
+### Other
+
+- crates.io keywords/categories, MSRV 1.86, CI + docs badges
+
 ## [0.1.1](https://github.com/imgarylai/citrusinvest/compare/yuzu-data-v0.1.0...yuzu-data-v0.1.1) - 2026-07-08
 
 ### Other
