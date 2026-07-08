@@ -77,6 +77,7 @@ pub fn run_backtest_json(input_json: &str) -> Result<String, String> {
         fee_ratio: input.config.fee_ratio,
         tax_ratio: input.config.tax_ratio,
         position_limit: input.config.position_limit,
+        ..Default::default()
     };
     let report =
         run_backtest_core(&spec_str, &ctx, &input.price_key, &cfg).map_err(|e| e.to_string())?;

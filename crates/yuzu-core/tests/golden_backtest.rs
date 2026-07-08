@@ -7,7 +7,7 @@ fn cfg(v: &serde_json::Value) -> BacktestConfig {
     BacktestConfig {
         fee_ratio: v["fee_ratio"].as_f64().unwrap(),
         tax_ratio: v["tax_ratio"].as_f64().unwrap(),
-        position_limit: 0.0,
+        ..Default::default()
     }
 }
 

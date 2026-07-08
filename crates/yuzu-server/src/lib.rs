@@ -201,8 +201,8 @@ pub fn handle_backtest<S: ObjectSource + Sync>(
     let ctx = EvalContext::new(panels);
     let cfg = BacktestConfig {
         fee_ratio: req.fee_ratio,
-        tax_ratio: 0.0,
         position_limit: req.position_limit,
+        ..Default::default()
     };
     run_backtest(&req.spec.to_string(), &ctx, &req.price_key, &cfg).map_err(|e| e.to_string())
 }
