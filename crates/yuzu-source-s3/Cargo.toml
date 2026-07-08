@@ -1,8 +1,11 @@
 [package]
 name = "yuzu-source-s3"
-version = "0.0.0"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+readme.workspace = true
+description = "S3-compatible ObjectSource for yuzu-data, reading objects over SigV4-presigned HTTPS GETs."
 
 [dependencies]
 rusty-s3 = "0.10.0"
@@ -12,7 +15,7 @@ rusty-s3 = "0.10.0"
 # would hand the loader plain bytes and break `GzDecoder`. `rustls` keeps TLS +
 # webpki roots for the HTTPS GETs.
 ureq = { version = "3.3.0", default-features = false, features = ["rustls"] }
-yuzu-data = { path = "../yuzu-data" }
+yuzu-data = { path = "../yuzu-data", version = "0.1.0" }
 
 [dev-dependencies]
 flate2.workspace = true

@@ -1,12 +1,15 @@
 [package]
 name = "yuzu-core"
-version = "0.0.0"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+readme.workspace = true
+description = "Pure, I/O-free backtest engine core for US equity strategies."
 
 [dependencies]
 ndarray.workspace = true
 serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }
-lemon = { path = "../lemon" }
+lemon = { package = "lemon-lang", path = "../lemon", version = "0.1.0" }
