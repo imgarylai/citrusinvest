@@ -15,18 +15,32 @@ Both surfaces are driven by the same single source of truth as the parser and
 the JSON schema (`schema/op-catalog.json`), so the highlighting, hover text, and
 completions never drift from the language itself.
 
-## Install the language server
+## The language server
 
-The extension launches the `lemon-lsp` binary. Build and install it from the
-workspace root:
+Hover, completion, and diagnostics are served by the `lemon-lsp` binary. The
+extension finds it in this order:
+
+1. an explicit `lemon.server.path`,
+2. `lemon-lsp` on your `PATH`,
+3. a previously downloaded copy, then
+4. **auto-download** — the matching prebuilt binary is fetched from the project's
+   GitHub Releases and cached (disable with `lemon.server.autoDownload`).
+
+So on a supported platform (Linux/macOS/Windows, x64/arm64) it works with no
+setup once binaries have been published. To use your own build instead:
 
 ```bash
-cargo install --path crates/lemon-lsp
+cargo install --path crates/lemon-lsp   # puts lemon-lsp on PATH
 ```
 
-This puts `lemon-lsp` on your `PATH`. If you keep it elsewhere, point the
-extension at it with the `lemon.server.path` setting. To use highlighting only,
-set `lemon.server.enabled` to `false`.
+Syntax highlighting always works with no server (`lemon.server.enabled: false`
+for highlighting only).
+
+> **Maintainers:** prebuilt binaries are produced by the `lemon-lsp binaries`
+> GitHub Actions workflow (`.github/workflows/lemon-lsp-release.yml`). Run it
+> (via *Run workflow* → tag, e.g. `lemon-lang-v0.2.0`) to cross-compile and
+> attach `lemon-lsp-<platform>` assets to that release; the extension then
+> downloads them automatically.
 
 ## Build the extension
 
@@ -52,6 +66,7 @@ an Azure DevOps access token.
 
 | Setting                | Default     | Description                                                          |
 | ---------------------- | ----------- | ------------------------------------------------------------------- |
-| `lemon.server.path`    | `lemon-lsp` | Path to the language server executable.                             |
-| `lemon.server.enabled` | `true`      | Enable the language server (off = highlighting only).               |
-| `lemon.series`         | `[]`        | Known data-series names; enables unknown-series diagnostics when set. |
+| `lemon.server.path`         | `lemon-lsp` | Path to the language server executable.                              |
+| `lemon.server.enabled`      | `true`      | Enable the language server (off = highlighting only).                |
+| `lemon.server.autoDownload` | `true`      | Download a prebuilt `lemon-lsp` from GitHub Releases when not on PATH.|
+| `lemon.series`              | `[]`        | Known data-series names; enables unknown-series diagnostics when set. |

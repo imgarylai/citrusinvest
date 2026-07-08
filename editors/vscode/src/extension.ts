@@ -5,17 +5,32 @@ import {
   ServerOptions,
   TransportKind,
 } from "vscode-languageclient/node";
+import { resolveServer } from "./server";
 
 let client: LanguageClient | undefined;
 
-export function activate(context: vscode.ExtensionContext): void {
+export async function activate(
+  context: vscode.ExtensionContext,
+): Promise<void> {
   const config = vscode.workspace.getConfiguration("lemon");
   if (!config.get<boolean>("server.enabled", true)) {
     // Syntax highlighting only — the grammar contribution needs no client.
     return;
   }
 
-  const command = config.get<string>("server.path", "lemon-lsp");
+  const output = vscode.window.createOutputChannel("Lemon");
+  context.subscriptions.push(output);
+
+  const command = await resolveServer(context, config, output);
+  if (!command) {
+    void vscode.window.showWarningMessage(
+      "Lemon: no language server available (syntax highlighting still works). " +
+        "Install it with `cargo install --path crates/lemon-lsp`, set " +
+        "`lemon.server.path`, or enable `lemon.server.autoDownload`.",
+    );
+    return;
+  }
+
   const serverOptions: ServerOptions = {
     run: { command, transport: TransportKind.stdio },
     debug: { command, transport: TransportKind.stdio },
@@ -23,6 +38,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ scheme: "file", language: "lemon" }],
+    outputChannel: output,
     // Supply the engine's known series names so the server can flag unknown /
     // typo'd series. Empty by default (that check is then skipped).
     initializationOptions: {
@@ -37,13 +53,9 @@ export function activate(context: vscode.ExtensionContext): void {
     clientOptions,
   );
 
-  // Surface a friendly hint if the server binary is missing, rather than a
-  // silent failure.
   client.start().catch((err) => {
     void vscode.window.showWarningMessage(
-      `Lemon: could not start language server "${command}". ` +
-        `Install it with \`cargo install --path crates/lemon-lsp\` or set ` +
-        `\`lemon.server.path\`. (${err})`,
+      `Lemon: could not start language server "${command}". (${err})`,
     );
   });
 
