@@ -556,12 +556,22 @@ it. A grid file is a spec template plus value lists — any JSON string equal to
   window seams. The very first train window has no earlier data and still
   starts cold.
 
-- `yuzu-cli lookahead --data D --spec s.json [--shift-days 1]` — run the
-  strategy as-is and again with the position matrix lagged by `shift-days`
-  (signals executed late), and report both legs' metrics plus the deltas. A
-  clearly positive baseline (`sharpe > 0.5`) that loses more than half its
-  Sharpe under the lag is flagged `suspicious` — its edge lives in same-close
-  execution or same-day data it couldn't have had.
+- `yuzu-cli lookahead --data D --spec s.json [--shift-days 1] [--profile]` —
+  run the strategy as-is and again with the position matrix lagged (signals
+  executed late), and report both legs' metrics plus the deltas. A clearly
+  positive baseline (`sharpe > 0.5`) that loses more than half its Sharpe
+  under the lag is flagged `suspicious` — its edge lives in same-close
+  execution or same-day data it couldn't have had. `--profile` runs the full
+  decay ladder (shifts 1, 2, 3, 5, 10, 21) in one pass; the curve's SHAPE is
+  the diagnosis: a cliff at shift 1 = same-close execution dependence, smooth
+  decay = genuinely fast alpha, performance that holds until shift ≈ N then
+  drops = data stamped ~N days ahead of its real publication date. Signals are
+  evaluated once — extra levels only cost extra NAV loops.
+
+  Note the DSL-level counterpart: `shift(expr, n)` lets a strategy bake the
+  lag in directly — `shift(<signal>, 1)` is next-day execution, and
+  `shift(pe, 21)` simulates a realistic one-month publication delay on a
+  fundamental series.
 
 All `BacktestConfig` flags (fees, slippage, liquidity cap, delisting,
 benchmark, bootstrap) apply to these commands too.

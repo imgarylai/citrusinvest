@@ -421,3 +421,73 @@ fn lookahead_flags_strategies_that_collapse_under_execution_lag() {
         yuzu_cli::run_lookahead(&dir, spec, 20240102, 20240131, 0, &Default::default()).is_err()
     );
 }
+
+#[test]
+fn lookahead_profile_shows_the_decay_curve() {
+    // Same alternating fixture as the single-shift test: the edge lives
+    // entirely in same-close execution, so the curve cliffs at shift 1.
+    let dir = std::env::temp_dir().join("yuzu_cli_fix_lookahead_profile");
+    let _ = fs::remove_dir_all(&dir);
+    let mut c = 100.0_f64;
+    let rows: Vec<OhlcvRow> = (0..40)
+        .map(|i| {
+            if i > 0 {
+                c *= if i % 2 == 1 { 0.99 } else { 1.05 };
+            }
+            OhlcvRow {
+                day: 20240101 + (i / 28) as i32 * 100 + (i % 28) as i32 + 1, // valid dates
+                adj_open: c,
+                adj_high: c,
+                adj_low: c,
+                adj_close: c,
+                volume: 0.0,
+            }
+        })
+        .collect();
+    let p = dir.join("prices");
+    fs::create_dir_all(&p).unwrap();
+    fs::write(p.join("PAT.csv.gz"), write_series(&rows).unwrap()).unwrap();
+
+    let spec = r#"{"op":"Fall","of":{"op":"Data","name":"close"},"n":1}"#;
+    let profile = yuzu_cli::run_lookahead_profile(
+        &dir,
+        spec,
+        20240101,
+        20240301,
+        &[1, 2, 5],
+        &Default::default(),
+    )
+    .unwrap();
+
+    assert!(profile.baseline.total_return > 0.5);
+    assert_eq!(profile.points.len(), 3);
+    assert_eq!(profile.points[0].shift_days, 1);
+    // Cliff at shift 1: retention collapses immediately.
+    assert!(profile.points[0].sharpe < 0.0);
+    assert!(profile.points[0].sharpe_retention < 0.5);
+    assert!(profile.suspicious);
+    // Even shifts re-align with the period-2 pattern: shift 2 recovers most
+    // of the baseline (that's the shape telling you the period), odd shifts
+    // stay inverted.
+    assert!(profile.points[1].shift_days == 2 && profile.points[1].sharpe > 0.0);
+
+    // Guards: zero shift and empty ladder are rejected.
+    assert!(yuzu_cli::run_lookahead_profile(
+        &dir,
+        spec,
+        20240101,
+        20240301,
+        &[0],
+        &Default::default()
+    )
+    .is_err());
+    assert!(yuzu_cli::run_lookahead_profile(
+        &dir,
+        spec,
+        20240101,
+        20240301,
+        &[],
+        &Default::default()
+    )
+    .is_err());
+}

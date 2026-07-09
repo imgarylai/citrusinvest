@@ -147,6 +147,10 @@ enum Cmd {
         /// Days to lag the position matrix in the comparison run.
         #[arg(long, default_value_t = 1)]
         shift_days: usize,
+        /// Run the full decay profile (shifts 1,2,3,5,10,21) instead of a
+        /// single comparison; --shift-days is ignored.
+        #[arg(long)]
+        profile: bool,
     },
     /// Walk-forward analysis: pick the best grid variant in-sample per window,
     /// evaluate it out-of-sample, and chain the OOS equity.
@@ -256,18 +260,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             common,
             spec,
             shift_days,
+            profile,
         } => {
             let cfg = common.config();
             let spec_json = std::fs::read_to_string(&spec)?;
-            let report = yuzu_cli::run_lookahead(
-                &common.data,
-                &spec_json,
-                common.from,
-                common.to,
-                shift_days,
-                &cfg,
-            )?;
-            emit(&common.out, serde_json::to_string_pretty(&report)?)?;
+            let json = if profile {
+                let report = yuzu_cli::run_lookahead_profile(
+                    &common.data,
+                    &spec_json,
+                    common.from,
+                    common.to,
+                    yuzu_cli::PROFILE_SHIFTS,
+                    &cfg,
+                )?;
+                serde_json::to_string_pretty(&report)?
+            } else {
+                let report = yuzu_cli::run_lookahead(
+                    &common.data,
+                    &spec_json,
+                    common.from,
+                    common.to,
+                    shift_days,
+                    &cfg,
+                )?;
+                serde_json::to_string_pretty(&report)?
+            };
+            emit(&common.out, json)?;
         }
         Cmd::Walkforward {
             common,
