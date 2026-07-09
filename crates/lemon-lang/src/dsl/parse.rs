@@ -505,6 +505,28 @@ mod tests {
     }
 
     #[test]
+    fn exit_when_and_quantile_row_surface() {
+        assert_eq!(
+            p("exit_when(close > sma(close, 20), close < sma(close, 60))"),
+            json!({
+                "op":"ExitWhen",
+                "entry":{"op":"Gt","l":{"op":"Data","name":"close"},
+                         "r":{"op":"Average","of":{"op":"Data","name":"close"},"n":20}},
+                "exit":{"op":"Lt","l":{"op":"Data","name":"close"},
+                        "r":{"op":"Average","of":{"op":"Data","name":"close"},"n":60}}
+            })
+        );
+        assert_eq!(
+            p("quantile_row(roe, 0.5)"),
+            json!({"op":"QuantileRow","of":{"op":"Data","name":"roe"},"c":0.5})
+        );
+        assert_eq!(
+            p("quantile_row(of = pe, c = 0.75)"),
+            json!({"op":"QuantileRow","of":{"op":"Data","name":"pe"},"c":0.75})
+        );
+    }
+
+    #[test]
     fn rebinding_is_an_error() {
         assert!(parse("let a = close\nlet a = pe\na > 1").is_err());
     }

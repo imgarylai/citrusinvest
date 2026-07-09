@@ -186,9 +186,9 @@ below names ops by their engine behavior; the DSL surface names map through
 **Surface-syntax notes** (see `lemon.md`): the DSL has **no** `==`, `!=`, `&`,
 `|`, or `!` — logical AND/OR/NOT are the words `and` / `or` / `not`, and there
 is no equality operator. `normalize_row` scales each row to unit gross weight
-(explicit portfolio weights, e.g. inverse-vol via `normalize_row(sig / std(close, 20))`). `exit_when` and `quantile_row` are implemented as `Panel` ops
-(golden-tested) but are **not** exposed as `Expr` AST variants or DSL surface
-names — they are not callable from lemon.
+(explicit portfolio weights, e.g. inverse-vol via `normalize_row(sig / std(close, 20))`).
+`exit_when(entry, exit)` holds from an entry edge until exit; `quantile_row(of, c)`
+returns a one-column per-row quantile panel (both are lemon-callable).
 
 OHLCV technical indicators (`atr`, `natr`, `cci`, `aroon`, `stoch`, `adx`/`±di`,
 `obv`, `mfi`, `willr`, and `vwap` = rolling-`n` `Σ(tp·vol)/Σvol` over typical
