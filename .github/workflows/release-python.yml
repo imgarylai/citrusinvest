@@ -46,7 +46,7 @@ jobs:
             target: aarch64
           - os: macos-latest
             target: aarch64
-          - os: macos-13
+          - os: macos-latest
             target: x86_64
           - os: windows-latest
             target: x64
