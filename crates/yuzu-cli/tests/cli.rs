@@ -364,3 +364,60 @@ fn sweep_marks_every_variant_failed_when_the_panel_cannot_load() {
     assert_eq!(board.len(), 2);
     assert!(board.iter().all(|e| !e.ok && e.error.is_some()));
 }
+
+#[test]
+fn lookahead_flags_strategies_that_collapse_under_execution_lag() {
+    // Price alternates: odd rows fall ~1%, even rows rise ~5%. The strategy
+    // "hold after a down day" (fall(close, 1)) enters at each fall-day close
+    // and captures every +5% day — but ONLY with same-close execution. Lagged
+    // one day it holds through every fall instead.
+    let dir = std::env::temp_dir().join("yuzu_cli_fix_lookahead");
+    let _ = fs::remove_dir_all(&dir);
+    let mut c = 100.0_f64;
+    let rows: Vec<OhlcvRow> = (0..20)
+        .map(|i| {
+            if i > 0 {
+                c *= if i % 2 == 1 { 0.99 } else { 1.05 };
+            }
+            OhlcvRow {
+                day: 20240102 + i as i32,
+                adj_open: c,
+                adj_high: c,
+                adj_low: c,
+                adj_close: c,
+                volume: 0.0,
+            }
+        })
+        .collect();
+    let p = dir.join("prices");
+    fs::create_dir_all(&p).unwrap();
+    fs::write(p.join("PAT.csv.gz"), write_series(&rows).unwrap()).unwrap();
+
+    let spec = r#"{"op":"Fall","of":{"op":"Data","name":"close"},"n":1}"#;
+    let report =
+        yuzu_cli::run_lookahead(&dir, spec, 20240102, 20240131, 1, &Default::default()).unwrap();
+
+    assert!(
+        report.baseline.total_return > 0.5,
+        "baseline captures the rises: {}",
+        report.baseline.total_return
+    );
+    assert!(
+        report.lagged.total_return < 0.0,
+        "lagged holds the falls: {}",
+        report.lagged.total_return
+    );
+    assert!(report.sharpe_drop > 0.0);
+    assert!(report.suspicious, "collapse under lag must be flagged");
+
+    // A lag-robust strategy (always in the market) is NOT flagged.
+    let robust = r#"{"op":"Gt","l":{"op":"Data","name":"close"},"r":{"op":"Const","value":0.0}}"#;
+    let r2 =
+        yuzu_cli::run_lookahead(&dir, robust, 20240102, 20240131, 1, &Default::default()).unwrap();
+    assert!(!r2.suspicious, "buy-and-hold survives a 1-day lag");
+
+    // shift_days = 0 is rejected.
+    assert!(
+        yuzu_cli::run_lookahead(&dir, spec, 20240102, 20240131, 0, &Default::default()).is_err()
+    );
+}

@@ -136,6 +136,18 @@ enum Cmd {
         #[arg(long)]
         top: Option<usize>,
     },
+    /// Compare a strategy against a signal-lagged rerun to flag lookahead
+    /// bias / same-close execution dependence.
+    Lookahead {
+        #[command(flatten)]
+        common: CommonArgs,
+        /// Path to a JSON Expr spec file.
+        #[arg(long)]
+        spec: PathBuf,
+        /// Days to lag the position matrix in the comparison run.
+        #[arg(long, default_value_t = 1)]
+        shift_days: usize,
+    },
     /// Walk-forward analysis: pick the best grid variant in-sample per window,
     /// evaluate it out-of-sample, and chain the OOS equity.
     Walkforward {
@@ -239,6 +251,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 board.truncate(n);
             }
             emit(&common.out, serde_json::to_string_pretty(&board)?)?;
+        }
+        Cmd::Lookahead {
+            common,
+            spec,
+            shift_days,
+        } => {
+            let cfg = common.config();
+            let spec_json = std::fs::read_to_string(&spec)?;
+            let report = yuzu_cli::run_lookahead(
+                &common.data,
+                &spec_json,
+                common.from,
+                common.to,
+                shift_days,
+                &cfg,
+            )?;
+            emit(&common.out, serde_json::to_string_pretty(&report)?)?;
         }
         Cmd::Walkforward {
             common,
