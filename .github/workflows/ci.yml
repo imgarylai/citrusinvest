@@ -49,3 +49,27 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Check against declared MSRV
         run: cargo check --workspace
+
+  python-bindings:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/yuzu-py
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Lint (yuzu-py)
+        run: |
+          cargo fmt --manifest-path crates/yuzu-py/Cargo.toml -- --check
+          cargo clippy --manifest-path crates/yuzu-py/Cargo.toml -- -D warnings
+      - name: Build and install wheel
+        run: |
+          pip install maturin
+          pip install ./crates/yuzu-py
+      - name: Python tests
+        run: python crates/yuzu-py/tests/test_yuzu.py

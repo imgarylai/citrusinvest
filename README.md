@@ -26,6 +26,9 @@ contract live in [`docs/backtest-engine.md`](docs/backtest-engine.md).
 | [`yuzu-source-s3`](https://crates.io/crates/yuzu-source-s3) | S3-compatible `ObjectSource` for `yuzu-data`. |
 | [`lemon-lang`](https://crates.io/crates/lemon-lang) | The lemon strategy DSL (imported as `lemon`). |
 
+**Python**: `crates/yuzu-py` binds the engine + DSL for Python (`pip install ./crates/yuzu-py`,
+module `yuzu`) — see [`crates/yuzu-py/README.md`](crates/yuzu-py/README.md).
+
 The `wasm`/`cli`/`server` crates are not published.
 
 ## Build
