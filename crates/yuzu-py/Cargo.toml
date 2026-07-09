@@ -25,4 +25,4 @@ pyo3 = { version = "0.27", features = ["extension-module", "abi3-py39"] }
 serde_json = "1.0.150"
 ndarray = "0.17.2"
 yuzu-core = { path = "../yuzu-core" }
-lemon = { package = "lemon-lang", path = "../lemon" }
+lemon = { package = "lemon-lang", path = "../lemon-lang" }
