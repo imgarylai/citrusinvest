@@ -11,6 +11,10 @@ S3-compatible object store via `yuzu-source-s3`).
 
 For NAV / metrics / strategy semantics, see [`backtest-engine.md`](backtest-engine.md).
 For strategy syntax, see [`lemon.md`](lemon.md).
+If you load data from an **FMP Starter**-class key: which library features you
+can honestly backtest (and which are blocked by missing panels) is documented in
+[`fmp-data-source.md`](fmp-data-source.md) — feature/series gaps, not a plan
+comparison table.
 
 ---
 

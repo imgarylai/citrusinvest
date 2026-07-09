@@ -12,6 +12,7 @@
 - [Lemon prompt card](docs/lemon-prompt.md): a compact, prompt-ready cheat sheet for generating lemon.
 - [Engine architecture](docs/backtest-engine.md): panels, NAV model, metrics, the `Report` JSON contract.
 - [Input data layout](docs/data-layout.md): bring-your-own prices/fundamentals/panels tree, series names, PIT notes.
+- [FMP Starter gaps vs features](docs/fmp-data-source.md): which ops/backtests need which panels when data is short/coarse.
 - [Contributing & release flow](CONTRIBUTING.md).
 
 ## API (docs.rs)
