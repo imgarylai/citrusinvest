@@ -53,7 +53,7 @@ pub(crate) fn load_ctx(
     let close = load_panel(&src, &syms, Field::AdjClose, from, to, PRICES_DIR)
         .map_err(|e| e.to_string())?;
     panels.insert("close".to_string(), close);
-    if cfg.max_participation > 0.0 && cfg.initial_capital > 0.0 {
+    if (cfg.max_participation > 0.0 || cfg.impact_coef > 0.0) && cfg.initial_capital > 0.0 {
         let volume = load_panel(&src, &syms, Field::Volume, from, to, PRICES_DIR)
             .map_err(|e| e.to_string())?;
         panels.insert("volume".to_string(), volume);

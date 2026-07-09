@@ -43,6 +43,8 @@ struct ConfigJson {
     #[serde(default)]
     max_participation: f64,
     #[serde(default)]
+    impact_coef: f64,
+    #[serde(default)]
     delist_after: usize,
     #[serde(default)]
     delist_haircut: f64,
@@ -96,6 +98,7 @@ pub fn run_backtest_json(input_json: &str) -> Result<String, String> {
         slippage_ratio: input.config.slippage_ratio,
         initial_capital: input.config.initial_capital,
         max_participation: input.config.max_participation,
+        impact_coef: input.config.impact_coef,
         delist_after: input.config.delist_after,
         delist_haircut: input.config.delist_haircut,
         benchmark_key: input.config.benchmark_key,

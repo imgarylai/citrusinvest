@@ -69,6 +69,8 @@ pub struct BacktestRequest {
     #[serde(default)]
     pub max_participation: f64,
     #[serde(default)]
+    pub impact_coef: f64,
+    #[serde(default)]
     pub delist_after: usize,
     #[serde(default)]
     pub delist_haircut: f64,
@@ -158,8 +160,8 @@ pub fn handle_backtest<S: ObjectSource + Sync>(
                                          // and the engine degrades that trade's mae/mfe to None.
     names.insert("high".to_string());
     names.insert("low".to_string());
-    // The liquidity cap needs dollar volume.
-    if req.max_participation > 0.0 && req.initial_capital > 0.0 {
+    // The liquidity cap and the impact model need dollar volume.
+    if (req.max_participation > 0.0 || req.impact_coef > 0.0) && req.initial_capital > 0.0 {
         names.insert("volume".to_string());
     }
 
@@ -244,6 +246,7 @@ pub fn handle_backtest<S: ObjectSource + Sync>(
         slippage_ratio: req.slippage_ratio,
         initial_capital: req.initial_capital,
         max_participation: req.max_participation,
+        impact_coef: req.impact_coef,
         delist_after: req.delist_after,
         delist_haircut: req.delist_haircut,
         benchmark_key,

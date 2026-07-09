@@ -57,6 +57,9 @@ struct CommonArgs {
     /// Max fraction of a symbol's daily dollar volume the book may hold.
     #[arg(long, default_value_t = 0.0)]
     max_participation: f64,
+    /// Square-root market-impact coefficient (0 = off; needs --initial-capital).
+    #[arg(long, default_value_t = 0.0)]
+    impact_coef: f64,
     /// Treat a symbol as delisted after N consecutive missing-price days (0 = off).
     #[arg(long, default_value_t = 0)]
     delist_after: usize,
@@ -84,6 +87,7 @@ impl CommonArgs {
             slippage_ratio: self.slippage_ratio,
             initial_capital: self.initial_capital,
             max_participation: self.max_participation,
+            impact_coef: self.impact_coef,
             delist_after: self.delist_after,
             delist_haircut: self.delist_haircut,
             benchmark_key: self.benchmark.clone(),
