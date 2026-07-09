@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/yuzu-core", "crates/yuzu-data", "crates/yuzu-wasm", "crates/yuzu-cli", "crates/yuzu-source-s3", "crates/yuzu-server", "crates/lemon", "crates/lemon-wasm", "crates/lemon-lsp"]
+members = ["crates/yuzu-core", "crates/yuzu-data", "crates/yuzu-wasm", "crates/yuzu-cli", "crates/yuzu-source-s3", "crates/yuzu-server", "crates/lemon-lang", "crates/lemon-wasm", "crates/lemon-lsp"]
 # yuzu-py builds via maturin with its own lockfile (PyO3 toolchain), outside
 # the workspace so cargo test/coverage CI never needs a Python toolchain.
 exclude = ["crates/yuzu-py"]
