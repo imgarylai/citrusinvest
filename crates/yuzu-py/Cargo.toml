@@ -1,6 +1,6 @@
 [package]
 name = "yuzu-py"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.86"
 license = "MIT"
@@ -8,6 +8,9 @@ repository = "https://github.com/imgarylai/citrusinvest"
 description = "Python bindings for the yuzu backtest engine and the lemon strategy DSL."
 publish = false
 
+# Version policy: major.minor mirrors the engine workspace version (all
+# workspace crates share one number); the patch segment is the bindings' own —
+# binding-only fixes bump it without waiting for an engine release.
 # Deliberately NOT a member of the repo workspace (see the root Cargo.toml's
 # `exclude`): building this crate needs the PyO3 toolchain, and keeping it out
 # means `cargo test --workspace` / coverage CI never touch Python.
