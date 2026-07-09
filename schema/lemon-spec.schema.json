@@ -794,6 +794,90 @@
         },
         {
           "additionalProperties": false,
+          "description": "Per-row winsorize: clip values to empirical quantiles `lower`/`upper` (in 0..1).",
+          "properties": {
+            "lower": {
+              "type": "number"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "Winsorize"
+            },
+            "upper": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "op",
+            "of",
+            "lower",
+            "upper"
+          ],
+          "title": "Winsorize",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Per-row z-score (population std); NaN preserved; constant rows become 0.",
+          "properties": {
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "Zscore"
+            }
+          },
+          "required": [
+            "op",
+            "of"
+          ],
+          "title": "Zscore",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Per-row quantile buckets labeled 1..=n (ties share average rank).",
+          "properties": {
+            "n": {
+              "type": "number"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "Bucket"
+            }
+          },
+          "required": [
+            "op",
+            "of",
+            "n"
+          ],
+          "title": "Bucket",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Per-row demean: subtract the cross-sectional mean of non-NaN cells.",
+          "properties": {
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "Demean"
+            }
+          },
+          "required": [
+            "op",
+            "of"
+          ],
+          "title": "Demean",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
           "description": "Ceiling of `of`.",
           "properties": {
             "of": {

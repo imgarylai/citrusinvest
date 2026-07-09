@@ -278,6 +278,10 @@ These take price/volume series explicitly (so you decide which series feed them)
 | `is_smallest` | `of`, `n`                                    | `1` for the `n` lowest values in each row, else `0`.                    |
 | `rank`        | `of`, `pct?`=`true`, `ascending?`=`true`     | Cross-sectional rank per row. `pct=true` → `0..1` percentile; `ascending=true` → smallest ranks lowest. |
 | `quantile_row`| `of`, `c`                                    | Per-row quantile of `of` across symbols at level `c` (e.g. `0.5` = median). Result is one column named `quantile`. |
+| `winsorize`   | `of`, `lower`, `upper`                       | Per-row clip to empirical quantiles `lower`/`upper` in `0..1` (linear interp). NaN preserved. |
+| `zscore`      | `of`                                         | Per-row `(x − mean) / std` (population std). Constant rows → `0`; empty → NaN. |
+| `bucket`      | `of`, `n`                                    | Per-row quantile buckets labeled `1..=n` (average ranks for ties). Empty/`n=0` → NaN. |
+| `demean`      | `of`                                         | Per-row subtract cross-sectional mean of non-NaN cells.                 |
 | `mask`        | `of`, `by`                                   | Keep `of` only where `by` is true; drop (NaN) elsewhere.                |
 | `normalize_row` | `of`                                       | Scale each row so gross weight (Σ\|w\|) is 1 — explicit portfolio weights. NaN preserved; zero rows unchanged. |
 | `industry_rank`| `of`, `categories?`                         | Rank `of` within each industry; optionally restrict to `categories` (list of strings). |
@@ -322,9 +326,9 @@ These are not written as calls but are still nodes in the tree:
 | `close`, `pe`, …     | `Data`                             | A raw input series by name (bare identifier).  |
 | `42`, `0.5`, `5e8`   | `Const`                            | A constant scalar, broadcast across the panel. A bare number used as an operand is auto-promoted to a `Const`. |
 
-That is the complete surface: **54 op tags** total in the engine — the leaves
+That is the complete surface: **58 op tags** total in the engine — the leaves
 `Data` and `Const`, the 10 operator ops above, the prefix ops `Neg` and `not`,
-and the 40 function-style calls in the tables.
+and the 44 function-style calls in the tables.
 
 ---
 
