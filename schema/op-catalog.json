@@ -725,6 +725,77 @@
         "kind": "expr",
         "name": "of",
         "required": true
+      },
+      {
+        "kind": "number",
+        "name": "lower",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "upper",
+        "required": true
+      }
+    ],
+    "description": "Per-row winsorize: clip values to empirical quantiles `lower`/`upper` (in 0..1).",
+    "form": "function",
+    "name": "winsorize",
+    "tag": "Winsorize"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      }
+    ],
+    "description": "Per-row z-score (population std); NaN preserved; constant rows become 0.",
+    "form": "function",
+    "name": "zscore",
+    "tag": "Zscore"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      }
+    ],
+    "description": "Per-row quantile buckets labeled 1..=n (ties share average rank).",
+    "form": "function",
+    "name": "bucket",
+    "tag": "Bucket"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      }
+    ],
+    "description": "Per-row demean: subtract the cross-sectional mean of non-NaN cells.",
+    "form": "function",
+    "name": "demean",
+    "tag": "Demean"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
       }
     ],
     "description": "Ceiling of `of`.",

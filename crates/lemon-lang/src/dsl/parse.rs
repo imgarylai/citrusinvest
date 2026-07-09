@@ -527,6 +527,26 @@ mod tests {
     }
 
     #[test]
+    fn cs_preprocess_surface() {
+        assert_eq!(
+            p("winsorize(pe, 0.05, 0.95)"),
+            json!({"op":"Winsorize","of":{"op":"Data","name":"pe"},"lower":0.05,"upper":0.95})
+        );
+        assert_eq!(
+            p("zscore(roe)"),
+            json!({"op":"Zscore","of":{"op":"Data","name":"roe"}})
+        );
+        assert_eq!(
+            p("bucket(momentum, 5)"),
+            json!({"op":"Bucket","of":{"op":"Data","name":"momentum"},"n":5})
+        );
+        assert_eq!(
+            p("demean(pe)"),
+            json!({"op":"Demean","of":{"op":"Data","name":"pe"}})
+        );
+    }
+
+    #[test]
     fn rebinding_is_an_error() {
         assert!(parse("let a = close\nlet a = pe\na > 1").is_err());
     }

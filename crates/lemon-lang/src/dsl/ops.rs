@@ -330,6 +330,38 @@ static ROWS: &[Row] = &[
         desc: "Per-row quantile of `of` across symbols at level `c` (e.g. 0.5 = median); one-column result.",
     },
     Row {
+        names: &["winsorize"],
+        sig: OpSig {
+            tag: "Winsorize",
+            fields: &[Expr("of"), Num("lower"), Num("upper")],
+        },
+        desc: "Per-row winsorize: clip values to empirical quantiles `lower`/`upper` (in 0..1).",
+    },
+    Row {
+        names: &["zscore"],
+        sig: OpSig {
+            tag: "Zscore",
+            fields: &[Expr("of")],
+        },
+        desc: "Per-row z-score (population std); NaN preserved; constant rows become 0.",
+    },
+    Row {
+        names: &["bucket"],
+        sig: OpSig {
+            tag: "Bucket",
+            fields: &[Expr("of"), Num("n")],
+        },
+        desc: "Per-row quantile buckets labeled 1..=n (ties share average rank).",
+    },
+    Row {
+        names: &["demean"],
+        sig: OpSig {
+            tag: "Demean",
+            fields: &[Expr("of")],
+        },
+        desc: "Per-row demean: subtract the cross-sectional mean of non-NaN cells.",
+    },
+    Row {
         names: &["ceil"],
         sig: OpSig {
             tag: "Ceil",
@@ -583,6 +615,10 @@ pub static ALL_OP_TAGS: &[&str] = &[
     "IsExit",
     "ExitWhen",
     "QuantileRow",
+    "Winsorize",
+    "Zscore",
+    "Bucket",
+    "Demean",
     "Gt",
     "Lt",
     "Ge",

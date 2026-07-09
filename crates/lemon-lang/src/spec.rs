@@ -142,6 +142,18 @@ pub enum Expr {
     ExitWhen { entry: Box<Expr>, exit: Box<Expr> },
     /// Per-row quantile of `of` across symbols; collapses to one column (`quantile`).
     QuantileRow { of: Box<Expr>, c: f64 },
+    /// Per-row winsorize: clip to empirical quantiles `lower`/`upper` in `[0, 1]`.
+    Winsorize {
+        of: Box<Expr>,
+        lower: f64,
+        upper: f64,
+    },
+    /// Per-row z-score `(x − mean) / std` (population std); constant rows → 0.
+    Zscore { of: Box<Expr> },
+    /// Per-row quantile buckets labeled 1..=`n` (NaN preserved).
+    Bucket { of: Box<Expr>, n: usize },
+    /// Per-row demean: subtract the cross-sectional mean of non-NaN cells.
+    Demean { of: Box<Expr> },
     /// 1 where `l` is greater than `r`, else 0.
     Gt { l: Box<Expr>, r: Box<Expr> },
     /// 1 where `l` is less than `r`, else 0.

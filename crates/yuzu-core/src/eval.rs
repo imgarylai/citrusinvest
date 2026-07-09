@@ -190,6 +190,10 @@ pub fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
         IsExit { of } => eval(of, ctx)?.is_exit(),
         ExitWhen { entry, exit } => eval(entry, ctx)?.exit_when(&eval(exit, ctx)?),
         QuantileRow { of, c } => eval(of, ctx)?.quantile_row(*c),
+        Winsorize { of, lower, upper } => eval(of, ctx)?.winsorize(*lower, *upper),
+        Zscore { of } => eval(of, ctx)?.zscore(),
+        Bucket { of, n } => eval(of, ctx)?.bucket(*n),
+        Demean { of } => eval(of, ctx)?.demean(),
         Gt { l, r } => num_binop(l, r, ctx, |x, y| bool_to_f64(x > y))?,
         Lt { l, r } => num_binop(l, r, ctx, |x, y| bool_to_f64(x < y))?,
         Ge { l, r } => num_binop(l, r, ctx, |x, y| bool_to_f64(x >= y))?,
@@ -514,6 +518,41 @@ mod tests {
         assert_eq!(q.ncols(), 1);
         // row0: A=1,B=4 → median 2.5 (linear interp)
         assert!((q.data[[0, 0]] - 2.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn cs_preprocess_ops_via_spec() {
+        let dem = run_strategy(
+            r#"{"op":"Demean","of":{"op":"Data","name":"close"}}"#,
+            &ctx(),
+        )
+        .unwrap();
+        // row0: 1,4 mean 2.5 → -1.5, 1.5
+        assert!((dem.data[[0, 0]] + 1.5).abs() < 1e-12);
+        assert!((dem.data[[0, 1]] - 1.5).abs() < 1e-12);
+
+        let z = run_strategy(
+            r#"{"op":"Zscore","of":{"op":"Data","name":"close"}}"#,
+            &ctx(),
+        )
+        .unwrap();
+        assert!(z.data[[0, 0]].is_finite());
+
+        let w = run_strategy(
+            r#"{"op":"Winsorize","of":{"op":"Data","name":"close"},"lower":0.0,"upper":1.0}"#,
+            &ctx(),
+        )
+        .unwrap();
+        assert_eq!(w.data[[0, 0]], 1.0);
+
+        let b = run_strategy(
+            r#"{"op":"Bucket","of":{"op":"Data","name":"close"},"n":2}"#,
+            &ctx(),
+        )
+        .unwrap();
+        // two symbols → buckets 1 and 2
+        assert_eq!(b.data[[0, 0]], 1.0);
+        assert_eq!(b.data[[0, 1]], 2.0);
     }
 
     #[test]

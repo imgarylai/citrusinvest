@@ -181,6 +181,7 @@ below names ops by their engine behavior; the DSL surface names map through
 | `hold_until(exit, …)`              | rank-priority rotation with `nstocks_limit` + optional stop_loss / take_profit / trail_stop (the one sequential loop) |
 | `rebalance(freq)`                  | downsample to last obs per W / ME / QE / YE period (or explicit dates)                                                     |
 | `rank(pct, ascending)`             | cross-sectional rank (axis=1), average ties                                                                           |
+| `winsorize` / `zscore` / `bucket` / `demean` | per-row cross-section preprocess (clip / standardize / q-buckets / subtract mean)                           |
 | arithmetic / comparison / logical  | `+ - * /`; comparisons `> >= < <=` → `1`/`0`; logical `and` / `or`; scalar variants                                  |
 
 **Surface-syntax notes** (see `lemon.md`): the DSL has **no** `==`, `!=`, `&`,
