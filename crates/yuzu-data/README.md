@@ -28,7 +28,11 @@ avoid that dependency can opt out:
 yuzu-data = { version = "0.1", default-features = false }
 ```
 
-See the [engine docs](https://github.com/imgarylai/citrusinvest/blob/main/docs/backtest-engine.md).
+**On-disk / object-key contract** (directory tree, CSV columns, series-name map):
+[Input data layout](https://github.com/imgarylai/citrusinvest/blob/main/docs/data-layout.md).
+
+Engine semantics (panels, NAV, Report):
+[backtest-engine.md](https://github.com/imgarylai/citrusinvest/blob/main/docs/backtest-engine.md).
 
 ## License
 
