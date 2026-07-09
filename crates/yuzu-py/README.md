@@ -60,3 +60,8 @@ pip install ./crates/yuzu-py       # or: maturin develop -m crates/yuzu-py/Cargo
 ```
 
 Wheels are abi3 (Python ≥ 3.9). License: MIT.
+
+**Versioning**: `major.minor` mirrors the engine workspace version (a
+`0.2.x` wheel is built from the `0.2` engine series); the patch segment is
+the bindings' own, so binding-only fixes can ship without an engine release.
+Each wheel is a snapshot of the whole repository at its release tag.
