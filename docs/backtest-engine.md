@@ -353,9 +353,25 @@ value   *= (1 - cost)
 spread/impact (e.g. `0.0005` = 5 bps per trade leg). Closed-trade net returns
 carry it on both legs too.
 
+**Square-root market impact** (`impact_coef`, requires `initial_capital > 0`
+and a volume panel): on each rebalance, every traded cell additionally pays
+
+```
+participation[c] = |Δw[c]| * initial_capital / dollar_volume[c]   (capped at 1)
+cost += |Δw[c]| * impact_coef * sqrt(participation[c])
+```
+
+so consuming more of a symbol's daily dollar volume costs progressively more.
+A cell with missing or zero dollar volume contributes no impact (the flat
+`slippage_ratio` still covers it). The flat component keeps its original
+accumulation order, so `impact_coef = 0` (the default) reproduces the
+flat-cost path bit-for-bit. Impact affects NAV only — per-trade returns are
+price-relative and carry the flat components only.
+
 **`BacktestConfig` defaults:** `fee_ratio = 0.0`, `tax_ratio = 0.0`,
 `position_limit = 0.0` (uncapped), `slippage_ratio = 0.0`,
 `initial_capital = 0.0` / `max_participation = 0.0` (liquidity cap off),
+`impact_coef = 0.0` (square-root impact off),
 `delist_after = 0` (delisting handling off), `delist_haircut = 0.0`,
 `benchmark_key = None`, `bootstrap_samples = 0` (bootstrap off) /
 `bootstrap_block = 0` (auto `⌊√n⌋`).
@@ -548,7 +564,6 @@ benchmark, bootstrap) apply to these commands too.
 These items are explicit scope cuts, not gaps:
 
 - **Advanced cost semantics** (`touched_exit` / `retain_cost_when_rebalance` / `stop_trading_next_period`) — the engine currently uses the simplified model described above.
-- **Volume-aware slippage** — `slippage_ratio` is a flat per-leg haircut; an impact model that scales with participation is future work.
 - **Portfolio optimization** (mean-variance, risk parity, etc.).
 - **Walk-forward position continuity** — each window still enters from flat
   (paying entry cost) even when the previous window's winner held the same

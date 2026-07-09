@@ -34,6 +34,14 @@ pub struct BacktestConfig {
     /// volume panel and `initial_capital > 0`. `0.0` (the default) disables it.
     /// The cap is measured against `initial_capital`, not compounded equity.
     pub max_participation: f64,
+    /// Square-root market-impact coefficient. On each rebalance, every traded
+    /// cell pays `impact_coef * sqrt(participation)` per unit of turnover,
+    /// where `participation = |Δw| * initial_capital / dollar_volume`, capped
+    /// at 1. Requires `initial_capital > 0` and a volume panel; a cell with
+    /// missing or zero dollar volume pays only the flat `slippage_ratio`.
+    /// `0.0` (the default) disables it and reproduces the flat-cost path
+    /// exactly.
+    pub impact_coef: f64,
     /// After this many consecutive missing-price rows a symbol is treated as
     /// delisted: the position is force-closed at its last valid price (less
     /// `delist_haircut`) and re-entry is blocked until prices resume. `0` (the
@@ -67,6 +75,7 @@ impl Default for BacktestConfig {
             slippage_ratio: 0.0,
             initial_capital: 0.0,
             max_participation: 0.0,
+            impact_coef: 0.0,
             delist_after: 0,
             delist_haircut: 0.0,
             benchmark_key: None,
@@ -229,9 +238,10 @@ pub fn run(
     let hi = conform_to(&px, high);
     let lo = conform_to(&px, low);
     // dollar volume per cell (NaN where volume is absent); only materialized
-    // when the liquidity cap is active.
+    // when the liquidity cap or the impact model is active.
     let liquidity_on = cfg.max_participation > 0.0 && cfg.initial_capital > 0.0 && volume.is_some();
-    let dollar_vol: Option<Array2<f64>> = if liquidity_on {
+    let impact_on = cfg.impact_coef > 0.0 && cfg.initial_capital > 0.0 && volume.is_some();
+    let dollar_vol: Option<Array2<f64>> = if liquidity_on || impact_on {
         conform_to(&px, volume).map(|mut v| {
             v.zip_mut_with(&px.data, |dv, p| *dv *= p);
             v
@@ -275,14 +285,16 @@ pub fn run(
             let mut row = last.clone();
             normalize_weights_row(&mut row);
             cap_weights_row(&mut row, cfg.position_limit);
-            if let Some(dv) = &dollar_vol {
-                let dv_row: Vec<f64> = (0..n).map(|c| dv[[r, c]]).collect();
-                cap_weights_by_liquidity(
-                    &mut row,
-                    &dv_row,
-                    cfg.max_participation,
-                    cfg.initial_capital,
-                );
+            if liquidity_on {
+                if let Some(dv) = &dollar_vol {
+                    let dv_row: Vec<f64> = (0..n).map(|c| dv[[r, c]]).collect();
+                    cap_weights_by_liquidity(
+                        &mut row,
+                        &dv_row,
+                        cfg.max_participation,
+                        cfg.initial_capital,
+                    );
+                }
             }
             exposure[r] = row.iter().map(|w| w.abs()).sum();
             for c in 0..n {
@@ -298,8 +310,17 @@ pub fn run(
     for c in 0..n {
         w_prev[c] = target[[0, c]];
     }
+    // per-row dollar-volume slice for the impact model (None when off)
+    let dv_row = |r: usize| -> Option<Vec<f64>> {
+        if !impact_on {
+            return None;
+        }
+        dollar_vol
+            .as_ref()
+            .map(|dv| (0..n).map(|c| dv[[r, c]]).collect())
+    };
     // day-0 entry cost (flat -> first target)
-    value *= 1.0 - rebalance_cost(&vec![0.0; n], &w_prev, cfg);
+    value *= 1.0 - rebalance_cost(&vec![0.0; n], &w_prev, dv_row(0).as_deref(), cfg);
     equity[0] = value;
 
     for r in 1..nrows {
@@ -354,7 +375,7 @@ pub fn run(
         // and drift in between).
         if rebalance[r] {
             let tgt: Vec<f64> = (0..n).map(|c| target[[r, c]]).collect();
-            value *= 1.0 - rebalance_cost(&drift, &tgt, cfg);
+            value *= 1.0 - rebalance_cost(&drift, &tgt, dv_row(r).as_deref(), cfg);
             w_prev = tgt;
         } else {
             w_prev = drift;
@@ -442,14 +463,38 @@ pub fn run(
     }
 }
 
-fn rebalance_cost(drift: &[f64], target: &[f64], cfg: &BacktestConfig) -> f64 {
+/// Turnover cost of moving `drift` to `target`. The flat component keeps its
+/// original accumulation order (row-sum × ratio) so `impact_coef = 0`
+/// reproduces the legacy path bit-for-bit; only the square-root impact
+/// component iterates per cell over `dollar_vol` (issue #19). A cell with
+/// missing or zero dollar volume contributes no impact — the flat slippage
+/// already covers it — so no NaN/Inf can reach the total.
+fn rebalance_cost(
+    drift: &[f64],
+    target: &[f64],
+    dollar_vol: Option<&[f64]>,
+    cfg: &BacktestConfig,
+) -> f64 {
     let turnover: f64 = drift.iter().zip(target).map(|(d, t)| (t - d).abs()).sum();
     let sells: f64 = drift
         .iter()
         .zip(target)
         .map(|(d, t)| (d - t).max(0.0))
         .sum();
-    (cfg.fee_ratio + cfg.slippage_ratio) * turnover + cfg.tax_ratio * sells
+    let mut cost = (cfg.fee_ratio + cfg.slippage_ratio) * turnover + cfg.tax_ratio * sells;
+    if cfg.impact_coef > 0.0 && cfg.initial_capital > 0.0 {
+        if let Some(dv) = dollar_vol {
+            for ((d, t), &v) in drift.iter().zip(target).zip(dv) {
+                let dw = (t - d).abs();
+                if dw == 0.0 || v.is_nan() || v <= 0.0 {
+                    continue;
+                }
+                let participation = (dw * cfg.initial_capital / v).min(1.0);
+                cost += dw * cfg.impact_coef * participation.sqrt();
+            }
+        }
+    }
+    cost
 }
 
 #[cfg(test)]
@@ -541,6 +586,103 @@ mod tests {
         };
         let r2 = run(&pos, &px, None, None, None, &fee);
         assert_eq!(r.equity, r2.equity);
+    }
+
+    #[test]
+    fn impact_cost_criteria() {
+        use crate::panel::Panel;
+        let dates = vec![20240102, 20240103];
+        let syms = vec!["LIQ".to_string(), "ILQ".to_string()];
+        let pos = Panel::from_rows(dates.clone(), syms.clone(), vec![vec![1.0, 1.0]; 2]).unwrap();
+        let px = Panel::from_rows(dates.clone(), syms.clone(), vec![vec![10.0, 10.0]; 2]).unwrap();
+        // dollar volume: LIQ = 10 * 1e9 = 1e10; ILQ = 10 * 100 = 1_000.
+        let vol = Panel::from_rows(dates.clone(), syms.clone(), vec![vec![1e9, 100.0]; 2]).unwrap();
+        let cfg = |coef: f64| BacktestConfig {
+            impact_coef: coef,
+            initial_capital: 1_000_000.0,
+            ..Default::default()
+        };
+
+        // Day-0 entry: each cell trades |Δw| = 0.5.
+        // LIQ participation = 0.5 * 1e6 / 1e10 = 5e-5 (dimensionless — #1).
+        // ILQ participation = 0.5 * 1e6 / 1e3 = 500 → capped at 1 (#4).
+        let coef = 0.01;
+        let r = run(&pos, &px, None, None, Some(&vol), &cfg(coef));
+        let liq_impact = 0.5 * coef * (5e-5_f64).sqrt();
+        let ilq_impact = 0.5 * coef * 1.0_f64; // capped participation
+        let want = 1.0 - (liq_impact + ilq_impact);
+        assert!(
+            (r.equity[0] - want).abs() < 1e-15,
+            "equity {} want {want}",
+            r.equity[0]
+        );
+        // #2 monotonicity: the illiquid cell pays strictly more.
+        assert!(ilq_impact > liq_impact);
+
+        // #5/#6 zero coefficient reproduces the legacy path bit-for-bit.
+        let off = run(&pos, &px, None, None, Some(&vol), &cfg(0.0));
+        let legacy = run(
+            &pos,
+            &px,
+            None,
+            None,
+            Some(&vol),
+            &BacktestConfig::default(),
+        );
+        assert_eq!(off.equity, legacy.equity);
+
+        // #8 linearity: with zero flat components, total cost is linear in coef.
+        let r2 = run(&pos, &px, None, None, Some(&vol), &cfg(2.0 * coef));
+        assert!(((1.0 - r2.equity[0]) - 2.0 * (1.0 - r.equity[0])).abs() < 1e-15);
+
+        // #3 zero/NaN dollar volume: those cells contribute NO impact (flat
+        // path only) and nothing non-finite reaches the total.
+        for bad in [0.0, f64::NAN] {
+            let vol_bad =
+                Panel::from_rows(dates.clone(), syms.clone(), vec![vec![1e9, bad]; 2]).unwrap();
+            let rb = run(&pos, &px, None, None, Some(&vol_bad), &cfg(coef));
+            let want_liq_only = 1.0 - liq_impact;
+            assert!(
+                (rb.equity[0] - want_liq_only).abs() < 1e-15,
+                "bad dv {bad}: equity {}",
+                rb.equity[0]
+            );
+            assert!(rb.equity.iter().all(|e| e.is_finite()));
+        }
+
+        // No volume panel at all -> impact silently off.
+        let rn = run(&pos, &px, None, None, None, &cfg(coef));
+        assert_eq!(rn.equity, legacy.equity);
+    }
+
+    #[test]
+    fn impact_cost_is_sign_symmetric() {
+        use crate::panel::Panel;
+        // #7: a buy of |Δw| = 1 and a later sell of |Δw| = 1 on a flat price
+        // with identical dollar volume cost the same.
+        let dates = vec![20240102, 20240103, 20240104];
+        let syms = vec!["A".to_string()];
+        let pos = Panel::from_rows(
+            dates.clone(),
+            syms.clone(),
+            vec![vec![1.0], vec![1.0], vec![0.0]],
+        )
+        .unwrap();
+        let px = Panel::from_rows(dates.clone(), syms.clone(), vec![vec![10.0]; 3]).unwrap();
+        let vol = Panel::from_rows(dates.clone(), syms.clone(), vec![vec![1e6]; 3]).unwrap();
+        let cfg = BacktestConfig {
+            impact_coef: 0.01,
+            initial_capital: 1_000_000.0,
+            ..Default::default()
+        };
+        let r = run(&pos, &px, None, None, Some(&vol), &cfg);
+        let entry_cost = 1.0 - r.equity[0];
+        let exit_cost = 1.0 - r.equity[2] / r.equity[1];
+        assert!(entry_cost > 0.0);
+        assert!(
+            (entry_cost - exit_cost).abs() < 1e-15,
+            "entry {entry_cost} vs exit {exit_cost}"
+        );
     }
 
     #[test]
