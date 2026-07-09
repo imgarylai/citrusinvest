@@ -507,3 +507,77 @@ pub fn run_walkforward(
         equity: oos_equity,
     })
 }
+
+// ---- lookahead-bias detector --------------------------------------------------
+
+/// Headline metrics of one leg of the lookahead comparison.
+#[derive(Serialize)]
+pub struct LookaheadLeg {
+    pub total_return: f64,
+    pub cagr: f64,
+    pub sharpe: f64,
+    pub max_drawdown: f64,
+}
+
+/// Baseline vs signal-lagged comparison (issue #23). A strategy whose edge
+/// survives executing `shift_days` later is robust to same-close execution
+/// assumptions and same-day data timestamps; one that collapses is living on
+/// lookahead (or on fills it could never get).
+#[derive(Serialize)]
+pub struct LookaheadReport {
+    pub shift_days: usize,
+    pub baseline: LookaheadLeg,
+    pub lagged: LookaheadLeg,
+    /// `baseline.sharpe - lagged.sharpe`.
+    pub sharpe_drop: f64,
+    /// `baseline.total_return - lagged.total_return`.
+    pub return_drop: f64,
+    /// True when a clearly positive baseline (`sharpe > 0.5`) loses more than
+    /// half its Sharpe under the lag.
+    pub suspicious: bool,
+}
+
+fn lookahead_leg(dates: &[i32], equity: &[f64]) -> LookaheadLeg {
+    LookaheadLeg {
+        total_return: yuzu_core::metrics::total_return(equity),
+        cagr: yuzu_core::metrics::cagr(equity, dates),
+        sharpe: yuzu_core::metrics::sharpe(equity),
+        max_drawdown: yuzu_core::metrics::max_drawdown(equity),
+    }
+}
+
+/// Run the strategy twice — as-is, and with the position matrix lagged by
+/// `shift_days` (signals executed N days late) — and report the metric deltas.
+pub fn run_lookahead(
+    root: &Path,
+    spec_json: &str,
+    from: i32,
+    to: i32,
+    shift_days: usize,
+    cfg: &BacktestConfig,
+) -> Result<LookaheadReport, String> {
+    if shift_days == 0 {
+        return Err("shift_days must be > 0".into());
+    }
+    let ctx = load_ctx(root, from, to, cfg)?;
+    let positions = yuzu_core::run_strategy(spec_json, &ctx).map_err(|e| e.to_string())?;
+    let prices = ctx.panels.get("close").ok_or("no close panel")?;
+    let volume = ctx.panels.get("volume");
+    let base = yuzu_core::backtest::run(&positions, prices, None, None, volume, cfg);
+    let lagged_pos = positions.shift(shift_days);
+    let lag = yuzu_core::backtest::run(&lagged_pos, prices, None, None, volume, cfg);
+
+    let baseline = lookahead_leg(&base.dates, &base.equity);
+    let lagged = lookahead_leg(&lag.dates, &lag.equity);
+    let sharpe_drop = baseline.sharpe - lagged.sharpe;
+    let return_drop = baseline.total_return - lagged.total_return;
+    let suspicious = baseline.sharpe > 0.5 && lagged.sharpe < 0.5 * baseline.sharpe;
+    Ok(LookaheadReport {
+        shift_days,
+        baseline,
+        lagged,
+        sharpe_drop,
+        return_drop,
+        suspicious,
+    })
+}

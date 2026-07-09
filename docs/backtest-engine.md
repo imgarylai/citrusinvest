@@ -556,6 +556,13 @@ it. A grid file is a spec template plus value lists — any JSON string equal to
   window seams. The very first train window has no earlier data and still
   starts cold.
 
+- `yuzu-cli lookahead --data D --spec s.json [--shift-days 1]` — run the
+  strategy as-is and again with the position matrix lagged by `shift-days`
+  (signals executed late), and report both legs' metrics plus the deltas. A
+  clearly positive baseline (`sharpe > 0.5`) that loses more than half its
+  Sharpe under the lag is flagged `suspicious` — its edge lives in same-close
+  execution or same-day data it couldn't have had.
+
 All `BacktestConfig` flags (fees, slippage, liquidity cap, delisting,
 benchmark, bootstrap) apply to these commands too.
 
