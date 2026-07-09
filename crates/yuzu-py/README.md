@@ -46,6 +46,12 @@ Series names are the engine's (`close`, `high`, `low`, `volume`, `pe`, …); a
 `volume` panel is required for the liquidity cap / market-impact features, and
 `high`/`low` enable per-trade MAE/MFE.
 
+## Install
+
+```bash
+pip install yuzu-backtest          # from PyPI (distribution name), imports as `yuzu`
+```
+
 ## Build from source
 
 ```bash
