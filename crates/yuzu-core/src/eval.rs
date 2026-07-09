@@ -494,7 +494,8 @@ mod tests {
         // entry: close > 1.5 (false,true,true on A=1,2,3), exit: always false.
         // Hold from first entry edge (row1) onward for A; B never enters (0.5,1,2 all?).
         // B: 0.5,1,2 — >1.5 only row2; entry edge at row2.
-        let entry = r#"{"op":"Gt","l":{"op":"Data","name":"close"},"r":{"op":"Const","value":1.5}}"#;
+        let entry =
+            r#"{"op":"Gt","l":{"op":"Data","name":"close"},"r":{"op":"Const","value":1.5}}"#;
         let exit = r#"{"op":"Lt","l":{"op":"Data","name":"close"},"r":{"op":"Const","value":0.0}}"#;
         let ew = run_strategy(
             &format!(r#"{{"op":"ExitWhen","entry":{entry},"exit":{exit}}}"#),
