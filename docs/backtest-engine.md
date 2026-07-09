@@ -59,6 +59,11 @@ files (plus fundamentals/industry) from disk or any `ObjectSource` implementatio
 and returns a `Panel` ready for the evaluator. It depends on `yuzu-core`;
 `yuzu-core` never depends on it (keeping the WASM build I/O-free).
 
+> **Full input contract for BYO data** (directory tree, fundamentals columns,
+> combined panels, series-name map, universe/PIT responsibilities):
+> [`data-layout.md`](./data-layout.md). The subsections below are a short prices
+> recap for engine readers; prefer `data-layout.md` when wiring a data root.
+
 ### File contract
 
 Each symbol's price history lives at:

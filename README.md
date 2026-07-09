@@ -16,6 +16,8 @@ yuzu_core::run_backtest(spec_json, ctx, price_key, cfg) -> Result<Report, Engine
 
 Architecture, DSL vocabulary, NAV model, metric conventions, and the Report JSON
 contract live in [`docs/backtest-engine.md`](docs/backtest-engine.md).
+**Bring-your-own data** (on-disk tree, CSV columns, series names):
+[`docs/data-layout.md`](docs/data-layout.md).
 
 ## Published crates
 
