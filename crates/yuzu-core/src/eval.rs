@@ -188,6 +188,8 @@ pub fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
         } => eval(of, ctx)?.sustain(*nwindow, *nsatisfy),
         IsEntry { of } => eval(of, ctx)?.is_entry(),
         IsExit { of } => eval(of, ctx)?.is_exit(),
+        ExitWhen { entry, exit } => eval(entry, ctx)?.exit_when(&eval(exit, ctx)?),
+        QuantileRow { of, c } => eval(of, ctx)?.quantile_row(*c),
         Gt { l, r } => num_binop(l, r, ctx, |x, y| bool_to_f64(x > y))?,
         Lt { l, r } => num_binop(l, r, ctx, |x, y| bool_to_f64(x < y))?,
         Ge { l, r } => num_binop(l, r, ctx, |x, y| bool_to_f64(x >= y))?,
@@ -485,6 +487,32 @@ mod tests {
         // row 2: A is largest? A=3,B=2 -> A largest; A rose (3>2) -> A true, B false.
         assert_eq!(got.data[[2, 0]], 1.0);
         assert_eq!(got.data[[2, 1]], 0.0);
+    }
+
+    #[test]
+    fn exit_when_and_quantile_row_via_spec() {
+        // entry: close > 1.5 (false,true,true on A=1,2,3), exit: always false.
+        // Hold from first entry edge (row1) onward for A; B never enters (0.5,1,2 all?).
+        // B: 0.5,1,2 — >1.5 only row2; entry edge at row2.
+        let entry = r#"{"op":"Gt","l":{"op":"Data","name":"close"},"r":{"op":"Const","value":1.5}}"#;
+        let exit = r#"{"op":"Lt","l":{"op":"Data","name":"close"},"r":{"op":"Const","value":0.0}}"#;
+        let ew = run_strategy(
+            &format!(r#"{{"op":"ExitWhen","entry":{entry},"exit":{exit}}}"#),
+            &ctx(),
+        )
+        .unwrap();
+        assert_eq!(ew.data[[0, 0]], 0.0);
+        assert_eq!(ew.data[[1, 0]], 1.0);
+        assert_eq!(ew.data[[2, 0]], 1.0);
+
+        let q = run_strategy(
+            r#"{"op":"QuantileRow","of":{"op":"Data","name":"close"},"c":0.5}"#,
+            &ctx(),
+        )
+        .unwrap();
+        assert_eq!(q.ncols(), 1);
+        // row0: A=1,B=4 → median 2.5 (linear interp)
+        assert!((q.data[[0, 0]] - 2.5).abs() < 1e-12);
     }
 
     #[test]

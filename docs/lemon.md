@@ -277,6 +277,7 @@ These take price/volume series explicitly (so you decide which series feed them)
 | `is_largest`  | `of`, `n`                                    | `1` for the `n` highest values in each row, else `0`.                   |
 | `is_smallest` | `of`, `n`                                    | `1` for the `n` lowest values in each row, else `0`.                    |
 | `rank`        | `of`, `pct?`=`true`, `ascending?`=`true`     | Cross-sectional rank per row. `pct=true` → `0..1` percentile; `ascending=true` → smallest ranks lowest. |
+| `quantile_row`| `of`, `c`                                    | Per-row quantile of `of` across symbols at level `c` (e.g. `0.5` = median). Result is one column named `quantile`. |
 | `mask`        | `of`, `by`                                   | Keep `of` only where `by` is true; drop (NaN) elsewhere.                |
 | `normalize_row` | `of`                                       | Scale each row so gross weight (Σ\|w\|) is 1 — explicit portfolio weights. NaN preserved; zero rows unchanged. |
 | `industry_rank`| `of`, `categories?`                         | Rank `of` within each industry; optionally restrict to `categories` (list of strings). |
@@ -289,6 +290,7 @@ These take price/volume series explicitly (so you decide which series feed them)
 | `sustain`    | `of`, `nwindow`, `nsatisfy?`                                                                           | `1` where `of` was true at least `nsatisfy` times within the last `nwindow` rows.             |
 | `is_entry`   | `of`                                                                                                   | `1` on the row where `of` turns false→true (rising edge).                                      |
 | `is_exit`    | `of`                                                                                                   | `1` on the row where `of` turns true→false (falling edge).                                     |
+| `exit_when`  | `entry`, `exit`                                                                                        | Hold true from an entry edge of `entry` until an exit edge of `entry` or `exit` is true (simpler than `hold_until`; no rotation cap). |
 | `hold_until` | `entry`, `exit`, `nstocks_limit?`, `rank?`, `stop_loss?`, `take_profit?`, `trail_stop?`, `trail_stop_activation?` | Stateful rotation: enter on `entry`, exit on `exit`, hold up to `nstocks_limit` names prioritized by `rank`, with optional stop/take/trailing exits. See gotchas: `rank` is an **expression**, the stop fields are **numbers**. |
 | `rebalance`  | `of`, `freq?`, `on?`                                                                                   | Hold `of`, refreshing on calendar `freq` (`"W"`/`"ME"`/`"QE"`/`"YE"`) or on rows where the `on` expression is true. |
 
@@ -320,10 +322,9 @@ These are not written as calls but are still nodes in the tree:
 | `close`, `pe`, …     | `Data`                             | A raw input series by name (bare identifier).  |
 | `42`, `0.5`, `5e8`   | `Const`                            | A constant scalar, broadcast across the panel. A bare number used as an operand is auto-promoted to a `Const`. |
 
-That is the complete surface: **52 op tags** total in the engine — the leaves
+That is the complete surface: **54 op tags** total in the engine — the leaves
 `Data` and `Const`, the 10 operator ops above, the prefix ops `Neg` and `not`,
-and the 38 function-style calls in the tables. (`exit_when` and `quantile_row` are engine-internal `Panel`
-operations and are **not** callable from lemon.)
+and the 40 function-style calls in the tables.
 
 ---
 

@@ -750,6 +750,50 @@
         },
         {
           "additionalProperties": false,
+          "description": "Hold true from an entry edge of `entry` until an exit edge (or `exit` is true).",
+          "properties": {
+            "entry": {
+              "$ref": "#/$defs/Expr"
+            },
+            "exit": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "ExitWhen"
+            }
+          },
+          "required": [
+            "op",
+            "entry",
+            "exit"
+          ],
+          "title": "ExitWhen",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Per-row quantile of `of` across symbols at level `c` (e.g. 0.5 = median); one-column result.",
+          "properties": {
+            "c": {
+              "type": "number"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "QuantileRow"
+            }
+          },
+          "required": [
+            "op",
+            "of",
+            "c"
+          ],
+          "title": "QuantileRow",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
           "description": "Ceiling of `of`.",
           "properties": {
             "of": {

@@ -138,6 +138,13 @@ pub enum Expr {
     IsEntry { of: Box<Expr> },
     /// 1 on the row where `of` turns true→false (falling edge).
     IsExit { of: Box<Expr> },
+    /// Hold true from an entry edge until an exit edge (or the `exit` panel is true).
+    ExitWhen {
+        entry: Box<Expr>,
+        exit: Box<Expr>,
+    },
+    /// Per-row quantile of `of` across symbols; collapses to one column (`quantile`).
+    QuantileRow { of: Box<Expr>, c: f64 },
     /// 1 where `l` is greater than `r`, else 0.
     Gt { l: Box<Expr>, r: Box<Expr> },
     /// 1 where `l` is less than `r`, else 0.

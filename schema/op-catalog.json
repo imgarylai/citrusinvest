@@ -685,6 +685,44 @@
     "args": [
       {
         "kind": "expr",
+        "name": "entry",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "exit",
+        "required": true
+      }
+    ],
+    "description": "Hold true from an entry edge of `entry` until an exit edge (or `exit` is true).",
+    "form": "function",
+    "name": "exit_when",
+    "tag": "ExitWhen"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "c",
+        "required": true
+      }
+    ],
+    "description": "Per-row quantile of `of` across symbols at level `c` (e.g. 0.5 = median); one-column result.",
+    "form": "function",
+    "name": "quantile_row",
+    "tag": "QuantileRow"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
         "name": "of",
         "required": true
       }

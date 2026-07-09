@@ -314,6 +314,22 @@ static ROWS: &[Row] = &[
         desc: "1 on the row where `of` turns true->false (falling edge).",
     },
     Row {
+        names: &["exit_when"],
+        sig: OpSig {
+            tag: "ExitWhen",
+            fields: &[Expr("entry"), Expr("exit")],
+        },
+        desc: "Hold true from an entry edge of `entry` until an exit edge (or `exit` is true).",
+    },
+    Row {
+        names: &["quantile_row"],
+        sig: OpSig {
+            tag: "QuantileRow",
+            fields: &[Expr("of"), Num("c")],
+        },
+        desc: "Per-row quantile of `of` across symbols at level `c` (e.g. 0.5 = median); one-column result.",
+    },
+    Row {
         names: &["ceil"],
         sig: OpSig {
             tag: "Ceil",
@@ -565,6 +581,8 @@ pub static ALL_OP_TAGS: &[&str] = &[
     "Sustain",
     "IsEntry",
     "IsExit",
+    "ExitWhen",
+    "QuantileRow",
     "Gt",
     "Lt",
     "Ge",

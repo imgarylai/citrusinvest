@@ -37,12 +37,13 @@ boolean "hold this symbol" panel or a selection/rotation.
 `obv(close,volume)` · `mfi(high,low,close,volume,n)` · `vwap(high,low,close,volume,n)`.
 
 **Cross-section & selection** (per row, across symbols): `is_largest(of, n)` / `is_smallest(of, n)`
-(top/bottom n) · `rank(of, pct?=true, ascending?=true)` (percentile rank) · `mask(of, by)` (keep
+(top/bottom n) · `rank(of, pct?=true, ascending?=true)` (percentile rank) ·
+`quantile_row(of, c)` (per-row quantile, e.g. `c=0.5` median) · `mask(of, by)` (keep
 `of` where `by` is true) · `normalize_row(of)` (scale each row to unit gross weight — explicit
 portfolio weights, e.g. inverse-vol: `normalize_row(sig / std(close, 20))`).
 
 **Streaks, edges & rotation**: `sustain(of, nwindow, nsatisfy?)` · `is_entry(of)` / `is_exit(of)`
-(rising/falling edge) · `hold_until(entry, exit, nstocks_limit?, rank?, stop_loss?, take_profit?,
+(rising/falling edge) · `exit_when(entry, exit)` · `hold_until(entry, exit, nstocks_limit?, rank?, stop_loss?, take_profit?,
 trail_stop?, trail_stop_activation?)` (stateful; `rank` is an expression, the stops are numbers) ·
 `rebalance(of, freq?, on?)` (`freq` = `"W"`/`"ME"`/`"QE"`/`"YE"`).
 
