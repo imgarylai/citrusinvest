@@ -81,6 +81,21 @@ pub(crate) fn load_ctx(
             .map_err(|e| e.to_string())?;
         panels.insert(price_key.to_string(), px);
     }
+    // Execution-layer stops need OHLC (open for gap fills, high/low for the
+    // touched trigger); load them when any stop is set.
+    if cfg.stops.is_active() {
+        for (name, field) in [
+            ("open", Field::AdjOpen),
+            ("high", Field::AdjHigh),
+            ("low", Field::AdjLow),
+        ] {
+            if !panels.contains_key(name) {
+                let p = load_panel(&src, &syms, field, from, to, PRICES_DIR)
+                    .map_err(|e| e.to_string())?;
+                panels.insert(name.to_string(), p);
+            }
+        }
+    }
     if (cfg.max_participation > 0.0 || cfg.impact_coef > 0.0) && cfg.initial_capital > 0.0 {
         let volume = load_panel(&src, &syms, Field::Volume, from, to, PRICES_DIR)
             .map_err(|e| e.to_string())?;
@@ -430,6 +445,7 @@ fn run_windowed(
     let run = yuzu_core::backtest::run_with_initial(
         &positions,
         &prices,
+        None, // open (unused by walk-forward; stops here fall back to level fills)
         None,
         None,
         volume.as_ref(),

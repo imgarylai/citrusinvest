@@ -1226,7 +1226,7 @@
         },
         {
           "additionalProperties": false,
-          "description": "Stateful rotation: enter on `entry`, exit on `exit`, hold up to `nstocks_limit` (prioritised by `rank`), with optional stop_loss/take_profit/trail_stop/trail_stop_activation.",
+          "description": "Stateful rotation: enter on `entry`, exit on `exit`, hold up to `nstocks_limit` (prioritised by `rank`). Price stops live in the backtest config (stop_loss/take_profit/trailing), not in the op.",
           "properties": {
             "entry": {
               "$ref": "#/$defs/Expr"
@@ -1242,18 +1242,6 @@
             },
             "rank": {
               "$ref": "#/$defs/Expr"
-            },
-            "stop_loss": {
-              "type": "number"
-            },
-            "take_profit": {
-              "type": "number"
-            },
-            "trail_stop": {
-              "type": "number"
-            },
-            "trail_stop_activation": {
-              "type": "number"
             }
           },
           "required": [

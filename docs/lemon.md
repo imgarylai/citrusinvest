@@ -317,7 +317,7 @@ These take price/volume series explicitly (so you decide which series feed them)
 | `is_entry`   | `of`                                                                                                   | `1` on the row where `of` turns false→true (rising edge).                                      |
 | `is_exit`    | `of`                                                                                                   | `1` on the row where `of` turns true→false (falling edge).                                     |
 | `exit_when`  | `entry`, `exit`                                                                                        | Hold true from an entry edge of `entry` until an exit edge of `entry` or `exit` is true (simpler than `hold_until`; no rotation cap). |
-| `hold_until` | `entry`, `exit`, `nstocks_limit?`, `rank?`, `stop_loss?`, `take_profit?`, `trail_stop?`, `trail_stop_activation?` | Stateful rotation: enter on `entry`, exit on `exit`, hold up to `nstocks_limit` names prioritized by `rank`, with optional stop/take/trailing exits. See gotchas: `rank` is an **expression**, the stop fields are **numbers**. |
+| `hold_until` | `entry`, `exit`, `nstocks_limit?`, `rank?` | Stateful rotation: enter on `entry`, exit on `exit`, hold up to `nstocks_limit` names prioritized by `rank`. **Price stops** (stop-loss / take-profit / trailing) are **not** here — they live in the backtest config (`BacktestConfig::stops`), applied by the NAV loop. `rank` is an **expression**. |
 | `rebalance`  | `of`, `freq?`, `on?`                                                                                   | Hold `of`, refreshing on calendar `freq` (`"W"`/`"ME"`/`"QE"`/`"YE"`) or on rows where the `on` expression is true. |
 
 ### Neutralization
@@ -444,10 +444,10 @@ for size and raw cheapness."
   - `stoch_d(...)`'s `d` defaults to `3`.
   - `neutralize(...)` and `neutralize_industry(...)` default `add_const=true`
     (an intercept is added to the regression).
-- **`hold_until` argument types are mixed.** Its `rank` field is an
-  **expression** (e.g. `rank=rank(-pe)`), but `stop_loss`, `take_profit`,
-  `trail_stop`, and `trail_stop_activation` are **plain numbers**. `entry` and
-  `exit` are expressions; `nstocks_limit` is a number.
+- **`hold_until` is selection only.** `entry`, `exit`, and `rank` are
+  expressions; `nstocks_limit` is a number. **Price stops are not part of the
+  op** — set `stop_loss` / `take_profit` / `trail_stop` on the backtest config
+  (they apply to any strategy, not just `hold_until`).
 - **A strategy must be an op node.** A bare `42` or `"ME"` at the top level is
   rejected — the top-level expression has to produce a signal.
 - **`n`-style window arguments are numbers, not expressions.** `sma(close, x)`

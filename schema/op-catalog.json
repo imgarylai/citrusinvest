@@ -1150,29 +1150,9 @@
         "kind": "expr",
         "name": "rank",
         "required": false
-      },
-      {
-        "kind": "number",
-        "name": "stop_loss",
-        "required": false
-      },
-      {
-        "kind": "number",
-        "name": "take_profit",
-        "required": false
-      },
-      {
-        "kind": "number",
-        "name": "trail_stop",
-        "required": false
-      },
-      {
-        "kind": "number",
-        "name": "trail_stop_activation",
-        "required": false
       }
     ],
-    "description": "Stateful rotation: enter on `entry`, exit on `exit`, hold up to `nstocks_limit` (prioritised by `rank`), with optional stop_loss/take_profit/trail_stop/trail_stop_activation.",
+    "description": "Stateful rotation: enter on `entry`, exit on `exit`, hold up to `nstocks_limit` (prioritised by `rank`). Price stops live in the backtest config (stop_loss/take_profit/trailing), not in the op.",
     "form": "function",
     "name": "hold_until",
     "tag": "HoldUntil"

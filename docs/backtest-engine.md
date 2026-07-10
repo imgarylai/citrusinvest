@@ -178,7 +178,7 @@ below names ops by their engine behavior; the DSL surface names map through
 | `is_largest(n)` / `is_smallest(n)` | per-row top/bottom `n` over non-NaN cells; NaN never selected; ties break by column order (stable)                    |
 | `is_entry` / `is_exit`             | rising / falling edge of a bool series (`shift` fills `false`)                                                        |
 | `sustain(nwindow, nsatisfy)`       | `rolling(nwindow).sum() >= nsatisfy` over a bool frame                                                                |
-| `hold_until(exit, …)`              | rank-priority rotation with `nstocks_limit` + optional stop_loss / take_profit / trail_stop (the one sequential loop) |
+| `hold_until(exit, …)`              | rank-priority rotation with `nstocks_limit` (the one sequential loop). Price stops are a NAV-loop config feature, not part of this op |
 | `rebalance(freq)`                  | downsample to last obs per W / ME / QE / YE period (or explicit dates)                                                     |
 | `rank(pct, ascending)`             | cross-sectional rank (axis=1), average ties                                                                           |
 | `winsorize` / `zscore` / `bucket` / `demean` | per-row cross-section preprocess (clip / standardize / q-buckets / subtract mean)                           |
@@ -264,8 +264,9 @@ Coverage (the run also executes the tests):
 cargo llvm-cov --summary-only
 ```
 
-Every op family is golden-tested — including the price-stop paths in
-`hold_until` (`stop_loss` / `take_profit` / `trail_stop`).
+Every op family is golden-tested. Execution-layer **stops** (`BacktestConfig::stops`)
+are unit-tested in `backtest.rs` (touched / gapped / close-fill / take-profit /
+trailing / short / re-entry-block).
 
 > **Fixture note:** ops that change the row count (`rebalance`) or column count
 > (`quantile_row`) write `expected_dates` / `expected_symbols`; the harness reads
@@ -676,8 +677,30 @@ benchmark, bootstrap) apply to these commands too.
 
 These items are explicit scope cuts, not gaps:
 
-- **Advanced cost semantics** (`touched_exit` / `retain_cost_when_rebalance` / `stop_trading_next_period`) — the engine currently uses the simplified model described above.
+- **Advanced cost semantics** (`retain_cost_when_rebalance` / `stop_trading_next_period`) — two remaining opt-in NAV-loop flags; the simplified cost model is otherwise as described above. (`touched_exit` shipped — see **Execution-layer stops** below.)
 - **Portfolio optimization** (mean-variance, risk parity, etc.).
+
+### Execution-layer stops (`BacktestConfig::stops`)
+
+Stop-loss / take-profit / trailing stops are an **execution** feature, not a
+strategy op — the NAV loop applies them to *any* position book, tracking each
+holding from its entry price. Off by default (`StopConfig` all-`INF` sentinels),
+so an unset config leaves every equity curve unchanged.
+
+- **Trigger & fill** (`StopFill`): `Touched` (default) triggers on the intraday
+  range and fills at the stop level, or at the day's **open** when the bar
+  gapped through it (`min(open, level)` long / `max` short — a worse-than-stop
+  fill you couldn't avoid). `Close` triggers on the close and fills there (an
+  "end-of-day rule" style). A same-day stop-loss + take-profit double-touch
+  assumes the stop-loss first (conservative; unavoidable without intraday data).
+- **Trailing** keys off the peak return established on *prior* days (a wide
+  up-day can't self-trip), and arms only after `trail_stop_activation`.
+- **After a stop** the name goes to cash and re-entry is blocked until the
+  position signal drops and re-adds it — so a stopped `hold_until` slot refills
+  only at the next rebalance (more realistic than same-day refill).
+- **Needs OHLC**: `Touched` reads open/high/low. `run_backtest` picks up
+  `open`/`high`/`low` panels from the context; the CLI (`--stop-loss` /
+  `--take-profit` / `--trail-stop` / `--stop-fill`) loads them automatically.
 
 Per-trade **MAE / MFE** (maximum adverse / favorable excursion) and factor
 **neutralization** (`neutralize` / `neutralize_industry` / `industry_rank` /

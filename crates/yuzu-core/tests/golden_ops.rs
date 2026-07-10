@@ -190,46 +190,10 @@ fn exit_when_matches_reference() {
     assert_panel_eq(&cond.exit_when(&exit), &expected("exit_when"), 0.0);
 }
 
-#[test]
-fn hold_until_stops_matches_reference() {
-    // take_profit fires for AAA on day 2 (130/90 = 1.44 > 1.2).
-    let v = load_golden("hold_until_stops");
-    let entry = panel_from_json(&v, "input");
-    let exit = panel_from_json(&v, "exit");
-    let price = panel_from_json(&v, "price");
-    let opts = HoldUntilOpts {
-        nstocks_limit: Some(3),
-        stop_loss: 0.1,
-        take_profit: 0.2,
-        price: Some(price),
-        ..Default::default()
-    };
-    assert_panel_eq(
-        &entry.hold_until(&exit, &opts),
-        &panel_from_json(&v, "expected"),
-        0.0,
-    );
-}
-
-#[test]
-fn hold_until_trail_stop_matches_reference() {
-    let v = load_golden("hold_until_trail");
-    let entry = panel_from_json(&v, "input");
-    let exit = panel_from_json(&v, "exit");
-    let price = panel_from_json(&v, "price");
-    let opts = HoldUntilOpts {
-        nstocks_limit: Some(3),
-        trail_stop: 0.1,
-        trail_stop_activation: 0.05,
-        price: Some(price),
-        ..Default::default()
-    };
-    assert_panel_eq(
-        &entry.hold_until(&exit, &opts),
-        &panel_from_json(&v, "expected"),
-        0.0,
-    );
-}
+// Price stops moved out of `hold_until` into the execution layer
+// (`BacktestConfig::stops`); their behavior is covered by the stop tests in
+// `backtest.rs` (touched/gap/close/trailing/short/re-entry). The old
+// op-level `hold_until_stops` / `hold_until_trail` goldens are retired.
 
 #[test]
 fn vol_target_matches_reference() {

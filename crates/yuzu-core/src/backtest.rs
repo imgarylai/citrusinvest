@@ -36,6 +36,68 @@ pub struct Trade {
     pub side: TradeSide,
 }
 
+/// How a triggered stop fills. `Touched` (the realistic default) fills at the
+/// stop level when the bar's range straddled it, or at the day's **open** when
+/// the bar gapped through it (a worse-than-stop fill you couldn't avoid).
+/// `Close` fills at the day's close — the "end-of-day rule" execution style.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum StopFill {
+    #[default]
+    Touched,
+    Close,
+}
+
+/// Execution-layer stops applied by the NAV loop to whatever position book it is
+/// given (not just `hold_until`). Each holding is tracked from its entry price;
+/// when a day's prices cross a level the position is force-exited to cash at the
+/// [`StopFill`] price and re-entry into that name is blocked until the position
+/// signal drops and re-adds it. All-off by default, so an unset `StopConfig`
+/// leaves the equity curve (and every golden) unchanged.
+#[derive(Debug, Clone, Copy)]
+pub struct StopConfig {
+    /// Exit when the return from entry falls to `−stop_loss` (e.g. `0.08` = −8%).
+    /// `f64::NEG_INFINITY` (the default) disables it.
+    pub stop_loss: f64,
+    /// Exit when the return from entry rises to `+take_profit`.
+    /// `f64::INFINITY` (the default) disables it.
+    pub take_profit: f64,
+    /// Exit when the return drops `trail_stop` below the best return seen since
+    /// entry (a trailing stop). `f64::INFINITY` (the default) disables it.
+    pub trail_stop: f64,
+    /// The trailing stop only arms once the return since entry first reaches
+    /// `+trail_stop_activation`. `0.0` arms immediately.
+    pub trail_stop_activation: f64,
+    /// How a triggered stop fills (default [`StopFill::Touched`]).
+    pub fill: StopFill,
+}
+
+impl Default for StopConfig {
+    fn default() -> Self {
+        StopConfig {
+            stop_loss: f64::NEG_INFINITY,
+            take_profit: f64::INFINITY,
+            trail_stop: f64::INFINITY,
+            trail_stop_activation: 0.0,
+            fill: StopFill::Touched,
+        }
+    }
+}
+
+impl StopConfig {
+    /// True when no stop level is set — the NAV loop skips the stop pass entirely.
+    fn is_off(&self) -> bool {
+        self.stop_loss == f64::NEG_INFINITY
+            && self.take_profit == f64::INFINITY
+            && self.trail_stop == f64::INFINITY
+    }
+
+    /// True when at least one stop level is set. Callers use this to decide
+    /// whether to load the OHLC panels the `Touched` fill needs.
+    pub fn is_active(&self) -> bool {
+        !self.is_off()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct BacktestConfig {
     pub fee_ratio: f64,
@@ -89,6 +151,9 @@ pub struct BacktestConfig {
     /// default) omits the block. The NAV loop ignores it — it is a report-only
     /// concern and does not change the full-sample equity curve.
     pub live_performance_start: Option<i32>,
+    /// Execution-layer stops (stop-loss / take-profit / trailing). All-off by
+    /// default; see [`StopConfig`]. Requires the OHLC panels for `Touched` fills.
+    pub stops: StopConfig,
 }
 
 impl Default for BacktestConfig {
@@ -107,6 +172,7 @@ impl Default for BacktestConfig {
             bootstrap_samples: 0,
             bootstrap_block: 0,
             live_performance_start: None,
+            stops: StopConfig::default(),
         }
     }
 }
@@ -179,6 +245,112 @@ fn scan_delistings(px: &Panel, delist_after: usize) -> Option<(Array2<bool>, Arr
         }
     }
     Some((dead, confirm))
+}
+
+/// Fill price for a stop at `level` given the day's `open`, honoring gaps.
+/// `adverse` = a stop-loss/trailing exit (price moved against you): a gap makes
+/// the fill *worse* → `min(open, level)` long / `max(open, level)` short. A
+/// favorable (take-profit) exit gaps in your favor → `max`/`min` swapped. NaN
+/// open falls back to the level.
+fn gap_fill(open: f64, level: f64, dir: f64, adverse: bool) -> f64 {
+    if open.is_nan() {
+        return level;
+    }
+    let long = dir >= 0.0;
+    // adverse-long / favorable-short → take the lower; the other two → higher.
+    if adverse == long {
+        open.min(level)
+    } else {
+        open.max(level)
+    }
+}
+
+/// Among two triggered adverse-side fills, the one hit **first** as price moved
+/// against the position: the higher price for a long, the lower for a short.
+fn first_touched(a: Option<f64>, b: f64, dir: f64) -> f64 {
+    match a {
+        None => b,
+        Some(a) if dir >= 0.0 => a.max(b),
+        Some(a) => a.min(b),
+    }
+}
+
+/// Evaluate the stops for one held day. `entry` is the entry price, `dir` the
+/// position sign (+1 long / −1 short); `peak` (best favorable return ratio since
+/// entry) is updated in place. Returns the fill price when a stop triggers.
+/// [`StopFill::Close`] triggers on the close and fills there; [`StopFill::Touched`]
+/// triggers on the intraday range and fills at the level (or the gapped open).
+#[allow(clippy::too_many_arguments)]
+fn check_stop(
+    entry: f64,
+    dir: f64,
+    peak: &mut f64,
+    o: f64,
+    h: f64,
+    l: f64,
+    c: f64,
+    cfg: &StopConfig,
+) -> Option<f64> {
+    if entry == 0.0 || entry.is_nan() {
+        return None;
+    }
+    let signed = |p: f64| dir * (p / entry - 1.0); // return in the position's favor
+    let sl_on = cfg.stop_loss != f64::NEG_INFINITY;
+    let tp_on = cfg.take_profit != f64::INFINITY;
+    let tr_on = cfg.trail_stop != f64::INFINITY;
+
+    match cfg.fill {
+        StopFill::Close => {
+            if c.is_nan() {
+                return None;
+            }
+            let rc = signed(c);
+            *peak = peak.max(rc);
+            let hit = (sl_on && rc <= -cfg.stop_loss.abs())
+                || (tp_on && rc >= cfg.take_profit.abs())
+                || (tr_on
+                    && *peak >= cfg.trail_stop_activation.abs()
+                    && rc <= *peak - cfg.trail_stop.abs());
+            hit.then_some(c)
+        }
+        StopFill::Touched => {
+            if h.is_nan() || l.is_nan() {
+                return None;
+            }
+            let (fav_price, adv_price) = if dir >= 0.0 { (h, l) } else { (l, h) };
+            let best = signed(fav_price);
+            let worst = signed(adv_price);
+            // The trailing stop keys off the peak established on PRIOR days, not
+            // today's high — otherwise a wide up-day would self-trip (we can't
+            // know from OHLC whether the high or the low came first intraday).
+            let prior_peak = *peak;
+            *peak = peak.max(best);
+            let level = |t: f64| entry * (1.0 + dir * t); // price at signed-return t
+
+            // Adverse-side stops (stop-loss, trailing) take priority; fill at the
+            // first-touched level, gap-adjusted to the open.
+            let mut adverse: Option<f64> = None;
+            if sl_on && worst <= -cfg.stop_loss.abs() {
+                let f = gap_fill(o, level(-cfg.stop_loss.abs()), dir, true);
+                adverse = Some(first_touched(adverse, f, dir));
+            }
+            if tr_on
+                && prior_peak >= cfg.trail_stop_activation.abs()
+                && worst <= prior_peak - cfg.trail_stop.abs()
+            {
+                let f = gap_fill(o, level(prior_peak - cfg.trail_stop.abs()), dir, true);
+                adverse = Some(first_touched(adverse, f, dir));
+            }
+            if adverse.is_some() {
+                return adverse;
+            }
+            // Take-profit only when no adverse stop fired this day.
+            if tp_on && best >= cfg.take_profit.abs() {
+                return Some(gap_fill(o, level(cfg.take_profit.abs()), dir, false));
+            }
+            None
+        }
+    }
 }
 
 /// Project `other` onto `grid`'s (dates × symbols), NaN where a cell is absent.
@@ -276,7 +448,7 @@ pub fn run(
     volume: Option<&Panel>,
     cfg: &BacktestConfig,
 ) -> BacktestRun {
-    run_with_initial(positions, prices, high, low, volume, cfg, None)
+    run_with_initial(positions, prices, None, high, low, volume, cfg, None)
 }
 
 /// Like [`run`], but the book starts holding `initial_weights` (symbol → weight)
@@ -285,9 +457,11 @@ pub fn run(
 /// same names doesn't pay a full entry cost at every seam. Keyed by symbol, so
 /// it survives a differing column order / universe between segments; symbols
 /// absent from the map (or from this segment's panel) start flat.
+#[allow(clippy::too_many_arguments)]
 pub fn run_with_initial(
     positions: &Panel,
     prices: &Panel,
+    open: Option<&Panel>,
     high: Option<&Panel>,
     low: Option<&Panel>,
     volume: Option<&Panel>,
@@ -295,6 +469,7 @@ pub fn run_with_initial(
     initial_weights: Option<&HashMap<String, f64>>,
 ) -> BacktestRun {
     let (pos, px) = align(positions, prices);
+    let op = conform_to(&px, open);
     let hi = conform_to(&px, high);
     let lo = conform_to(&px, low);
     // dollar volume per cell (NaN where volume is absent); only materialized
@@ -313,6 +488,17 @@ pub fn run_with_initial(
     let nrows = px.nrows();
     let dates = px.dates.clone();
     let delist = scan_delistings(&px, cfg.delist_after);
+
+    // Execution-layer stops: track each holding from its entry price and
+    // force-exit at the stop fill; `stopped[r,c]` marks the exit day (fill in
+    // `stop_fill`), and a stopped name stays flat until the raw signal resets.
+    let stops_on = !cfg.stops.is_off();
+    let mut stopped = Array2::from_elem((nrows, n), false);
+    let mut stop_fill = Array2::from_elem((nrows, n), f64::NAN);
+    let mut entry_px = vec![f64::NAN; n]; // entry price of the current holding
+    let mut entry_dir = vec![0.0_f64; n]; // +1 long / −1 short
+    let mut peak = vec![f64::NAN; n]; // best favorable return ratio since entry
+    let mut blocked = vec![false; n]; // stopped-out, awaiting a signal reset
 
     // Forward-fill positions down rows; record rebalance days (the ffilled raw
     // allocation changed) and the row-normalized target weights. Weights are only
@@ -336,6 +522,45 @@ pub fn run_with_initial(
                 if let Some((dead, _)) = &delist {
                     if dead[[r, c]] {
                         last[c] = 0.0;
+                    }
+                }
+                if stops_on {
+                    let held = last[c] != 0.0;
+                    if blocked[c] {
+                        if !held {
+                            blocked[c] = false; // signal reset → future re-entry allowed
+                        }
+                        last[c] = 0.0; // stay flat while blocked
+                        continue;
+                    }
+                    if !held {
+                        entry_px[c] = f64::NAN; // exited normally → reset tracking
+                        continue;
+                    }
+                    let dir = last[c].signum();
+                    if entry_px[c].is_nan() || entry_dir[c] != dir {
+                        entry_px[c] = px.data[[r, c]]; // fresh entry (or flip) at close
+                        entry_dir[c] = dir;
+                        peak[c] = 0.0;
+                    }
+                    let o = op.as_ref().map_or(f64::NAN, |m| m[[r, c]]);
+                    let hh = hi.as_ref().map_or(f64::NAN, |m| m[[r, c]]);
+                    let ll = lo.as_ref().map_or(f64::NAN, |m| m[[r, c]]);
+                    if let Some(f) = check_stop(
+                        entry_px[c],
+                        dir,
+                        &mut peak[c],
+                        o,
+                        hh,
+                        ll,
+                        px.data[[r, c]],
+                        &cfg.stops,
+                    ) {
+                        stopped[[r, c]] = true;
+                        stop_fill[[r, c]] = f;
+                        last[c] = 0.0; // force-exit this day
+                        blocked[c] = true;
+                        entry_px[c] = f64::NAN;
                     }
                 }
             }
@@ -399,7 +624,12 @@ pub fn run_with_initial(
         let mut drift = vec![0.0_f64; n];
         for c in 0..n {
             let p0 = px.data[[r - 1, c]];
-            let p1 = px.data[[r, c]];
+            // A stop exits at its fill price, not the close.
+            let p1 = if stops_on && stopped[[r, c]] {
+                stop_fill[[r, c]]
+            } else {
+                px.data[[r, c]]
+            };
             let ret = if p0.is_nan() || p1.is_nan() || p0 == 0.0 {
                 0.0
             } else {
@@ -475,8 +705,13 @@ pub fn run_with_initial(
                     .as_ref()
                     .map(|(_, confirm)| confirm[[r, c]])
                     .unwrap_or(false);
+                // A stop exit is a real trade (pays exit costs) but fills at its
+                // stop price; a delisting fills at last-valid × (1 − haircut).
+                let stopped_here = stops_on && stopped[[r, c]];
                 let xp = if delisted {
                     last_valid_px * (1.0 - cfg.delist_haircut)
+                } else if stopped_here {
+                    stop_fill[[r, c]]
                 } else {
                     px.data[[r, c]]
                 };
@@ -1078,13 +1313,13 @@ mod tests {
 
         // Carrying the identical book -> zero seam turnover, no day-0 cost.
         let carried = HashMap::from([("A".to_string(), 1.0)]);
-        let warm = run_with_initial(&pos, &px, None, None, None, &cfg, Some(&carried));
+        let warm = run_with_initial(&pos, &px, None, None, None, None, &cfg, Some(&carried));
         assert!((warm.equity[0] - 1.0).abs() < 1e-12, "no seam cost");
         assert!((warm.equity[2] - 1.0).abs() < 1e-12);
 
         // Carrying half the target -> turnover 0.5, so only half the entry fee.
         let half = HashMap::from([("A".to_string(), 0.5)]);
-        let partial = run_with_initial(&pos, &px, None, None, None, &cfg, Some(&half));
+        let partial = run_with_initial(&pos, &px, None, None, None, None, &cfg, Some(&half));
         assert!((partial.equity[0] - (1.0 - 0.01 * 0.5)).abs() < 1e-12);
 
         // A carried symbol that isn't in this segment's target still costs to
@@ -1107,9 +1342,324 @@ mod tests {
             None,
             None,
             None,
+            None,
             &cfg,
             Some(&HashMap::from([("A".to_string(), 1.0)])),
         );
         assert!((cross.equity[0] - (1.0 - 0.01 * 2.0)).abs() < 1e-12);
+    }
+
+    // ---- execution-layer stops (#20) ---------------------------------------
+
+    /// Build (pos, close, open, high, low) panels from row-wise OHLC for one
+    /// symbol held long every day.
+    fn stop_fixture(
+        ohlc: &[(f64, f64, f64, f64)], // (open, high, low, close)
+    ) -> (Panel, Panel, Panel, Panel, Panel) {
+        use crate::panel::Panel;
+        let dates: Vec<i32> = (0..ohlc.len() as i32).map(|i| 20240102 + i).collect();
+        let col = |f: fn(&(f64, f64, f64, f64)) -> f64| {
+            Panel::from_rows(
+                dates.clone(),
+                vec!["A".into()],
+                ohlc.iter().map(|x| vec![f(x)]).collect(),
+            )
+            .unwrap()
+        };
+        let pos = Panel::from_rows(
+            dates.clone(),
+            vec!["A".into()],
+            ohlc.iter().map(|_| vec![1.0]).collect(),
+        )
+        .unwrap();
+        (pos, col(|x| x.3), col(|x| x.0), col(|x| x.1), col(|x| x.2))
+    }
+
+    #[test]
+    fn touched_stop_loss_fills_at_the_level_not_the_close() {
+        // Entry close 100; day1 low 90 touches the 8% stop (level 92) while the
+        // open (98) is above it -> fill at 92, not the close (95).
+        let (pos, close, open, high, low) =
+            stop_fixture(&[(100.0, 100.0, 100.0, 100.0), (98.0, 99.0, 90.0, 95.0)]);
+        let cfg = BacktestConfig {
+            stops: StopConfig {
+                stop_loss: 0.08,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let r = run_with_initial(
+            &pos,
+            &close,
+            Some(&open),
+            Some(&high),
+            Some(&low),
+            None,
+            &cfg,
+            None,
+        );
+        assert!(
+            (r.equity[1] - 0.92).abs() < 1e-12,
+            "fill at 92, got {}",
+            r.equity[1]
+        );
+        let t = &r.trades[0];
+        assert!((t.exit_price.unwrap() - 92.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn gapped_stop_fills_at_the_open() {
+        // Day1 gaps fully below the 92 stop (open 88) -> can't fill at 92; fills
+        // at the open 88 (worse than the stop).
+        let (pos, close, open, high, low) =
+            stop_fixture(&[(100.0, 100.0, 100.0, 100.0), (88.0, 89.0, 87.0, 88.0)]);
+        let cfg = BacktestConfig {
+            stops: StopConfig {
+                stop_loss: 0.08,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let r = run_with_initial(
+            &pos,
+            &close,
+            Some(&open),
+            Some(&high),
+            Some(&low),
+            None,
+            &cfg,
+            None,
+        );
+        assert!(
+            (r.equity[1] - 0.88).abs() < 1e-12,
+            "gap fill at open 88, got {}",
+            r.equity[1]
+        );
+    }
+
+    #[test]
+    fn close_fill_mode_triggers_and_fills_on_the_close() {
+        // Touched mode would fill at 92; Close mode instead needs the close to
+        // breach and fills there. Close 91 -> −9% ≤ −8% -> fill at 91.
+        let (pos, close, open, high, low) =
+            stop_fixture(&[(100.0, 100.0, 100.0, 100.0), (98.0, 99.0, 90.0, 91.0)]);
+        let cfg = BacktestConfig {
+            stops: StopConfig {
+                stop_loss: 0.08,
+                fill: StopFill::Close,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let r = run_with_initial(
+            &pos,
+            &close,
+            Some(&open),
+            Some(&high),
+            Some(&low),
+            None,
+            &cfg,
+            None,
+        );
+        assert!(
+            (r.equity[1] - 0.91).abs() < 1e-12,
+            "close fill at 91, got {}",
+            r.equity[1]
+        );
+    }
+
+    #[test]
+    fn take_profit_fills_at_the_level() {
+        // Day1 high 115 hits the +10% take-profit (level 110); open 108 below it
+        // -> fill at 110.
+        let (pos, close, open, high, low) =
+            stop_fixture(&[(100.0, 100.0, 100.0, 100.0), (108.0, 115.0, 107.0, 112.0)]);
+        let cfg = BacktestConfig {
+            stops: StopConfig {
+                take_profit: 0.10,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let r = run_with_initial(
+            &pos,
+            &close,
+            Some(&open),
+            Some(&high),
+            Some(&low),
+            None,
+            &cfg,
+            None,
+        );
+        assert!(
+            (r.equity[1] - 1.10).abs() < 1e-12,
+            "take-profit at 110, got {}",
+            r.equity[1]
+        );
+    }
+
+    #[test]
+    fn stopped_name_stays_flat_until_the_signal_resets() {
+        // Held days 0-1 (stops day1). Signal still on day2 → must stay flat
+        // (the +200 spike must NOT be earned). Signal drops day3, re-asserts
+        // day4 on a calm bar → a fresh trade opens.
+        use crate::panel::Panel;
+        let dates: Vec<i32> = (0..5).map(|i| 20240102 + i).collect();
+        let pos = Panel::from_rows(
+            dates.clone(),
+            vec!["A".into()],
+            vec![vec![1.0], vec![1.0], vec![1.0], vec![0.0], vec![1.0]],
+        )
+        .unwrap();
+        let mk = |v: Vec<f64>| {
+            Panel::from_rows(
+                dates.clone(),
+                vec!["A".into()],
+                v.into_iter().map(|x| vec![x]).collect(),
+            )
+            .unwrap()
+        };
+        let close = mk(vec![100.0, 95.0, 200.0, 100.0, 100.0]);
+        let open = mk(vec![100.0, 98.0, 190.0, 100.0, 100.0]);
+        let high = mk(vec![100.0, 99.0, 205.0, 100.0, 100.0]);
+        let low = mk(vec![100.0, 90.0, 190.0, 100.0, 100.0]);
+        let cfg = BacktestConfig {
+            stops: StopConfig {
+                stop_loss: 0.08,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let r = run_with_initial(
+            &pos,
+            &close,
+            Some(&open),
+            Some(&high),
+            Some(&low),
+            None,
+            &cfg,
+            None,
+        );
+        // day1: 92/100 = 0.92; day2-4: flat (the +200 spike is NOT earned).
+        assert!((r.equity[1] - 0.92).abs() < 1e-12);
+        assert!(
+            (r.equity[2] - 0.92).abs() < 1e-12,
+            "must be flat day2, got {}",
+            r.equity[2]
+        );
+        assert!((r.equity[4] - 0.92).abs() < 1e-12);
+        // Two trades: the stopped exit (day1) and the fresh re-entry on day4.
+        assert_eq!(r.trades.len(), 2, "expected a stopped exit + a re-entry");
+        let reentry = r.trades.iter().find(|t| t.entry_date == 20240106).unwrap();
+        assert!(reentry.exit_date.is_none(), "day4 re-entry is still open");
+    }
+
+    #[test]
+    fn trailing_stop_arms_and_ratchets() {
+        // Rise to +20% (arms the 10% trail once activation 5% passed), then a
+        // pullback whose low crosses trail level = peak(1.20) − 0.10 = 1.10 →
+        // level price 110. Day2 low 108 < 110, open 118 above → fill at 110.
+        let (pos, close, open, high, low) = stop_fixture(&[
+            (100.0, 100.0, 100.0, 100.0),
+            (105.0, 120.0, 104.0, 118.0), // peak 1.20
+            (118.0, 118.0, 108.0, 109.0), // pulls back through 110
+        ]);
+        let cfg = BacktestConfig {
+            stops: StopConfig {
+                trail_stop: 0.10,
+                trail_stop_activation: 0.05,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let r = run_with_initial(
+            &pos,
+            &close,
+            Some(&open),
+            Some(&high),
+            Some(&low),
+            None,
+            &cfg,
+            None,
+        );
+        // day1 close 118 -> 1.18; day2 exits at 110 -> ×(110/118).
+        assert!(
+            (r.equity[2] - 1.10).abs() < 1e-9,
+            "trail exit at 110, got {}",
+            r.equity[2]
+        );
+    }
+
+    #[test]
+    fn short_position_stop_loss_triggers_on_a_rise() {
+        // Short entry at 100; stop_loss 8% for a short triggers when price RISES
+        // to 108. Day1 high 110 touches; open 102 below -> fill at 108; a short
+        // loses as price rises, so equity < 1.
+        use crate::panel::Panel;
+        let dates: Vec<i32> = (0..2).map(|i| 20240102 + i).collect();
+        let pos = Panel::from_rows(
+            dates.clone(),
+            vec!["A".into()],
+            vec![vec![-1.0], vec![-1.0]],
+        )
+        .unwrap();
+        let mk = |v: Vec<f64>| {
+            Panel::from_rows(
+                dates.clone(),
+                vec!["A".into()],
+                v.into_iter().map(|x| vec![x]).collect(),
+            )
+            .unwrap()
+        };
+        let close = mk(vec![100.0, 106.0]);
+        let open = mk(vec![100.0, 102.0]);
+        let high = mk(vec![100.0, 110.0]);
+        let low = mk(vec![100.0, 101.0]);
+        let cfg = BacktestConfig {
+            stops: StopConfig {
+                stop_loss: 0.08,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let r = run_with_initial(
+            &pos,
+            &close,
+            Some(&open),
+            Some(&high),
+            Some(&low),
+            None,
+            &cfg,
+            None,
+        );
+        // short return day1 = w(−1)·(108/100 − 1) = −0.08 -> equity 0.92.
+        assert!(
+            (r.equity[1] - 0.92).abs() < 1e-12,
+            "short stop at 108, got {}",
+            r.equity[1]
+        );
+    }
+
+    #[test]
+    fn stops_off_by_default_leaves_the_curve_unchanged() {
+        // A drop that would trip an 8% stop earns the full close-to-close move
+        // when stops are off (default) — proving the feature is opt-in.
+        let (pos, close, open, high, low) =
+            stop_fixture(&[(100.0, 100.0, 100.0, 100.0), (98.0, 99.0, 90.0, 95.0)]);
+        let r = run_with_initial(
+            &pos,
+            &close,
+            Some(&open),
+            Some(&high),
+            Some(&low),
+            None,
+            &BacktestConfig::default(),
+            None,
+        );
+        assert!(
+            (r.equity[1] - 0.95).abs() < 1e-12,
+            "no stop -> close 95, got {}",
+            r.equity[1]
+        );
     }
 }

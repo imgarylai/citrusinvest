@@ -1,34 +1,17 @@
 //! `hold_until`: rank-priority rotation — the one genuinely sequential loop.
-//! Rank-priority rotation with optional price stops:
-//! select up to `nstocks_limit` names each day by entry-rank + held-position priority,
-//! with optional stop_loss / take_profit / trail_stop exits.
+//! Select up to `nstocks_limit` names each day by entry-rank + held-position
+//! priority. Price stops (stop-loss / take-profit / trailing) are **not** here —
+//! they moved to the execution layer (`BacktestConfig::stops`, see `backtest.rs`),
+//! so `hold_until` is pure selection.
 
 use crate::align::align;
 use crate::panel::{bool_to_f64, is_true, Panel};
-use ndarray::{Array1, Array2};
+use ndarray::Array2;
 
+#[derive(Default)]
 pub struct HoldUntilOpts {
     pub nstocks_limit: Option<usize>,
-    pub stop_loss: f64,
-    pub take_profit: f64,
-    pub trail_stop: f64,
-    pub trail_stop_activation: f64,
     pub rank: Option<Panel>,
-    pub price: Option<Panel>,
-}
-
-impl Default for HoldUntilOpts {
-    fn default() -> Self {
-        HoldUntilOpts {
-            nstocks_limit: None,
-            stop_loss: f64::NEG_INFINITY,
-            take_profit: f64::INFINITY,
-            trail_stop: f64::INFINITY,
-            trail_stop_activation: 0.0,
-            rank: None,
-            price: None,
-        }
-    }
 }
 
 /// indices that would sort `xs` ascending, ties broken by original index (stable).
@@ -55,11 +38,7 @@ impl Panel {
         };
 
         let entry_i = entry.data.mapv(|x| if is_true(x) { 1.0 } else { 0.0 });
-        let mut exit_i = exit.data.mapv(|x| if is_true(x) { 1.0 } else { 0.0 });
-        let price = opts.price.as_ref().map(|p| {
-            let (_, p2) = align(&entry, p);
-            p2.data
-        });
+        let exit_i = exit.data.mapv(|x| if is_true(x) { 1.0 } else { 0.0 });
 
         let nrows = entry.nrows();
         let mut ret = Array2::from_elem((nrows, n), 0.0_f64);
@@ -77,20 +56,7 @@ impl Panel {
             }
         }
 
-        let mut entry_price = Array1::from_elem(n, f64::NAN);
-        let mut max_return = Array1::from_elem(n, 1.0_f64);
-
         for i in 1..nrows {
-            apply_price_stops(
-                &ret,
-                &mut entry_price,
-                &mut max_return,
-                &mut exit_i,
-                price.as_ref(),
-                i,
-                opts,
-            );
-
             let mut rank: Vec<f64> = (0..n)
                 .map(|c| entry_i[[i, c]] * ranking[[i, c]] + ret[[i - 1, c]] * 3.0)
                 .collect();
@@ -167,56 +133,5 @@ mod tests {
         assert_eq!(r.data[[1, 0]], 0.0); // A loses
         assert_eq!(r.data[[1, 1]], 1.0); // B wins on rank
         assert_eq!(r.data[[1, 2]], 0.0); // C never entered
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn apply_price_stops(
-    ret: &Array2<f64>,
-    entry_price: &mut Array1<f64>,
-    max_return: &mut Array1<f64>,
-    exit_i: &mut Array2<f64>,
-    price: Option<&Array2<f64>>,
-    i: usize,
-    opts: &HoldUntilOpts,
-) {
-    if opts.stop_loss == f64::NEG_INFINITY
-        && opts.take_profit == f64::INFINITY
-        && opts.trail_stop == f64::INFINITY
-    {
-        return;
-    }
-    let price = price.expect("price required when stop rules enabled");
-    let n = ret.ncols();
-    for c in 0..n {
-        let is_entry = if i > 1 {
-            ret[[i - 2, c]] == 0.0
-        } else {
-            ret[[i - 1, c]] == 1.0
-        };
-        let waiting = entry_price[c].is_nan() && ret[[i - 1, c]] == 1.0;
-        if is_entry || waiting {
-            entry_price[c] = price[[i, c]];
-            max_return[c] = 1.0;
-        }
-        let held = ret[[i - 1, c]] == 1.0;
-        let returns = price[[i, c]] / entry_price[c];
-        let mut stop = held
-            && (returns > 1.0 + opts.take_profit.abs() || returns < 1.0 - opts.stop_loss.abs());
-        if opts.trail_stop != f64::INFINITY {
-            if held {
-                max_return[c] = max_return[c].max(returns);
-            }
-            let active = max_return[c] >= 1.0 + opts.trail_stop_activation.abs();
-            stop = stop || (held && active && returns < max_return[c] - opts.trail_stop.abs());
-        }
-        let exited = ret[[i - 1, c]] == 0.0 && !entry_price[c].is_nan();
-        if exited {
-            entry_price[c] = f64::NAN;
-            max_return[c] = 1.0;
-        }
-        if stop {
-            exit_i[[i, c]] = 1.0;
-        }
     }
 }

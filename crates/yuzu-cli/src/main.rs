@@ -79,13 +79,46 @@ struct CommonArgs {
     /// post-live equity metrics to the report (unset = omit).
     #[arg(long)]
     live_performance_start: Option<i32>,
+    /// Stop-loss as a fraction of entry (e.g. 0.08 = −8%); unset = off.
+    #[arg(long)]
+    stop_loss: Option<f64>,
+    /// Take-profit as a fraction of entry (e.g. 0.2 = +20%); unset = off.
+    #[arg(long)]
+    take_profit: Option<f64>,
+    /// Trailing stop: exit this far below the best return since entry; unset = off.
+    #[arg(long)]
+    trail_stop: Option<f64>,
+    /// Return the trailing stop must reach before it arms (default 0).
+    #[arg(long, default_value_t = 0.0)]
+    trail_stop_activation: f64,
+    /// How a stop fills: `touched` (stop price / gapped open, default) or `close`.
+    #[arg(long, value_enum, default_value_t = StopFillArg::Touched)]
+    stop_fill: StopFillArg,
     /// Output file (default: stdout).
     #[arg(long)]
     out: Option<PathBuf>,
 }
 
+/// CLI mirror of `yuzu_core::backtest::StopFill`.
+#[derive(Clone, Copy, ValueEnum)]
+enum StopFillArg {
+    Touched,
+    Close,
+}
+
 impl CommonArgs {
     fn config(&self) -> yuzu_core::backtest::BacktestConfig {
+        use yuzu_core::backtest::{StopConfig, StopFill};
+        let stops = StopConfig {
+            stop_loss: self.stop_loss.unwrap_or(f64::NEG_INFINITY),
+            take_profit: self.take_profit.unwrap_or(f64::INFINITY),
+            trail_stop: self.trail_stop.unwrap_or(f64::INFINITY),
+            trail_stop_activation: self.trail_stop_activation,
+            fill: match self.stop_fill {
+                StopFillArg::Touched => StopFill::Touched,
+                StopFillArg::Close => StopFill::Close,
+            },
+        };
         yuzu_core::backtest::BacktestConfig {
             fee_ratio: self.fee_ratio,
             slippage_ratio: self.slippage_ratio,
@@ -98,6 +131,7 @@ impl CommonArgs {
             bootstrap_samples: self.bootstrap_samples,
             bootstrap_block: self.bootstrap_block,
             live_performance_start: self.live_performance_start,
+            stops,
             ..Default::default()
         }
     }
