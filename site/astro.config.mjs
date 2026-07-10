@@ -2,25 +2,25 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 
-// Project Pages live under a repo sub-path, so every asset/link must be
-// prefixed with `base`. The self-hosted rustdoc is intentionally gone — the
-// published crates document themselves on docs.rs (see the API reference page),
-// which keeps this deploy a single, backend-free static site.
+// Served from the apex domain citrusquant.com, so assets live at the root.
+// The self-hosted rustdoc is intentionally gone — the published crates
+// document themselves on docs.rs (see the API reference page), which keeps
+// this deploy a single, backend-free static site.
 export default defineConfig({
-  site: 'https://imgarylai.github.io',
-  base: '/citrusinvest/',
+  site: 'https://citrusquant.com',
+  base: '/',
   trailingSlash: 'ignore',
   integrations: [
     starlight({
-      title: 'citrusinvest',
+      title: 'citrusquant',
       description:
         'Learn the yuzu backtest engine and the lemon strategy DSL — with an in-browser backtest playground.',
       social: {
-        github: 'https://github.com/imgarylai/citrusinvest',
+        github: 'https://github.com/citrusquant/citrusquant',
       },
       editLink: {
         baseUrl:
-          'https://github.com/imgarylai/citrusinvest/edit/main/site/',
+          'https://github.com/citrusquant/citrusquant/edit/main/site/',
       },
       customCss: ['./src/styles/custom.css'],
       sidebar: [

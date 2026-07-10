@@ -4,9 +4,9 @@
 
 S3-compatible `ObjectSource` for [`yuzu-data`](https://crates.io/crates/yuzu-data),
 reading objects over SigV4-presigned HTTPS GETs. Part of
-[citrusinvest](https://github.com/imgarylai/citrusinvest).
+[citrusquant](https://github.com/citrusquant/citrusquant).
 
-See the [engine docs](https://github.com/imgarylai/citrusinvest/blob/main/docs/backtest-engine.md).
+See the [engine docs](https://github.com/citrusquant/citrusquant/blob/main/docs/backtest-engine.md).
 
 ## License
 

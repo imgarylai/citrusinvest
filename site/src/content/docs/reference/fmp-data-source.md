@@ -12,7 +12,7 @@ before relying on tier-specific claims below.
 This document answers one question:
 
 > If I only have an **FMP Starter**-class key (short US history, limited
-> fundamentals depth, no bulk), which citrusinvest **features can I honestly
+> fundamentals depth, no bulk), which citrusquant **features can I honestly
 > backtest**, and which ones are blocked because the **input panels** are missing
 > or too coarse?
 
@@ -42,7 +42,7 @@ lemon op / backtest knob  →  needs series (close, high, pe, …)
 ## 2. Feature families → required series
 
 Groups match how authors use the library. Op names are the lemon surface
-([`lemon.md`](../reference/lemon), [`schema/op-catalog.json`](https://github.com/imgarylai/citrusinvest/blob/main/schema/op-catalog.json)).
+([`lemon.md`](../reference/lemon), [`schema/op-catalog.json`](https://github.com/citrusquant/citrusquant/blob/main/schema/op-catalog.json)).
 
 ### 2.1 Price time-series (single series)
 
@@ -142,7 +142,7 @@ checklist for your sync job; re-verify endpoints when implementing a builder.
 
 ## 4. Gap table: Starter → what you cannot honestly backtest
 
-| If your Starter-fed tree is weak on… | Then these citrusinvest capabilities are blocked or misleading |
+| If your Starter-fed tree is weak on… | Then these citrusquant capabilities are blocked or misleading |
 |--------------------------------------|------------------------------------------------------------------|
 | History longer than ~5y | **Any** strategy needing longer samples: long walk-forwards (#21), multi-regime TA, long factor studies — all op families |
 | `close` only (no high/low) | **OHLCV TA**: `atr`, `natr`, `willr`, `cci`, `stoch_*`, `aroon_*`, `adx`, `±di`; MAE/MFE quality; future **touched_exit** (#20) |

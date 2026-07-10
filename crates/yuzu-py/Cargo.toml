@@ -4,7 +4,7 @@ version = "0.2.0"
 edition = "2021"
 rust-version = "1.86"
 license = "MIT"
-repository = "https://github.com/imgarylai/citrusinvest"
+repository = "https://github.com/citrusquant/citrusquant"
 description = "Python bindings for the yuzu backtest engine and the lemon strategy DSL."
 publish = false
 

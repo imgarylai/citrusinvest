@@ -1,6 +1,6 @@
 # yuzu — Python bindings
 
-Python bindings for the [citrusinvest](https://github.com/imgarylai/citrusinvest)
+Python bindings for the [citrusquant](https://github.com/citrusquant/citrusquant)
 backtest engine: the **yuzu** backtest core plus the **lemon** strategy DSL,
 compiled from Rust. The engine boundary is pure data —
 `(strategy, panels, config) → report` — so the bindings are thin and fast.

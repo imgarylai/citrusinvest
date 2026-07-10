@@ -220,7 +220,7 @@ fn build_spec_schema() -> Value {
 
     json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$id": "https://github.com/imgarylai/citrusinvest/schema/lemon-spec.schema.json",
+        "$id": "https://github.com/citrusquant/citrusquant/schema/lemon-spec.schema.json",
         "title": "Lemon strategy spec (Expr tree)",
         "description": "The serializable lemon strategy AST: a JSON tree tagged by \"op\". Generated from crates/lemon metadata; do not edit by hand.",
         "$ref": "#/$defs/Expr",

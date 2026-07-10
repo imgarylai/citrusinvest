@@ -2,7 +2,7 @@
 
 [![crates.io](https://img.shields.io/crates/v/yuzu-data)](https://crates.io/crates/yuzu-data)
 
-Native I/O layer for [citrusinvest](https://github.com/imgarylai/citrusinvest):
+Native I/O layer for [citrusquant](https://github.com/citrusquant/citrusquant):
 reads price and fundamental files into
 [`yuzu-core`](https://crates.io/crates/yuzu-core) panels.
 
@@ -29,10 +29,10 @@ yuzu-data = { version = "0.1", default-features = false }
 ```
 
 **On-disk / object-key contract** (directory tree, CSV columns, series-name map):
-[Input data layout](https://github.com/imgarylai/citrusinvest/blob/main/docs/data-layout.md).
+[Input data layout](https://github.com/citrusquant/citrusquant/blob/main/docs/data-layout.md).
 
 Engine semantics (panels, NAV, Report):
-[backtest-engine.md](https://github.com/imgarylai/citrusinvest/blob/main/docs/backtest-engine.md).
+[backtest-engine.md](https://github.com/citrusquant/citrusquant/blob/main/docs/backtest-engine.md).
 
 ## License
 

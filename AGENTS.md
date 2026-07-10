@@ -4,7 +4,7 @@ Guidance for AI coding agents working in this repository.
 
 ## What this is
 
-citrusinvest is a Rust backtest engine (a Cargo workspace):
+citrusquant is a Rust backtest engine (a Cargo workspace):
 
 - `yuzu-core` — pure, I/O-free backtest engine core (`run_backtest`).
 - `yuzu-data` — native data loading (reads gzip CSV price/fundamental files into panels).

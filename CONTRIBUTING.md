@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in the citrusinvest engine. It's a Cargo workspace of
+Thanks for your interest in the citrusquant engine. It's a Cargo workspace of
 `yuzu-*` crates (backtest core, data, server, CLI, wasm, S3 source) plus the
 `lemon` strategy DSL and its wasm binding.
 
