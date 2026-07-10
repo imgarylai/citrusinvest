@@ -12,7 +12,7 @@ publish = false
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-yuzu-core = { path = "../yuzu-core", version = "0.3.0" }
+yuzu-core = { path = "../yuzu-core", version = "0.4.0" }
 ndarray = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
