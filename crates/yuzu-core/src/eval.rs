@@ -1,5 +1,9 @@
 //! Evaluates an [`Expr`] tree against a data context (`HashMap<String, Panel>`).
 //! [`run_strategy`] parses a JSON spec and evaluates it to a position matrix.
+//!
+//! Internally, evaluation borrows `Data` leaves from the context so multi-reference
+//! expression trees do not deep-copy dense series at every leaf. The public API
+//! still returns an owned [`Panel`].
 
 use crate::error::EngineError;
 use crate::ops::rebalance::Freq;
@@ -46,22 +50,84 @@ fn as_const(e: &Expr) -> Option<f64> {
     }
 }
 
+/// Intermediate eval result: `Data` leaves borrow from the context; every
+/// computed node owns a fresh panel. This avoids deep-copying dense series
+/// matrices at every data-series reference in the expression tree.
+enum EvalOut<'a> {
+    Borrowed(&'a Panel),
+    Owned(Panel),
+}
+
+impl<'a> EvalOut<'a> {
+    fn as_panel(&self) -> &Panel {
+        match self {
+            EvalOut::Borrowed(p) => p,
+            EvalOut::Owned(p) => p,
+        }
+    }
+
+    fn into_owned(self) -> Panel {
+        match self {
+            EvalOut::Borrowed(p) => {
+                #[cfg(test)]
+                borrowed_into_owned_inc();
+                p.clone()
+            }
+            EvalOut::Owned(p) => p,
+        }
+    }
+}
+
+// Test-only counters: data-leaf visits vs deep clones forced by into_owned.
+// After this change, multi-use intermediate `Data` leaves should visit many
+// times with zero borrowed→owned clones when the root is a computed panel.
+#[cfg(test)]
+thread_local! {
+    static BORROWED_INTO_OWNED: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    static DATA_LEAF_HITS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+fn borrowed_into_owned_inc() {
+    BORROWED_INTO_OWNED.with(|c| c.set(c.get() + 1));
+}
+
+#[cfg(test)]
+fn data_leaf_hit_inc() {
+    DATA_LEAF_HITS.with(|c| c.set(c.get() + 1));
+}
+
+#[cfg(test)]
+fn take_eval_counters() -> (u64 /* data hits */, u64 /* borrowed clones */) {
+    let hits = DATA_LEAF_HITS.with(|c| c.replace(0));
+    let clones = BORROWED_INTO_OWNED.with(|c| c.replace(0));
+    (hits, clones)
+}
+
 /// Evaluate a binary numeric/comparison op, broadcasting a `Const` on either
 /// side against the other operand's panel (`panel <op> scalar`). Rejects
 /// `const <op> const` — there's no panel shape to broadcast onto.
-fn num_binop(
+fn num_binop<'a>(
     l: &Expr,
     r: &Expr,
-    ctx: &EvalContext,
+    ctx: &'a EvalContext,
     f: impl Fn(f64, f64) -> f64,
-) -> Result<Panel, EngineError> {
+) -> Result<EvalOut<'a>, EngineError> {
     match (as_const(l), as_const(r)) {
         (Some(_), Some(_)) => Err(EngineError::Eval(
             "both operands of a binary op are Const".into(),
         )),
-        (Some(a), None) => Ok(eval(r, ctx)?.scalar_lhs(a, f)),
-        (None, Some(b)) => Ok(eval(l, ctx)?.scalar_rhs(b, f)),
-        (None, None) => Ok(eval(l, ctx)?.ewise(&eval(r, ctx)?, f)),
+        (Some(a), None) => Ok(EvalOut::Owned(
+            eval_out(r, ctx)?.as_panel().scalar_lhs(a, f),
+        )),
+        (None, Some(b)) => Ok(EvalOut::Owned(
+            eval_out(l, ctx)?.as_panel().scalar_rhs(b, f),
+        )),
+        (None, None) => {
+            let left = eval_out(l, ctx)?;
+            let right = eval_out(r, ctx)?;
+            Ok(EvalOut::Owned(left.as_panel().ewise(right.as_panel(), f)))
+        }
     }
 }
 
@@ -69,6 +135,10 @@ fn num_binop(
 /// stays **exhaustive** — a new `Expr` variant that is not listed here fails to
 /// compile. Family helpers also match exhaustively over their subset.
 pub fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
+    Ok(eval_out(expr, ctx)?.into_owned())
+}
+
+fn eval_out<'a>(expr: &Expr, ctx: &'a EvalContext) -> Result<EvalOut<'a>, EngineError> {
     use Expr::*;
     match expr {
         // Leaves
@@ -156,14 +226,18 @@ pub fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
     }
 }
 
-fn eval_leaf(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
+fn eval_leaf<'a>(expr: &Expr, ctx: &'a EvalContext) -> Result<EvalOut<'a>, EngineError> {
     use Expr::*;
     match expr {
-        Data { name } => ctx
-            .panels
-            .get(name)
-            .cloned()
-            .ok_or_else(|| EngineError::Eval(format!("unknown series '{name}'"))),
+        Data { name } => {
+            #[cfg(test)]
+            data_leaf_hit_inc();
+            let p = ctx
+                .panels
+                .get(name)
+                .ok_or_else(|| EngineError::Eval(format!("unknown series '{name}'")))?;
+            Ok(EvalOut::Borrowed(p))
+        }
         Const { value } => {
             // Const is only meaningful inside scalar ops, handled by callers.
             Err(EngineError::Eval(format!(
@@ -174,213 +248,287 @@ fn eval_leaf(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
     }
 }
 
-fn eval_ts(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
+fn eval_ts<'a>(expr: &Expr, ctx: &'a EvalContext) -> Result<EvalOut<'a>, EngineError> {
     use Expr::*;
-    Ok(match expr {
-        Average { of, n } => eval(of, ctx)?.average(*n),
-        Ema { of, n } => eval(of, ctx)?.ema(*n),
-        Std { of, n } => eval(of, ctx)?.rolling_std(*n),
-        Rsi { of, n } => eval(of, ctx)?.rsi(*n),
-        PctChange { of, n } => eval(of, ctx)?.pct_change(*n),
-        Rise { of, n } => eval(of, ctx)?.rise(*n),
-        Fall { of, n } => eval(of, ctx)?.fall(*n),
-        Shift { of, n } => eval(of, ctx)?.shift(*n),
-        RollingMax { of, n } => eval(of, ctx)?.rolling_max(*n),
-        RollingMin { of, n } => eval(of, ctx)?.rolling_min(*n),
-        BollingerMid { of, n } => eval(of, ctx)?.bollinger_mid(*n),
-        BollingerUpper { of, n, k } => eval(of, ctx)?.bollinger_upper(*n, *k),
-        BollingerLower { of, n, k } => eval(of, ctx)?.bollinger_lower(*n, *k),
-        Macd { of, fast, slow } => eval(of, ctx)?.macd(*fast, *slow),
+    Ok(EvalOut::Owned(match expr {
+        Average { of, n } => eval_out(of, ctx)?.as_panel().average(*n),
+        Ema { of, n } => eval_out(of, ctx)?.as_panel().ema(*n),
+        Std { of, n } => eval_out(of, ctx)?.as_panel().rolling_std(*n),
+        Rsi { of, n } => eval_out(of, ctx)?.as_panel().rsi(*n),
+        PctChange { of, n } => eval_out(of, ctx)?.as_panel().pct_change(*n),
+        Rise { of, n } => eval_out(of, ctx)?.as_panel().rise(*n),
+        Fall { of, n } => eval_out(of, ctx)?.as_panel().fall(*n),
+        Shift { of, n } => eval_out(of, ctx)?.as_panel().shift(*n),
+        RollingMax { of, n } => eval_out(of, ctx)?.as_panel().rolling_max(*n),
+        RollingMin { of, n } => eval_out(of, ctx)?.as_panel().rolling_min(*n),
+        BollingerMid { of, n } => eval_out(of, ctx)?.as_panel().bollinger_mid(*n),
+        BollingerUpper { of, n, k } => eval_out(of, ctx)?.as_panel().bollinger_upper(*n, *k),
+        BollingerLower { of, n, k } => eval_out(of, ctx)?.as_panel().bollinger_lower(*n, *k),
+        Macd { of, fast, slow } => eval_out(of, ctx)?.as_panel().macd(*fast, *slow),
         MacdSignal {
             of,
             fast,
             slow,
             signal,
-        } => eval(of, ctx)?.macd_signal(*fast, *slow, *signal),
+        } => eval_out(of, ctx)?
+            .as_panel()
+            .macd_signal(*fast, *slow, *signal),
         MacdHist {
             of,
             fast,
             slow,
             signal,
-        } => eval(of, ctx)?.macd_hist(*fast, *slow, *signal),
-        DonchianHigh { of, n } => eval(of, ctx)?.donchian_high(*n),
-        DonchianLow { of, n } => eval(of, ctx)?.donchian_low(*n),
-        DonchianMid { of, n } => eval(of, ctx)?.donchian_mid(*n),
+        } => eval_out(of, ctx)?
+            .as_panel()
+            .macd_hist(*fast, *slow, *signal),
+        DonchianHigh { of, n } => eval_out(of, ctx)?.as_panel().donchian_high(*n),
+        DonchianLow { of, n } => eval_out(of, ctx)?.as_panel().donchian_low(*n),
+        DonchianMid { of, n } => eval_out(of, ctx)?.as_panel().donchian_mid(*n),
         _ => unreachable!("eval_ts: not a unary TS op"),
-    })
+    }))
 }
 
-fn eval_ta(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
+fn eval_ta<'a>(expr: &Expr, ctx: &'a EvalContext) -> Result<EvalOut<'a>, EngineError> {
     use Expr::*;
-    Ok(match expr {
+    Ok(EvalOut::Owned(match expr {
         Atr {
             high,
             low,
             close,
             n,
-        } => ta::atr(&eval(high, ctx)?, &eval(low, ctx)?, &eval(close, ctx)?, *n),
+        } => {
+            let h = eval_out(high, ctx)?;
+            let l = eval_out(low, ctx)?;
+            let c = eval_out(close, ctx)?;
+            ta::atr(h.as_panel(), l.as_panel(), c.as_panel(), *n)
+        }
         Natr {
             high,
             low,
             close,
             n,
-        } => ta::natr(&eval(high, ctx)?, &eval(low, ctx)?, &eval(close, ctx)?, *n),
+        } => {
+            let h = eval_out(high, ctx)?;
+            let l = eval_out(low, ctx)?;
+            let c = eval_out(close, ctx)?;
+            ta::natr(h.as_panel(), l.as_panel(), c.as_panel(), *n)
+        }
         WillR {
             high,
             low,
             close,
             n,
-        } => ta::willr(&eval(high, ctx)?, &eval(low, ctx)?, &eval(close, ctx)?, *n),
+        } => {
+            let h = eval_out(high, ctx)?;
+            let l = eval_out(low, ctx)?;
+            let c = eval_out(close, ctx)?;
+            ta::willr(h.as_panel(), l.as_panel(), c.as_panel(), *n)
+        }
         Cci {
             high,
             low,
             close,
             n,
-        } => ta::cci(&eval(high, ctx)?, &eval(low, ctx)?, &eval(close, ctx)?, *n),
+        } => {
+            let h = eval_out(high, ctx)?;
+            let l = eval_out(low, ctx)?;
+            let c = eval_out(close, ctx)?;
+            ta::cci(h.as_panel(), l.as_panel(), c.as_panel(), *n)
+        }
         StochK {
             high,
             low,
             close,
             n,
-        } => ta::stoch_k(&eval(high, ctx)?, &eval(low, ctx)?, &eval(close, ctx)?, *n),
+        } => {
+            let h = eval_out(high, ctx)?;
+            let l = eval_out(low, ctx)?;
+            let c = eval_out(close, ctx)?;
+            ta::stoch_k(h.as_panel(), l.as_panel(), c.as_panel(), *n)
+        }
         StochD {
             high,
             low,
             close,
             n,
             d,
-        } => ta::stoch_d(
-            &eval(high, ctx)?,
-            &eval(low, ctx)?,
-            &eval(close, ctx)?,
-            *n,
-            *d,
-        ),
-        AroonUp { high, n } => ta::aroon_up(&eval(high, ctx)?, *n),
-        AroonDown { low, n } => ta::aroon_down(&eval(low, ctx)?, *n),
+        } => {
+            let h = eval_out(high, ctx)?;
+            let l = eval_out(low, ctx)?;
+            let c = eval_out(close, ctx)?;
+            ta::stoch_d(h.as_panel(), l.as_panel(), c.as_panel(), *n, *d)
+        }
+        AroonUp { high, n } => ta::aroon_up(eval_out(high, ctx)?.as_panel(), *n),
+        AroonDown { low, n } => ta::aroon_down(eval_out(low, ctx)?.as_panel(), *n),
         Adx {
             high,
             low,
             close,
             n,
-        } => ta::adx(&eval(high, ctx)?, &eval(low, ctx)?, &eval(close, ctx)?, *n),
+        } => {
+            let h = eval_out(high, ctx)?;
+            let l = eval_out(low, ctx)?;
+            let c = eval_out(close, ctx)?;
+            ta::adx(h.as_panel(), l.as_panel(), c.as_panel(), *n)
+        }
         PlusDi {
             high,
             low,
             close,
             n,
-        } => ta::plus_di(&eval(high, ctx)?, &eval(low, ctx)?, &eval(close, ctx)?, *n),
+        } => {
+            let h = eval_out(high, ctx)?;
+            let l = eval_out(low, ctx)?;
+            let c = eval_out(close, ctx)?;
+            ta::plus_di(h.as_panel(), l.as_panel(), c.as_panel(), *n)
+        }
         MinusDi {
             high,
             low,
             close,
             n,
-        } => ta::minus_di(&eval(high, ctx)?, &eval(low, ctx)?, &eval(close, ctx)?, *n),
-        Obv { close, volume } => ta::obv(&eval(close, ctx)?, &eval(volume, ctx)?),
+        } => {
+            let h = eval_out(high, ctx)?;
+            let l = eval_out(low, ctx)?;
+            let c = eval_out(close, ctx)?;
+            ta::minus_di(h.as_panel(), l.as_panel(), c.as_panel(), *n)
+        }
+        Obv { close, volume } => {
+            let c = eval_out(close, ctx)?;
+            let v = eval_out(volume, ctx)?;
+            ta::obv(c.as_panel(), v.as_panel())
+        }
         Mfi {
             high,
             low,
             close,
             volume,
             n,
-        } => ta::mfi(
-            &eval(high, ctx)?,
-            &eval(low, ctx)?,
-            &eval(close, ctx)?,
-            &eval(volume, ctx)?,
-            *n,
-        ),
+        } => {
+            let h = eval_out(high, ctx)?;
+            let l = eval_out(low, ctx)?;
+            let c = eval_out(close, ctx)?;
+            let v = eval_out(volume, ctx)?;
+            ta::mfi(h.as_panel(), l.as_panel(), c.as_panel(), v.as_panel(), *n)
+        }
         Vwap {
             high,
             low,
             close,
             volume,
             n,
-        } => ta::vwap(
-            &eval(high, ctx)?,
-            &eval(low, ctx)?,
-            &eval(close, ctx)?,
-            &eval(volume, ctx)?,
-            *n,
-        ),
+        } => {
+            let h = eval_out(high, ctx)?;
+            let l = eval_out(low, ctx)?;
+            let c = eval_out(close, ctx)?;
+            let v = eval_out(volume, ctx)?;
+            ta::vwap(h.as_panel(), l.as_panel(), c.as_panel(), v.as_panel(), *n)
+        }
         _ => unreachable!("eval_ta: not a multi-series TA op"),
-    })
+    }))
 }
 
-fn eval_cs(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
+fn eval_cs<'a>(expr: &Expr, ctx: &'a EvalContext) -> Result<EvalOut<'a>, EngineError> {
     use Expr::*;
-    Ok(match expr {
-        IsLargest { of, n } => eval(of, ctx)?.is_largest(*n),
-        IsSmallest { of, n } => eval(of, ctx)?.is_smallest(*n),
+    Ok(EvalOut::Owned(match expr {
+        IsLargest { of, n } => eval_out(of, ctx)?.as_panel().is_largest(*n),
+        IsSmallest { of, n } => eval_out(of, ctx)?.as_panel().is_smallest(*n),
         Sustain {
             of,
             nwindow,
             nsatisfy,
-        } => eval(of, ctx)?.sustain(*nwindow, *nsatisfy),
-        IsEntry { of } => eval(of, ctx)?.is_entry(),
-        IsExit { of } => eval(of, ctx)?.is_exit(),
-        ExitWhen { entry, exit } => eval(entry, ctx)?.exit_when(&eval(exit, ctx)?),
-        QuantileRow { of, c } => eval(of, ctx)?.quantile_row(*c),
-        Winsorize { of, lower, upper } => eval(of, ctx)?.winsorize(*lower, *upper),
-        Zscore { of } => eval(of, ctx)?.zscore(),
-        Bucket { of, n } => eval(of, ctx)?.bucket(*n),
-        Demean { of } => eval(of, ctx)?.demean(),
-        Rank { of, pct, ascending } => eval(of, ctx)?.rank_cs(*pct, *ascending),
+        } => eval_out(of, ctx)?.as_panel().sustain(*nwindow, *nsatisfy),
+        IsEntry { of } => eval_out(of, ctx)?.as_panel().is_entry(),
+        IsExit { of } => eval_out(of, ctx)?.as_panel().is_exit(),
+        ExitWhen { entry, exit } => {
+            let e = eval_out(entry, ctx)?;
+            let x = eval_out(exit, ctx)?;
+            e.as_panel().exit_when(x.as_panel())
+        }
+        QuantileRow { of, c } => eval_out(of, ctx)?.as_panel().quantile_row(*c),
+        Winsorize { of, lower, upper } => eval_out(of, ctx)?.as_panel().winsorize(*lower, *upper),
+        Zscore { of } => eval_out(of, ctx)?.as_panel().zscore(),
+        Bucket { of, n } => eval_out(of, ctx)?.as_panel().bucket(*n),
+        Demean { of } => eval_out(of, ctx)?.as_panel().demean(),
+        Rank { of, pct, ascending } => eval_out(of, ctx)?.as_panel().rank_cs(*pct, *ascending),
         _ => unreachable!("eval_cs: not a cross-section op"),
-    })
+    }))
 }
 
-fn eval_arith(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
+fn eval_arith<'a>(expr: &Expr, ctx: &'a EvalContext) -> Result<EvalOut<'a>, EngineError> {
     use Expr::*;
     Ok(match expr {
         Gt { l, r } => num_binop(l, r, ctx, |x, y| bool_to_f64(x > y))?,
         Lt { l, r } => num_binop(l, r, ctx, |x, y| bool_to_f64(x < y))?,
         Ge { l, r } => num_binop(l, r, ctx, |x, y| bool_to_f64(x >= y))?,
         Le { l, r } => num_binop(l, r, ctx, |x, y| bool_to_f64(x <= y))?,
-        And { l, r } => eval(l, ctx)?.and(&eval(r, ctx)?),
-        Or { l, r } => eval(l, ctx)?.or(&eval(r, ctx)?),
-        Not { of } => eval(of, ctx)?.not(),
+        And { l, r } => {
+            let left = eval_out(l, ctx)?;
+            let right = eval_out(r, ctx)?;
+            EvalOut::Owned(left.as_panel().and(right.as_panel()))
+        }
+        Or { l, r } => {
+            let left = eval_out(l, ctx)?;
+            let right = eval_out(r, ctx)?;
+            EvalOut::Owned(left.as_panel().or(right.as_panel()))
+        }
+        Not { of } => EvalOut::Owned(eval_out(of, ctx)?.as_panel().not()),
         Add { l, r } => num_binop(l, r, ctx, |x, y| x + y)?,
         Sub { l, r } => num_binop(l, r, ctx, |x, y| x - y)?,
         Mul { l, r } => num_binop(l, r, ctx, |x, y| x * y)?,
         Div { l, r } => num_binop(l, r, ctx, |x, y| x / y)?,
-        Neg { of } => eval(of, ctx)?.neg(),
-        Ceil { of } => eval(of, ctx)?.ceil(),
-        Mask { of, by } => eval(of, ctx)?.mask(&eval(by, ctx)?),
+        Neg { of } => EvalOut::Owned(eval_out(of, ctx)?.as_panel().neg()),
+        Ceil { of } => EvalOut::Owned(eval_out(of, ctx)?.as_panel().ceil()),
+        Mask { of, by } => {
+            let o = eval_out(of, ctx)?;
+            let b = eval_out(by, ctx)?;
+            EvalOut::Owned(o.as_panel().mask(b.as_panel()))
+        }
         _ => unreachable!("eval_arith: not an arithmetic/logic op"),
     })
 }
 
-fn eval_portfolio(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
+fn eval_portfolio<'a>(expr: &Expr, ctx: &'a EvalContext) -> Result<EvalOut<'a>, EngineError> {
     use Expr::*;
     match expr {
-        NormalizeRow { of } => Ok(eval(of, ctx)?.normalize_row()),
+        NormalizeRow { of } => Ok(EvalOut::Owned(
+            eval_out(of, ctx)?.as_panel().normalize_row(),
+        )),
         VolTarget {
             of,
             prices,
             target,
             n,
-        } => Ok(eval(of, ctx)?.vol_target(&eval(prices, ctx)?, *target, *n)),
+        } => {
+            let signal = eval_out(of, ctx)?;
+            let px = eval_out(prices, ctx)?;
+            Ok(EvalOut::Owned(signal.as_panel().vol_target(
+                px.as_panel(),
+                *target,
+                *n,
+            )))
+        }
         HoldUntil {
             entry,
             exit,
             nstocks_limit,
             rank,
         } => {
-            let e = eval(entry, ctx)?;
-            let x = eval(exit, ctx)?;
+            let e = eval_out(entry, ctx)?;
+            let x = eval_out(exit, ctx)?;
+            // HoldUntilOpts stores an owned rank panel.
             let rank_panel = match rank {
-                Some(r) => Some(eval(r, ctx)?),
+                Some(r) => Some(eval_out(r, ctx)?.into_owned()),
                 None => None,
             };
             let opts = HoldUntilOpts {
                 nstocks_limit: *nstocks_limit,
                 rank: rank_panel,
             };
-            Ok(e.hold_until(&x, &opts))
+            Ok(EvalOut::Owned(e.as_panel().hold_until(x.as_panel(), &opts)))
         }
         Rebalance { of, freq, on } => {
-            let p = eval(of, ctx)?;
+            let p = eval_out(of, ctx)?;
             match (freq.as_deref(), on) {
                 (Some(_), Some(_)) => Err(EngineError::Eval(
                     "Rebalance takes either freq or on, not both".into(),
@@ -396,26 +544,27 @@ fn eval_portfolio(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> 
                             return Err(EngineError::Eval(format!("bad freq '{other}'")));
                         }
                     };
-                    Ok(p.rebalance_freq(f))
+                    Ok(EvalOut::Owned(p.as_panel().rebalance_freq(f)))
                 }
                 (None, Some(on)) => {
-                    let trigger = eval(on, ctx)?;
+                    let trigger = eval_out(on, ctx)?;
                     // Dates (already sorted, unique) where any cell in the row is
                     // true: finite and != 0. Union across symbols → portfolio
                     // rebalances whenever any holding's trigger fires.
-                    let dates: Vec<i32> = trigger
+                    let t = trigger.as_panel();
+                    let dates: Vec<i32> = t
                         .dates
                         .iter()
                         .enumerate()
                         .filter(|&(r, _)| {
-                            (0..trigger.ncols()).any(|cc| {
-                                let v = trigger.data[[r, cc]];
+                            (0..t.ncols()).any(|cc| {
+                                let v = t.data[[r, cc]];
                                 v.is_finite() && v != 0.0
                             })
                         })
                         .map(|(_, &d)| d)
                         .collect();
-                    Ok(p.rebalance_dates(&dates))
+                    Ok(EvalOut::Owned(p.as_panel().rebalance_dates(&dates)))
                 }
             }
         }
@@ -423,28 +572,43 @@ fn eval_portfolio(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> 
     }
 }
 
-fn eval_industry(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
+fn eval_industry<'a>(expr: &Expr, ctx: &'a EvalContext) -> Result<EvalOut<'a>, EngineError> {
     use Expr::*;
     match expr {
         Neutralize { of, by, add_const } => {
-            let factor = eval(of, ctx)?;
+            let factor = eval_out(of, ctx)?;
+            // neutralize takes &[Panel]; materialize owned copies once at the call.
             let neutralizers = by
                 .iter()
-                .map(|b| eval(b, ctx))
+                .map(|b| eval_out(b, ctx).map(EvalOut::into_owned))
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(factor.neutralize(&neutralizers, *add_const))
+            Ok(EvalOut::Owned(
+                factor.as_panel().neutralize(&neutralizers, *add_const),
+            ))
         }
-        NeutralizeIndustry { of, add_const } => {
-            Ok(eval(of, ctx)?.neutralize_industry(&ctx.industry, *add_const))
-        }
-        IndustryRank { of, categories } => {
-            Ok(eval(of, ctx)?.industry_rank(&ctx.industry, categories.as_deref()))
-        }
-        CapIndustry { of, max_weight } => {
-            Ok(eval(of, ctx)?.cap_industry(&ctx.industry, *max_weight))
-        }
-        GroupbyCategory { of, agg } => eval(of, ctx)?.groupby_category(&ctx.industry, agg),
-        InSector { of, name } => Ok(eval(of, ctx)?.in_sector(&ctx.industry, name)),
+        NeutralizeIndustry { of, add_const } => Ok(EvalOut::Owned(
+            eval_out(of, ctx)?
+                .as_panel()
+                .neutralize_industry(&ctx.industry, *add_const),
+        )),
+        IndustryRank { of, categories } => Ok(EvalOut::Owned(
+            eval_out(of, ctx)?
+                .as_panel()
+                .industry_rank(&ctx.industry, categories.as_deref()),
+        )),
+        CapIndustry { of, max_weight } => Ok(EvalOut::Owned(
+            eval_out(of, ctx)?
+                .as_panel()
+                .cap_industry(&ctx.industry, *max_weight),
+        )),
+        GroupbyCategory { of, agg } => Ok(EvalOut::Owned(
+            eval_out(of, ctx)?
+                .as_panel()
+                .groupby_category(&ctx.industry, agg)?,
+        )),
+        InSector { of, name } => Ok(EvalOut::Owned(
+            eval_out(of, ctx)?.as_panel().in_sector(&ctx.industry, name),
+        )),
         _ => unreachable!("eval_industry: not an industry op"),
     }
 }
@@ -1115,5 +1279,83 @@ mod tests {
         for s in &specs {
             assert!(run_strategy(s, &ctx()).is_ok(), "failed to evaluate: {s}");
         }
+    }
+
+    /// `Data` leaves used only as intermediates must not force a deep clone.
+    /// Before EvalOut, each hit cloned the full panel; after, hits ≫ clones.
+    #[test]
+    fn data_leaves_borrow_without_deep_clone() {
+        let _ = take_eval_counters(); // reset
+                                      // close > average(close, 2): two Data leaves, root is computed Owned.
+        let spec = r#"{
+            "op":"Gt",
+            "l":{"op":"Data","name":"close"},
+            "r":{"op":"Average","of":{"op":"Data","name":"close"},"n":2}
+        }"#;
+        let got = run_strategy(spec, &ctx()).unwrap();
+        assert_eq!(got.nrows(), 3);
+        let (hits, clones) = take_eval_counters();
+        assert_eq!(hits, 2, "two Data leaves visited");
+        assert_eq!(
+            clones, 0,
+            "no borrowed→owned deep clone when root is computed"
+        );
+
+        // Bare Data still materializes once at the public boundary.
+        let bare = run_strategy(r#"{"op":"Data","name":"close"}"#, &ctx()).unwrap();
+        assert_eq!(bare.nrows(), 3);
+        let (hits, clones) = take_eval_counters();
+        assert_eq!(hits, 1);
+        assert_eq!(clones, 1, "root Data must clone once for owned return");
+
+        // Five references to the same series still zero intermediate clones.
+        let d = r#"{"op":"Data","name":"close"}"#;
+        let five = format!(
+            r#"{{"op":"Add","l":{{"op":"Add","l":{{"op":"Add","l":{{"op":"Add","l":{d},"r":{d}}},"r":{d}}},"r":{d}}},"r":{d}}}"#
+        );
+        let sum = run_strategy(&five, &ctx()).unwrap();
+        assert_eq!(sum.data[[0, 0]], 5.0); // 1+1+1+1+1
+        let (hits, clones) = take_eval_counters();
+        assert_eq!(hits, 5);
+        assert_eq!(clones, 0);
+    }
+
+    /// Smoke timing on a large-ish panel (T=500, S=200). Documents wall-clock
+    /// for multi-`close` eval; primary win is clone count, not necessarily latency.
+    #[test]
+    fn large_panel_multi_close_eval_smoke() {
+        use std::time::Instant;
+        let t = 500usize;
+        let s = 200usize;
+        let dates: Vec<i32> = (0..t as i32).map(|i| 20200101 + i).collect();
+        let symbols: Vec<String> = (0..s).map(|i| format!("S{i:04}")).collect();
+        let data = ndarray::Array2::from_shape_fn((t, s), |(r, c)| {
+            100.0 + (r as f64) * 0.01 + (c as f64) * 0.001
+        });
+        let close = Panel::new(dates, symbols, data).unwrap();
+        let c = EvalContext::new(HashMap::from([("close".to_string(), close)]));
+        // close > average(close, 20) — two Data leaves + one rolling mean.
+        let spec = r#"{
+            "op":"Gt",
+            "l":{"op":"Data","name":"close"},
+            "r":{"op":"Average","of":{"op":"Data","name":"close"},"n":20}
+        }"#;
+        let _ = take_eval_counters();
+        let start = Instant::now();
+        let iters = 20;
+        for _ in 0..iters {
+            let p = run_strategy(spec, &c).unwrap();
+            assert_eq!(p.nrows(), t);
+            assert_eq!(p.ncols(), s);
+        }
+        let elapsed = start.elapsed();
+        let (hits, clones) = take_eval_counters();
+        assert_eq!(hits, 2 * iters as u64);
+        assert_eq!(clones, 0);
+        eprintln!(
+            "large_panel_multi_close: {iters} iters of 500×200 Gt(close, avg(close,20)) \
+             in {elapsed:?} ({:.2} ms/iter); data_hits={hits} borrowed_clones={clones}",
+            elapsed.as_secs_f64() * 1000.0 / iters as f64
+        );
     }
 }
