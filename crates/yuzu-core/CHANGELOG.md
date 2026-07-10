@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/imgarylai/citrusinvest/compare/yuzu-core-v0.3.0...yuzu-core-v0.4.0) - 2026-07-10
+
+### Added
+
+- *(core)* vol_target op — portfolio volatility targeting
+- *(core)* carry positions across walk-forward window seams ([#21](https://github.com/imgarylai/citrusinvest/pull/21))
+- *(core)* factor report + event study research API ([#45](https://github.com/imgarylai/citrusinvest/pull/45))
+- *(core)* cap_industry op — per-industry gross weight cap
+- *(core)* expose per-trade fill prices and side in the report
+
 ## [0.3.0](https://github.com/imgarylai/citrusinvest/compare/yuzu-core-v0.2.0...yuzu-core-v0.3.0) - 2026-07-10
 
 ### Added

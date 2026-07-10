@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/imgarylai/citrusinvest/compare/lemon-lang-v0.3.0...lemon-lang-v0.4.0) - 2026-07-10
+
+### Added
+
+- *(lemon)* shareable strategy envelope format + `lemon check` validation
+- *(core)* vol_target op — portfolio volatility targeting
+- *(core)* cap_industry op — per-industry gross weight cap
+
 ## [0.3.0](https://github.com/imgarylai/citrusinvest/compare/lemon-lang-v0.2.0...lemon-lang-v0.3.0) - 2026-07-10
 
 ### Added
