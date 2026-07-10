@@ -6,10 +6,11 @@ use std::cell::RefCell;
 use std::time::Duration;
 
 use yuzu_cli::fmp::{
-    build_symbol_list, parse_symbols_list, sync, HttpClient, HttpError, SymbolFilter, SyncConfig,
-    WriteMode, US_EXCHANGES,
+    build_symbol_list, fetch_delisted, parse_symbols_list, sync, HttpClient, HttpError,
+    SymbolFilter, SyncConfig, WriteMode, US_EXCHANGES,
 };
 use yuzu_cli::run_single;
+use yuzu_core::backtest::BacktestConfig;
 use yuzu_data::csv_io::parse_series;
 use yuzu_data::fundamentals::parse_fundamentals;
 use yuzu_data::{Field, LocalSource, ObjectSource};
@@ -140,6 +141,120 @@ fn syncs_prices_and_the_tree_backtests() {
     let report = run_single(&dir, spec, 20240102, 20240104, &Default::default(), "close").unwrap();
     assert_eq!(report.equity.len(), 3);
     assert!(report.metrics.total_return.is_finite());
+}
+
+#[test]
+fn delisted_universe_is_filtered_by_exchange_and_paged() {
+    // Page 0 has one US name (kept) and one OTC name (filtered by US_EXCHANGES);
+    // page 1 is empty, which stops the walk.
+    let http = MockHttp::new().seq(
+        "delisted-companies",
+        vec![
+            Ok(br#"[
+                {"symbol":"DEAD","exchange":"NASDAQ","delistedDate":"2024-01-03"},
+                {"symbol":"OTCJUNK","exchange":"OTC","delistedDate":"2019-06-01"}
+            ]"#
+            .to_vec()),
+            Ok(b"[]".to_vec()),
+        ],
+    );
+    let got = fetch_delisted(&http, "KEY", &cfg(), Some(US_EXCHANGES)).unwrap();
+    assert_eq!(got.len(), 1);
+    assert_eq!(got[0].symbol, "DEAD");
+    assert_eq!(got[0].delisted_date, Some(20240103));
+    assert_eq!(http.hit_count("delisted-companies"), 2); // walked page 0 then the empty page 1
+}
+
+#[test]
+fn delisted_symbol_price_file_ends_at_delist_date_and_engine_forces_exit() {
+    // #124 acceptance: a delisted name's price file simply ends at its delisting
+    // date, and the engine's delist_after forced-exit fires on the NaN gap.
+    let dir = tmp("delist");
+    // DEAD stops trading after 2024-01-03; the price feed returns nothing after.
+    // LIVE trades the full window.
+    let dead_prices = r#"[
+        {"date":"2024-01-02","adjClose":10.0,"volume":100},
+        {"date":"2024-01-03","adjClose":10.0,"volume":100}
+    ]"#;
+    let live_prices = r#"[
+        {"date":"2024-01-02","adjClose":10.0,"volume":100},
+        {"date":"2024-01-03","adjClose":10.0,"volume":100},
+        {"date":"2024-01-04","adjClose":10.0,"volume":100}
+    ]"#;
+    let http = MockHttp::new()
+        .seq(
+            "delisted-companies",
+            vec![
+                Ok(
+                    br#"[{"symbol":"DEAD","exchange":"NASDAQ","delistedDate":"2024-01-03"}]"#
+                        .to_vec(),
+                ),
+                Ok(b"[]".to_vec()),
+            ],
+        )
+        .ok("symbol=DEAD", dead_prices)
+        .ok("symbol=LIVE", live_prices);
+
+    // Union the delisted universe into the sync list, exactly like the CLI does.
+    let delisted = fetch_delisted(&http, "KEY", &cfg(), Some(US_EXCHANGES)).unwrap();
+    let mut syms = vec!["LIVE".to_string()];
+    syms.extend(delisted.into_iter().map(|d| d.symbol));
+    let summary = sync(&http, "KEY", &syms, &dir, &cfg()).unwrap();
+    assert_eq!(summary.symbols_written, 2);
+
+    // The dead name's file ends at the delisting date; the live one runs past it.
+    let src = LocalSource::new(&dir);
+    let dead = parse_series(
+        &src.get("prices/DEAD.csv.gz").unwrap().unwrap(),
+        Field::AdjClose,
+    )
+    .unwrap();
+    assert_eq!(
+        dead.last().unwrap().0,
+        20240103,
+        "DEAD must end at delist date"
+    );
+    let live = parse_series(
+        &src.get("prices/LIVE.csv.gz").unwrap().unwrap(),
+        Field::AdjClose,
+    )
+    .unwrap();
+    assert_eq!(live.last().unwrap().0, 20240104);
+
+    // Hold both names equally; on 2024-01-04 DEAD has a missing price. With
+    // delist_after=1 + a full haircut the position is force-closed at a total
+    // loss, so equity diverges from the survivorship-friendly delist_after=0
+    // path — i.e. the forced exit fired on the synced tree.
+    let spec =
+        r#"{"op":"NormalizeRow","of":{"op":"IsLargest","of":{"op":"Data","name":"close"},"n":2}}"#;
+    let survivor = run_single(
+        &dir,
+        spec,
+        20240102,
+        20240104,
+        &BacktestConfig::default(),
+        "close",
+    )
+    .unwrap();
+    let honest = run_single(
+        &dir,
+        spec,
+        20240102,
+        20240104,
+        &BacktestConfig {
+            delist_after: 1,
+            delist_haircut: 1.0,
+            ..Default::default()
+        },
+        "close",
+    )
+    .unwrap();
+    assert!(
+        (survivor.metrics.total_return - honest.metrics.total_return).abs() > 1e-9,
+        "delist forced-exit did not change the result: survivor={} honest={}",
+        survivor.metrics.total_return,
+        honest.metrics.total_return
+    );
 }
 
 #[test]

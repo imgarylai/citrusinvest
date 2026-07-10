@@ -1,6 +1,7 @@
 //! Unit tests for the FMP sync modules.
 
 use super::config::SyncConfig;
+use super::delisted::{exchange_filter, keep_exchange, parse_delisted_rows, DelistedSymbol};
 use super::fundamentals::{densify_fundamentals, merge_fundamentals};
 use super::http::{redact, HttpError};
 use super::price::parse_price_rows;
@@ -89,6 +90,52 @@ fn merge_fundamentals_spreads_fields_across_endpoints() {
     assert_eq!(vals[0], 15.0); // pe
     assert_eq!(vals[6], 1.0e12); // market_cap
     assert_eq!(vals[11], 0.08); // revenue_growth
+}
+
+#[test]
+fn parse_delisted_rows_extracts_symbol_exchange_and_date() {
+    let rows = vec![
+        serde_json::json!({
+            "symbol":"DEAD","companyName":"Dead Co","exchange":"NASDAQ",
+            "ipoDate":"2002-05-21","delistedDate":"2024-01-03"
+        }),
+        // Missing delistedDate → symbol still kept, date None.
+        serde_json::json!({"symbol":"OLD","exchange":"NYSE"}),
+        // Blank symbol → dropped.
+        serde_json::json!({"symbol":"  ","exchange":"NASDAQ","delistedDate":"2020-01-01"}),
+    ];
+    let out = parse_delisted_rows(&rows);
+    assert_eq!(
+        out,
+        vec![
+            DelistedSymbol {
+                symbol: "DEAD".into(),
+                exchange: "NASDAQ".into(),
+                delisted_date: Some(20240103),
+            },
+            DelistedSymbol {
+                symbol: "OLD".into(),
+                exchange: "NYSE".into(),
+                delisted_date: None,
+            },
+        ]
+    );
+}
+
+#[test]
+fn exchange_filter_keeps_only_wanted_exchanges() {
+    // None / empty / "all" → keep every exchange.
+    assert!(exchange_filter(None).is_none());
+    assert!(exchange_filter(Some("")).is_none());
+    assert!(exchange_filter(Some("all")).is_none());
+
+    let us = exchange_filter(Some("NASDAQ,NYSE,AMEX"));
+    assert!(keep_exchange(&us, "nasdaq")); // case-insensitive
+    assert!(keep_exchange(&us, "NYSE"));
+    assert!(!keep_exchange(&us, "OTC")); // OTC filtered out
+    assert!(!keep_exchange(&us, "CBOE"));
+    // No filter keeps even the odd ones.
+    assert!(keep_exchange(&None, "OTC"));
 }
 
 #[test]

@@ -311,6 +311,14 @@ enum Cmd {
         /// endpoint and skipped).
         #[arg(long)]
         include_etf: bool,
+        /// Also union FMP's delisted-companies universe (filtered by --exchange)
+        /// into the symbol list, so dead names are synced too — their price
+        /// files simply end at the delisting date, and the engine's delist_after
+        /// forced-exit handles them. Removes survivorship bias at the data layer
+        /// (#124 / #26). Note: delisted rows carry no market cap, so
+        /// --min-market-cap does not filter them.
+        #[arg(long)]
+        include_delisted: bool,
         /// Skip symbols whose company market cap is below this, in USD (0 = off).
         /// Accepts unit suffixes: 1b, 500m, 10k, 2.5t (or a plain number / 1e9).
         #[arg(long, default_value = "0", value_parser = yuzu_cli::fmp::parse_market_cap)]
@@ -361,6 +369,12 @@ enum Cmd {
         /// Include ETFs and funds (default: stocks only).
         #[arg(long)]
         include_etf: bool,
+        /// Also append FMP's delisted-companies universe (filtered by
+        /// --exchange) to the list, so a whole-market backtest is
+        /// survivorship-honest (#124 / #26). Delisted rows carry no market cap,
+        /// so --min-market-cap does not filter them.
+        #[arg(long)]
+        include_delisted: bool,
         /// Cap the number of symbols returned (default: the API's).
         #[arg(long)]
         limit: Option<usize>,
@@ -566,6 +580,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             include_fundamentals,
             include_industry,
             include_etf,
+            include_delisted,
             min_market_cap,
             rate_limit,
             max_retries,
@@ -615,10 +630,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 mode,
             };
             let client = yuzu_cli::fmp::UreqClient::new();
-            let symbols = if all_symbols {
+            let mut symbols = if all_symbols {
                 let filter = yuzu_cli::fmp::SymbolFilter {
                     min_market_cap,
-                    exchange: Some(exchange),
+                    exchange: Some(exchange.clone()),
                     include_etf,
                     limit: None,
                 };
@@ -638,6 +653,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 explicit
             };
+            if include_delisted {
+                eprintln!("fetching delisted universe from FMP…");
+                let delisted =
+                    yuzu_cli::fmp::fetch_delisted(&client, &api_key, &cfg, Some(&exchange))?;
+                let mut seen: std::collections::HashSet<String> = symbols.iter().cloned().collect();
+                let before = symbols.len();
+                for d in delisted {
+                    if seen.insert(d.symbol.clone()) {
+                        symbols.push(d.symbol);
+                    }
+                }
+                eprintln!("delisted: +{} names unioned in", symbols.len() - before);
+            }
             let summary = yuzu_cli::fmp::sync(&client, &api_key, &symbols, &out, &cfg)?;
             eprintln!(
                 "done: {} written, {} skipped, {} filtered, {} price rows, {} fundamentals, {} failures",
@@ -662,6 +690,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             min_market_cap,
             exchange,
             include_etf,
+            include_delisted,
             limit,
             rate_limit,
             max_retries,
@@ -678,15 +707,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
             let filter = yuzu_cli::fmp::SymbolFilter {
                 min_market_cap,
-                exchange: Some(exchange),
+                exchange: Some(exchange.clone()),
                 include_etf,
                 limit,
             };
             let client = yuzu_cli::fmp::UreqClient::new();
             eprintln!("building symbol universe from FMP screener…");
-            let syms = yuzu_cli::fmp::build_symbol_list(&client, &api_key, &cfg, &filter)?;
+            let mut syms = yuzu_cli::fmp::build_symbol_list(&client, &api_key, &cfg, &filter)?;
             if syms.is_empty() {
                 return Err("screener returned no symbols (loosen the filters?)".into());
+            }
+            if include_delisted {
+                eprintln!("fetching delisted universe from FMP…");
+                let delisted =
+                    yuzu_cli::fmp::fetch_delisted(&client, &api_key, &cfg, Some(&exchange))?;
+                let mut seen: std::collections::HashSet<String> = syms.iter().cloned().collect();
+                let before = syms.len();
+                for d in delisted {
+                    if seen.insert(d.symbol.clone()) {
+                        syms.push(d.symbol);
+                    }
+                }
+                syms.sort();
+                eprintln!("delisted: +{} names appended", syms.len() - before);
             }
             let mut body = String::from("# symbols built by `yuzu-cli fmp-symbols`\n");
             for s in &syms {
