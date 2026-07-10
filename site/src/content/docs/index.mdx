@@ -1,0 +1,57 @@
+---
+title: citrusinvest
+description: Learn the yuzu backtest engine and the lemon strategy DSL — with an in-browser backtest playground.
+template: splash
+hero:
+  tagline: An open-source Rust backtest engine (yuzu) and a small strategy DSL (lemon). Write a strategy, run a backtest — right here in your browser.
+  actions:
+    - text: Quickstart
+      link: start/quickstart
+      icon: right-arrow
+      variant: primary
+    - text: Try the playground
+      link: playground
+      icon: rocket
+    - text: View on GitHub
+      link: https://github.com/imgarylai/citrusinvest
+      icon: external
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+## What this is
+
+**citrusinvest** turns a one-line strategy into an equity curve, a trade list,
+and a full metrics report. Two pieces:
+
+- **lemon** — a small, readable DSL. `is_largest(sma(close, 2), 3)` means
+  *"hold the three names with the highest 2-day average close."*
+- **yuzu** — a pure, I/O-free engine that evaluates the strategy against your
+  price/fundamental panels and produces a `Report`.
+
+It compiles to native (batch backtests via Rayon) **and** WebAssembly — which is
+exactly why the [playground](playground) can run a real backtest with no server.
+
+<CardGrid stagger>
+  <Card title="Readable strategies" icon="pencil">
+    Author in lemon; the engine lowers it to a JSON `Expr` tree. No boilerplate.
+  </Card>
+  <Card title="Runs in the browser" icon="rocket">
+    The same engine that runs native batch backtests is compiled to WASM.
+  </Card>
+  <Card title="Bring your own data" icon="document">
+    The engine ships no market data — you feed panels. See the data guide.
+  </Card>
+  <Card title="Rust-native API" icon="setting">
+    Published crates document themselves on docs.rs.
+  </Card>
+</CardGrid>
+
+## Start here
+
+<CardGrid>
+  <LinkCard title="Quickstart" description="Install, run the bundled example, see a report in minutes." href="start/quickstart" />
+  <LinkCard title="Your first strategy" description="Build up a lemon strategy one operator at a time." href="start/first-strategy" />
+  <LinkCard title="Interactive playground" description="Edit a strategy and backtest it in your browser." href="playground" />
+  <LinkCard title="Reading a report" description="What every metric and series in a Report means." href="guides/reading-a-report" />
+</CardGrid>

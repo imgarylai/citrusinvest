@@ -1,0 +1,88 @@
+/* citrus accent — keeps the tutorial site visually distinct from plain rustdoc */
+:root {
+  --sl-color-accent-low: #3a3000;
+  --sl-color-accent: #b8860b;
+  --sl-color-accent-high: #ffe08a;
+}
+:root[data-theme='light'] {
+  --sl-color-accent-low: #fff3c4;
+  --sl-color-accent: #a06a00;
+  --sl-color-accent-high: #4a3200;
+}
+
+/* Playground layout */
+.pg-wrap {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 60rem) {
+  .pg-wrap {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+.pg-editor {
+  width: 100%;
+  min-height: 16rem;
+  font-family: var(--sl-font-mono, monospace);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  padding: 0.75rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.5rem;
+  background: var(--sl-color-black);
+  color: var(--sl-color-white);
+  resize: vertical;
+}
+.pg-run {
+  margin-top: 0.75rem;
+  padding: 0.5rem 1.25rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 0.5rem;
+  background: var(--sl-color-accent);
+  color: #fff;
+  cursor: pointer;
+}
+.pg-run:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+.pg-status {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--sl-color-gray-3);
+  min-height: 1.2em;
+}
+.pg-status[data-kind='error'] {
+  color: #ff6b6b;
+}
+.pg-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+.pg-metric {
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+}
+.pg-metric .k {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sl-color-gray-3);
+}
+.pg-metric .v {
+  font-size: 1.1rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.pg-chart {
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.5rem;
+  background: var(--sl-color-black);
+}
