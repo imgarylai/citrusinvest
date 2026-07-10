@@ -1,6 +1,7 @@
 name: Publish WASM to npm
 
 on:
+  # Manual runs: pick which package(s) to publish.
   workflow_dispatch:
     inputs:
       package:
@@ -8,14 +9,30 @@ on:
         type: choice
         options: [lemon-wasm, yuzu-wasm, both]
         default: lemon-wasm
+  # Automatic runs: when release-plz cuts a release, publish the new version so
+  # npm stays in lockstep with crates.io. release-plz may open one release per
+  # crate, so this can fire several times for a single version bump — the
+  # per-step "already published?" guard makes the extra runs no-op cleanly.
+  release:
+    types: [published]
 
 permissions:
   contents: read
   id-token: write # OIDC token exchange for npm Trusted Publishing
 
+# Serialize runs so concurrent release events don't race on the same version.
+concurrency:
+  group: publish-wasm-npm
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-latest
+    # On a release event there are no inputs, so default to the packages that
+    # are already onboarded on npm (have a Trusted Publisher configured). Add
+    # yuzu-wasm here once it has been published + trusted once.
+    env:
+      PACKAGE: ${{ github.event_name == 'release' && 'lemon-wasm' || inputs.package }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -34,22 +51,36 @@ jobs:
         run: npm install -g npm@latest
 
       # wasm-pack resolves --out-dir relative to the crate directory, so we cd
-      # into the crate and publish ./pkg from there (npm publish's path is
-      # relative to the step's working directory). This keeps the built package
-      # path unambiguous regardless of the wasm-pack version.
+      # into the crate and publish ./pkg from there. The bare name `pkg` would
+      # be read as a registry spec, so the path must be `./pkg`.
       #
       # No NODE_AUTH_TOKEN: with a trusted publisher configured on npmjs.com,
       # npm mints a short-lived OIDC token itself and attaches provenance.
+      #
+      # Idempotent: skip if this exact version is already on npm, so repeated
+      # release events (or manual re-runs) don't fail on an existing version.
       - name: Build & publish @citrusquant/lemon-wasm
-        if: ${{ inputs.package == 'lemon-wasm' || inputs.package == 'both' }}
+        if: ${{ env.PACKAGE == 'lemon-wasm' || env.PACKAGE == 'both' }}
         working-directory: crates/lemon-wasm
         run: |
           wasm-pack build --release --target bundler --scope citrusquant --out-dir pkg
-          npm publish ./pkg --access public
+          name=$(node -p "require('./pkg/package.json').name")
+          version=$(node -p "require('./pkg/package.json').version")
+          if npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "::notice::$name@$version already published — skipping"
+          else
+            npm publish ./pkg --access public
+          fi
 
       - name: Build & publish @citrusquant/yuzu-wasm
-        if: ${{ inputs.package == 'yuzu-wasm' || inputs.package == 'both' }}
+        if: ${{ env.PACKAGE == 'yuzu-wasm' || env.PACKAGE == 'both' }}
         working-directory: crates/yuzu-wasm
         run: |
           wasm-pack build --release --target bundler --scope citrusquant --out-dir pkg
-          npm publish ./pkg --access public
+          name=$(node -p "require('./pkg/package.json').name")
+          version=$(node -p "require('./pkg/package.json').version")
+          if npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "::notice::$name@$version already published — skipping"
+          else
+            npm publish ./pkg --access public
+          fi
