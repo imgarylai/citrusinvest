@@ -1119,6 +1119,28 @@
         },
         {
           "additionalProperties": false,
+          "description": "Boolean mask (1/0) where the symbol's industry equals `name` (exact, case-sensitive); shape follows `of`.",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "InSector"
+            }
+          },
+          "required": [
+            "op",
+            "of",
+            "name"
+          ],
+          "title": "InSector",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
           "description": "1 where `l` is greater than `r`, else 0.",
           "properties": {
             "l": {

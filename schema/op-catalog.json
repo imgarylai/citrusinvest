@@ -1019,6 +1019,25 @@
     "tag": "GroupbyCategory"
   },
   {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "kind": "string",
+        "name": "name",
+        "required": true
+      }
+    ],
+    "description": "Boolean mask (1/0) where the symbol's industry equals `name` (exact, case-sensitive); shape follows `of`.",
+    "form": "function",
+    "name": "in_sector",
+    "tag": "InSector"
+  },
+  {
     "args": [
       {
         "kind": "expr",

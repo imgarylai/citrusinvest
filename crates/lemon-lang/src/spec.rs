@@ -236,4 +236,7 @@ pub enum Expr {
     },
     /// Aggregate `of` within each industry using `agg` (e.g. mean).
     GroupbyCategory { of: Box<Expr>, agg: String },
+    /// Boolean mask: `1` where the symbol's industry equals `name` (exact, case-sensitive).
+    /// Shape follows `of`; symbols missing from the industry map are `0`.
+    InSector { of: Box<Expr>, name: String },
 }

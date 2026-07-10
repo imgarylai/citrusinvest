@@ -547,6 +547,22 @@ mod tests {
     }
 
     #[test]
+    fn in_sector_surface() {
+        assert_eq!(
+            p(r#"in_sector(close, "Technology")"#),
+            json!({"op":"InSector","of":{"op":"Data","name":"close"},"name":"Technology"})
+        );
+        assert_eq!(
+            p(r#"mask(is_largest(roe, 10), in_sector(roe, "Energy"))"#),
+            json!({
+                "op":"Mask",
+                "of":{"op":"IsLargest","of":{"op":"Data","name":"roe"},"n":10},
+                "by":{"op":"InSector","of":{"op":"Data","name":"roe"},"name":"Energy"}
+            })
+        );
+    }
+
+    #[test]
     fn rebinding_is_an_error() {
         assert!(parse("let a = close\nlet a = pe\na > 1").is_err());
     }
