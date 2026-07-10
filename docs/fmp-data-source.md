@@ -127,7 +127,7 @@ checklist for your sync job; re-verify endpoints when implementing a builder.
 | Company **sector** for industry map | US profile fields usually enough | **Available** |
 | Snapshot scores / analyst series | Often limited, extra endpoints, or must **derive** | **Degraded / Derive** |
 | Full-universe **bulk** EOD/statements | Not on Starter | **Missing (ops scale)** — ops still run on small lists |
-| Historical **index constituents** (PIT) | Often weak or incomplete | **Degraded / Missing** |
+| Historical **index constituents** (PIT) | Reconstructable from the change log via `--index` (#125); thins out for old dates | **Degraded** (recent OK, old drifts) |
 | **Delisted** names with complete price files | Easy to omit if you only sync “active” lists; `--include-delisted` ingests them (#124) | **Degraded** unless you pass `--include-delisted` |
 
 “Richer” FMP tiers mainly restore **depth**, **fuller fundamentals**, and
@@ -190,7 +190,7 @@ the key stays on your machine and no FMP data is redistributed. FMP lives only i
 yuzu-cli fmp-sync --api-key "$FMP_API_KEY" --out ./mydata \
   --symbols AAPL,MSFT,GOOGL --from 20200101 --to 20251231 \
   [--include-fundamentals] [--include-industry] \
-  [--include-etf] [--include-delisted] [--min-market-cap 1b] [--all-symbols] [--exchange NASDAQ,NYSE,AMEX] \
+  [--include-etf] [--include-delisted] [--min-market-cap 1b] [--all-symbols] [--index sp500] [--exchange NASDAQ,NYSE,AMEX] \
   [--rate-limit 300] [--max-retries 4] [--append | --resume]
 ```
 
@@ -201,6 +201,7 @@ yuzu-cli fmp-sync --api-key "$FMP_API_KEY" --out ./mydata \
 | `tracked/universe.csv.gz` (`symbol,sector,market_cap`) | `--include-industry` | `profile` |
 | — (universe discovery / exchange, ETF & market-cap screen) | `--all-symbols`, `--exchange`, `--min-market-cap` | `company-screener`, `profile` |
 | — (delisted names unioned into the universe) | `--include-delisted` | `delisted-companies` |
+| `panels/in_<index>.csv.gz` (PIT membership 0/1) + ever-member price universe | `--index sp500` | `sp-500` + `historical-sp-500` |
 | symbol list file (`yuzu-cli fmp-symbols`) | `fmp-symbols --out …` | `company-screener` |
 
 ### Establishing the symbol list first
@@ -239,6 +240,17 @@ Universe & screening (from #52 review):
 - **Market-cap floor** — `--min-market-cap <usd>` drops symbols below that
   company market cap (`0` = off), read from the `profile` endpoint. Accepts unit
   suffixes: `1b`, `500m`, `10k`, `2.5t` (or a plain number / `1e9`).
+- **Point-in-time index** — `--index sp500` (or `nasdaq` / `dowjones`) is a
+  universe source that reconstructs membership from FMP's current snapshot
+  (`sp-500`) + change log (`historical-sp-500`): it syncs every name that was
+  **ever** a member over `[from,to]` (survivorship-honest, incl. names that later
+  left) and writes a `panels/in_sp500.csv.gz` 0/1 membership panel. Backtest with
+  `mask(signal, in_sp500)` to hold a name only while it was a member; the CLI
+  `run` / `sweep` auto-loads `in_sp500` from `panels/`. **Honest weakness:**
+  reconstruction is index-scoped and **drifts the further back you go** (older
+  change-log rows drop the removed ticker / reason), so it's reliable in recent
+  years and degrades pre-2000s. Mutually exclusive with the other universe
+  sources (#125).
 - **Delisted names** — `--include-delisted` unions FMP's `delisted-companies`
   universe (filtered by `--exchange`) into the symbol list, so dead securities
   are synced too. Their `prices/{SYM}.csv.gz` simply **ends at the delisting
@@ -271,10 +283,11 @@ close/OHLC TA and cross-section ops on a modest symbol list (the acceptance path
 `fmp-sync` then `yuzu-cli run`). Fundamentals are **best-effort** from the annual
 ratios/metrics/growth endpoints and are dense forward-filled onto the price
 calendar; fields the plan does not return are left `NaN`. Delisted names can be
-unioned in with `--include-delisted` for survivorship-honest backtests (#124).
-Richer fundamentals, full-universe, and point-in-time index membership remain out
+unioned in with `--include-delisted` for survivorship-honest backtests (#124),
+and `--index sp500` reconstructs point-in-time index membership (#125).
+Richer fundamentals and full-universe / bulk rebuilds remain out
 of scope — see §2–§4 above for what a Starter key can and cannot honestly
-support, and #53 / #125 for the follow-up.
+support, and #53 for the remaining follow-up.
 
 ---
 

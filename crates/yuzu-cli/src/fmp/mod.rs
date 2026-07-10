@@ -32,6 +32,7 @@ mod config;
 mod delisted;
 mod fundamentals;
 mod http;
+mod index;
 mod industry;
 mod price;
 mod sync;
@@ -50,6 +51,7 @@ pub(crate) const INDUSTRY_KEY: &str = "tracked/universe.csv.gz";
 pub use config::{SyncConfig, SyncSummary, WriteMode};
 pub use delisted::{fetch_delisted, DelistedSymbol};
 pub use http::{HttpClient, HttpError, UreqClient};
+pub use index::{Index, IndexMembership, MEMBERSHIP_SERIES};
 pub use sync::sync;
 pub use universe::{
     build_symbol_list, parse_market_cap, parse_symbols_list, SymbolFilter, US_EXCHANGES,

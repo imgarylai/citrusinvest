@@ -106,6 +106,26 @@ enum StopFillArg {
     Close,
 }
 
+/// Index whose point-in-time membership `fmp-sync --index` reconstructs.
+#[cfg(feature = "fmp-sync")]
+#[derive(Clone, Copy, ValueEnum)]
+enum IndexArg {
+    Sp500,
+    Nasdaq,
+    Dowjones,
+}
+
+#[cfg(feature = "fmp-sync")]
+impl From<IndexArg> for yuzu_cli::fmp::Index {
+    fn from(a: IndexArg) -> Self {
+        match a {
+            IndexArg::Sp500 => yuzu_cli::fmp::Index::Sp500,
+            IndexArg::Nasdaq => yuzu_cli::fmp::Index::Nasdaq,
+            IndexArg::Dowjones => yuzu_cli::fmp::Index::DowJones,
+        }
+    }
+}
+
 impl CommonArgs {
     fn config(&self) -> yuzu_core::backtest::BacktestConfig {
         use yuzu_core::backtest::{StopConfig, StopFill};
@@ -292,6 +312,14 @@ enum Cmd {
         /// --rate-limit / --resume. Mutually exclusive with --symbols.
         #[arg(long)]
         all_symbols: bool,
+        /// Reconstruct a point-in-time index universe: sync every name that was
+        /// ever a member over [from,to] (survivorship-honest, incl. names that
+        /// later left), and write a `in_<index>` 0/1 membership panel to
+        /// panels/. Backtest with `mask(signal, in_sp500)`. Index-scoped and
+        /// degrades for very old dates (#125). Mutually exclusive with the other
+        /// universe sources.
+        #[arg(long, value_enum)]
+        index: Option<IndexArg>,
         /// Exchanges for --all-symbols (comma-separated FMP codes). Default the
         /// three US majors; pass `all` for every exchange.
         #[arg(long, default_value = yuzu_cli::fmp::US_EXCHANGES)]
@@ -574,6 +602,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             symbols,
             symbols_file,
             all_symbols,
+            index,
             exchange,
             from,
             to,
@@ -596,17 +625,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty())
                 .collect();
-            // Exactly one universe source: --symbols, --symbols-file, or --all-symbols.
-            let sources = [!explicit.is_empty(), symbols_file.is_some(), all_symbols]
-                .iter()
-                .filter(|b| **b)
-                .count();
+            // Exactly one universe source: --symbols, --symbols-file, --all-symbols, --index.
+            let sources = [
+                !explicit.is_empty(),
+                symbols_file.is_some(),
+                all_symbols,
+                index.is_some(),
+            ]
+            .iter()
+            .filter(|b| **b)
+            .count();
             if sources > 1 {
-                return Err("choose one of --symbols, --symbols-file, or --all-symbols".into());
+                return Err(
+                    "choose one of --symbols, --symbols-file, --all-symbols, or --index".into(),
+                );
             }
             if sources == 0 {
                 return Err(
-                    "provide --symbols AAPL,MSFT,..., --symbols-file <path>, or --all-symbols"
+                    "provide --symbols AAPL,MSFT,..., --symbols-file <path>, --all-symbols, or --index <sp500|nasdaq|dowjones>"
                         .into(),
                 );
             }
@@ -630,7 +666,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 mode,
             };
             let client = yuzu_cli::fmp::UreqClient::new();
-            let mut symbols = if all_symbols {
+            // For --index, fetch the reconstructor up front: its ever-members are
+            // the sync universe, and it's reused after the sync to write the
+            // membership panel over the resulting price calendar.
+            let membership = match index {
+                Some(idx) => Some(yuzu_cli::fmp::IndexMembership::fetch(
+                    &client,
+                    &api_key,
+                    idx.into(),
+                    &cfg,
+                )?),
+                None => None,
+            };
+            let mut symbols = if let Some(m) = &membership {
+                eprintln!(
+                    "reconstructing {} point-in-time membership…",
+                    m.series_name()
+                );
+                let ever = m.ever_members(from, to);
+                eprintln!(
+                    "index universe: {} ever-members over [{from}, {to}]",
+                    ever.len()
+                );
+                ever
+            } else if all_symbols {
                 let filter = yuzu_cli::fmp::SymbolFilter {
                     min_market_cap,
                     exchange: Some(exchange.clone()),
@@ -681,6 +740,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             if summary.symbols_written == 0 {
                 return Err("no symbols were written".into());
+            }
+            // Now that prices exist (a trading calendar), write the PIT
+            // membership panel over exactly those days.
+            if let Some(m) = &membership {
+                let (days, cols) = yuzu_cli::write_index_membership(&out, m, from, to)?;
+                eprintln!(
+                    "wrote panels/{}.csv.gz: {days} days × {cols} symbols (mask with mask(signal, {}))",
+                    m.series_name(),
+                    m.series_name()
+                );
             }
         }
         #[cfg(feature = "fmp-sync")]

@@ -11,7 +11,10 @@ use serde::Serialize;
 use yuzu_core::backtest::BacktestConfig;
 use yuzu_core::report::Report;
 use yuzu_core::{run_backtest, EvalContext};
-use yuzu_data::{load_panel, Field, LocalSource, PRICES_DIR};
+use yuzu_data::{
+    load_combined_panel, load_panel, write_combined_panel, Field, LocalSource, ObjectSink,
+    PANELS_DIR, PRICES_DIR,
+};
 
 /// Symbols with a per-symbol price file under `root/prices`, sorted and
 /// de-duplicated. Recognizes `.csv.gz`, `.parquet`, and `.csv`; the
@@ -101,6 +104,19 @@ pub(crate) fn load_ctx(
             .map_err(|e| e.to_string())?;
         panels.insert("volume".to_string(), volume);
     }
+    // Auto-load index membership panels (in_sp500, …) from panels/ when present,
+    // so a strategy can `mask(signal, in_sp500)` on the CLI path. Columns absent
+    // from the file become NaN (i.e. "not a member"). Missing file → skipped.
+    for name in fmp::MEMBERSHIP_SERIES {
+        if panels.contains_key(*name) {
+            continue;
+        }
+        if let Some(p) = load_combined_panel(&src, name, &syms, from, to, PANELS_DIR)
+            .map_err(|e| e.to_string())?
+        {
+            panels.insert((*name).to_string(), p);
+        }
+    }
     // The CLI treats benchmark_key as a SYMBOL: its closes are loaded as a
     // one-column panel under that key (e.g. --benchmark SPY).
     if let Some(sym) = &cfg.benchmark_key {
@@ -121,6 +137,47 @@ pub(crate) fn load_ctx(
         panels,
         industry: HashMap::new(),
     })
+}
+
+/// The trading calendar of a synced tree: the ascending, unique dates of the
+/// `close` panel over `[from, to]`. Used to place an index membership panel on
+/// exactly the days prices exist for.
+pub fn trading_calendar(root: &Path, from: i32, to: i32) -> Result<Vec<i32>, String> {
+    let syms = list_symbols(root).map_err(|e| e.to_string())?;
+    if syms.is_empty() {
+        return Err("no synced prices to derive a trading calendar from".to_string());
+    }
+    let close = load_panel(
+        &LocalSource::new(root),
+        &syms,
+        Field::AdjClose,
+        from,
+        to,
+        PRICES_DIR,
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(close.dates)
+}
+
+/// Reconstruct and write an index membership panel (`panels/in_sp500.csv.gz`,
+/// etc.) over the synced tree's trading calendar. Columns are the index's
+/// `ever_members(from, to)` — the same universe you should have synced. Returns
+/// `(days, symbols)` in the written panel.
+pub fn write_index_membership(
+    root: &Path,
+    membership: &fmp::IndexMembership,
+    from: i32,
+    to: i32,
+) -> Result<(usize, usize), String> {
+    let calendar = trading_calendar(root, from, to)?;
+    let columns = membership.ever_members(from, to);
+    let panel = membership.membership_panel(&calendar, &columns)?;
+    let bytes = write_combined_panel(&panel).map_err(|e| e.to_string())?;
+    let key = format!("{PANELS_DIR}/{}.csv.gz", membership.series_name());
+    LocalSource::new(root)
+        .put(&key, &bytes)
+        .map_err(|e| e.to_string())?;
+    Ok((calendar.len(), columns.len()))
 }
 
 /// Which metric to rank by in a sweep.
