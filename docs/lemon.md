@@ -248,6 +248,26 @@ works. `n`-style arguments are **plain numbers**, not expressions.
 | `fall`                  | `of`, `n`               | `1` where `of` fell `n` consecutive days, else `0`. |
 | `shift`                 | `of`, `n`               | `of` lagged forward by `n` days.                    |
 | `rolling_max`           | `of`, `n`               | Rolling maximum over `n` days.                       |
+| `rolling_min`           | `of`, `n`               | Rolling minimum over `n` days.                       |
+
+### Bands & channels (single-series composites)
+
+These take one series (`of`, usually `close`) and are composed from the moving
+averages / rolling stats above. Bollinger bands warm up with their `std` term
+(NaN until row `n-1`), the mid line with `sma` (`min_periods = n/2`); MACD lines
+warm up once the slow EMA seeds; Donchian bands at row `n-1`.
+
+| Call              | Arguments                                | Meaning                                                        |
+| ----------------- | ---------------------------------------- | -------------------------------------------------------------- |
+| `bollinger_mid`   | `of`, `n`                                | Mid band: `sma(of, n)`.                                        |
+| `bollinger_upper` | `of`, `n`, `k?`=`2`                      | Upper band: `sma(of, n) + k * std(of, n)`.                     |
+| `bollinger_lower` | `of`, `n`, `k?`=`2`                      | Lower band: `sma(of, n) - k * std(of, n)`.                     |
+| `macd`            | `of`, `fast?`=`12`, `slow?`=`26`         | MACD line: `ema(of, fast) - ema(of, slow)`.                    |
+| `macd_signal`     | `of`, `fast?`=`12`, `slow?`=`26`, `signal?`=`9` | `signal`-day EMA of the MACD line.                      |
+| `macd_hist`       | `of`, `fast?`=`12`, `slow?`=`26`, `signal?`=`9` | MACD line minus its signal line.                        |
+| `donchian_high`   | `of`, `n`                                | Upper channel: rolling `n`-day high (`rolling_max`).           |
+| `donchian_low`    | `of`, `n`                                | Lower channel: rolling `n`-day low (`rolling_min`).            |
+| `donchian_mid`    | `of`, `n`                                | Channel mid: `(rolling_max + rolling_min) / 2`.               |
 
 ### OHLCV technical indicators
 

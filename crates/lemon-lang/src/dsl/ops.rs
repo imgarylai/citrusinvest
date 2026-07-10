@@ -144,6 +144,86 @@ static ROWS: &[Row] = &[
         desc: "Rolling maximum of `of` over `n` days.",
     },
     Row {
+        names: &["rolling_min"],
+        sig: OpSig {
+            tag: "RollingMin",
+            fields: &[Expr("of"), Num("n")],
+        },
+        desc: "Rolling minimum of `of` over `n` days.",
+    },
+    Row {
+        names: &["bollinger_mid"],
+        sig: OpSig {
+            tag: "BollingerMid",
+            fields: &[Expr("of"), Num("n")],
+        },
+        desc: "Bollinger mid band: the `n`-day simple moving average of `of`.",
+    },
+    Row {
+        names: &["bollinger_upper"],
+        sig: OpSig {
+            tag: "BollingerUpper",
+            fields: &[Expr("of"), Num("n"), NumOpt("k")],
+        },
+        desc: "Bollinger upper band: sma(of, n) + k * std(of, n) (k defaults to 2).",
+    },
+    Row {
+        names: &["bollinger_lower"],
+        sig: OpSig {
+            tag: "BollingerLower",
+            fields: &[Expr("of"), Num("n"), NumOpt("k")],
+        },
+        desc: "Bollinger lower band: sma(of, n) - k * std(of, n) (k defaults to 2).",
+    },
+    Row {
+        names: &["macd"],
+        sig: OpSig {
+            tag: "Macd",
+            fields: &[Expr("of"), NumOpt("fast"), NumOpt("slow")],
+        },
+        desc: "MACD line: ema(of, fast) - ema(of, slow) (fast/slow default 12/26).",
+    },
+    Row {
+        names: &["macd_signal"],
+        sig: OpSig {
+            tag: "MacdSignal",
+            fields: &[Expr("of"), NumOpt("fast"), NumOpt("slow"), NumOpt("signal")],
+        },
+        desc: "MACD signal line: `signal`-day EMA of the MACD line (defaults 12/26/9).",
+    },
+    Row {
+        names: &["macd_hist"],
+        sig: OpSig {
+            tag: "MacdHist",
+            fields: &[Expr("of"), NumOpt("fast"), NumOpt("slow"), NumOpt("signal")],
+        },
+        desc: "MACD histogram: MACD line minus its signal line (defaults 12/26/9).",
+    },
+    Row {
+        names: &["donchian_high"],
+        sig: OpSig {
+            tag: "DonchianHigh",
+            fields: &[Expr("of"), Num("n")],
+        },
+        desc: "Donchian channel upper band: rolling `n`-day high of `of`.",
+    },
+    Row {
+        names: &["donchian_low"],
+        sig: OpSig {
+            tag: "DonchianLow",
+            fields: &[Expr("of"), Num("n")],
+        },
+        desc: "Donchian channel lower band: rolling `n`-day low of `of`.",
+    },
+    Row {
+        names: &["donchian_mid"],
+        sig: OpSig {
+            tag: "DonchianMid",
+            fields: &[Expr("of"), Num("n")],
+        },
+        desc: "Donchian channel mid-line: (rolling_max + rolling_min) / 2 over `n` days.",
+    },
+    Row {
         names: &["atr"],
         sig: OpSig {
             tag: "Atr",
@@ -475,6 +555,10 @@ pub fn field_default(tag: &str, field_name: &str) -> Option<serde_json::Value> {
     use serde_json::json;
     match (tag, field_name) {
         ("StochD", "d") => Some(json!(3)),
+        ("BollingerUpper", "k") | ("BollingerLower", "k") => Some(json!(2.0)),
+        ("Macd", "fast") | ("MacdSignal", "fast") | ("MacdHist", "fast") => Some(json!(12)),
+        ("Macd", "slow") | ("MacdSignal", "slow") | ("MacdHist", "slow") => Some(json!(26)),
+        ("MacdSignal", "signal") | ("MacdHist", "signal") => Some(json!(9)),
         ("Rank", "pct") => Some(json!(true)),
         ("Rank", "ascending") => Some(json!(true)),
         ("Neutralize", "add_const") => Some(json!(true)),
@@ -601,6 +685,16 @@ pub static ALL_OP_TAGS: &[&str] = &[
     "Rise",
     "Shift",
     "RollingMax",
+    "RollingMin",
+    "BollingerMid",
+    "BollingerUpper",
+    "BollingerLower",
+    "Macd",
+    "MacdSignal",
+    "MacdHist",
+    "DonchianHigh",
+    "DonchianLow",
+    "DonchianMid",
     "Atr",
     "Natr",
     "WillR",
@@ -770,7 +864,7 @@ mod tests {
 
     #[test]
     fn every_spec_op_has_a_signature_or_operator() {
-        // The 51 op tags from spec.rs. If a new op is added, add it here AND to the
+        // Every op tag from spec.rs. If a new op is added, add it here AND to the
         // table/operator maps — this test is the completeness gate for this plan.
         for tag in ALL_OP_TAGS {
             let known = ROWS.iter().any(|r| r.sig.tag == *tag)

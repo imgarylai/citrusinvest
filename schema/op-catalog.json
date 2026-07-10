@@ -203,6 +203,241 @@
     "args": [
       {
         "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      }
+    ],
+    "description": "Rolling minimum of `of` over `n` days.",
+    "form": "function",
+    "name": "rolling_min",
+    "tag": "RollingMin"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      }
+    ],
+    "description": "Bollinger mid band: the `n`-day simple moving average of `of`.",
+    "form": "function",
+    "name": "bollinger_mid",
+    "tag": "BollingerMid"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      },
+      {
+        "default": 2.0,
+        "kind": "number",
+        "name": "k",
+        "required": false
+      }
+    ],
+    "description": "Bollinger upper band: sma(of, n) + k * std(of, n) (k defaults to 2).",
+    "form": "function",
+    "name": "bollinger_upper",
+    "tag": "BollingerUpper"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      },
+      {
+        "default": 2.0,
+        "kind": "number",
+        "name": "k",
+        "required": false
+      }
+    ],
+    "description": "Bollinger lower band: sma(of, n) - k * std(of, n) (k defaults to 2).",
+    "form": "function",
+    "name": "bollinger_lower",
+    "tag": "BollingerLower"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "default": 12,
+        "kind": "number",
+        "name": "fast",
+        "required": false
+      },
+      {
+        "default": 26,
+        "kind": "number",
+        "name": "slow",
+        "required": false
+      }
+    ],
+    "description": "MACD line: ema(of, fast) - ema(of, slow) (fast/slow default 12/26).",
+    "form": "function",
+    "name": "macd",
+    "tag": "Macd"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "default": 12,
+        "kind": "number",
+        "name": "fast",
+        "required": false
+      },
+      {
+        "default": 26,
+        "kind": "number",
+        "name": "slow",
+        "required": false
+      },
+      {
+        "default": 9,
+        "kind": "number",
+        "name": "signal",
+        "required": false
+      }
+    ],
+    "description": "MACD signal line: `signal`-day EMA of the MACD line (defaults 12/26/9).",
+    "form": "function",
+    "name": "macd_signal",
+    "tag": "MacdSignal"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "default": 12,
+        "kind": "number",
+        "name": "fast",
+        "required": false
+      },
+      {
+        "default": 26,
+        "kind": "number",
+        "name": "slow",
+        "required": false
+      },
+      {
+        "default": 9,
+        "kind": "number",
+        "name": "signal",
+        "required": false
+      }
+    ],
+    "description": "MACD histogram: MACD line minus its signal line (defaults 12/26/9).",
+    "form": "function",
+    "name": "macd_hist",
+    "tag": "MacdHist"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      }
+    ],
+    "description": "Donchian channel upper band: rolling `n`-day high of `of`.",
+    "form": "function",
+    "name": "donchian_high",
+    "tag": "DonchianHigh"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      }
+    ],
+    "description": "Donchian channel lower band: rolling `n`-day low of `of`.",
+    "form": "function",
+    "name": "donchian_low",
+    "tag": "DonchianLow"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "kind": "number",
+        "name": "n",
+        "required": true
+      }
+    ],
+    "description": "Donchian channel mid-line: (rolling_max + rolling_min) / 2 over `n` days.",
+    "form": "function",
+    "name": "donchian_mid",
+    "tag": "DonchianMid"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
         "name": "high",
         "required": true
       },
