@@ -1,6 +1,17 @@
 // @ts-check
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
+import wasm from 'vite-plugin-wasm';
+import topLevelAwait from 'vite-plugin-top-level-await';
+
+// The wasm playground is client-only, so restrict these transforms to the
+// client build. Letting the top-level-await transform touch Astro's SSR page
+// build breaks its module graph (the static route generator can't find pages).
+const clientOnly = (plugin) => ({
+  ...plugin,
+  apply: (/** @type {unknown} */ _config, /** @type {{ isSsrBuild?: boolean }} */ env) =>
+    !env.isSsrBuild,
+});
 
 // Served from the apex domain citrusquant.com, so assets live at the root.
 // The self-hosted rustdoc is intentionally gone — the published crates
@@ -10,6 +21,12 @@ export default defineConfig({
   site: 'https://citrusquant.com',
   base: '/',
   trailingSlash: 'ignore',
+  // The playground imports the @citrusquant/*-wasm packages (wasm-pack bundler
+  // target); these plugins let Vite bundle the wasm and its top-level-await
+  // instantiation into the client build.
+  vite: {
+    plugins: [clientOnly(wasm()), clientOnly(topLevelAwait())],
+  },
   integrations: [
     starlight({
       title: 'citrusquant',
