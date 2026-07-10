@@ -6,6 +6,7 @@
 
 pub mod combined;
 pub mod csv_io;
+mod date;
 pub mod error;
 pub mod format;
 pub mod fundamentals;
