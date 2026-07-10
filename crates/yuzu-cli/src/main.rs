@@ -112,6 +112,11 @@ enum Cmd {
         /// Path to a JSON Expr spec file.
         #[arg(long)]
         spec: PathBuf,
+        /// Price series that drives fills and daily returns: open/high/low/close.
+        /// For next-open execution, keep close-based signals and lag them
+        /// (`shift(signal, 1)`), then set `--price-key open`.
+        #[arg(long, default_value = "close")]
+        price_key: String,
     },
     /// Run many strategy variants in parallel and emit a ranked leaderboard.
     Sweep {
@@ -126,6 +131,9 @@ enum Cmd {
         /// Keep only the top N entries (default: all).
         #[arg(long)]
         top: Option<usize>,
+        /// Price series that drives fills and daily returns: open/high/low/close.
+        #[arg(long, default_value = "close")]
+        price_key: String,
     },
     /// Expand a parameter grid and run a ranked sweep over every combination.
     Grid {
@@ -140,6 +148,9 @@ enum Cmd {
         /// Keep only the top N entries (default: all).
         #[arg(long)]
         top: Option<usize>,
+        /// Price series that drives fills and daily returns: open/high/low/close.
+        #[arg(long, default_value = "close")]
+        price_key: String,
     },
     /// Compare a strategy against a signal-lagged rerun to flag lookahead
     /// bias / same-close execution dependence.
@@ -315,11 +326,21 @@ fn load_grid_variants(path: &PathBuf) -> Result<Vec<(String, String)>, Box<dyn s
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     match Cli::parse().cmd {
-        Cmd::Run { common, spec } => {
+        Cmd::Run {
+            common,
+            spec,
+            price_key,
+        } => {
             let cfg = common.config();
             let spec_json = std::fs::read_to_string(&spec)?;
-            let report =
-                yuzu_cli::run_single(&common.data, &spec_json, common.from, common.to, &cfg)?;
+            let report = yuzu_cli::run_single(
+                &common.data,
+                &spec_json,
+                common.from,
+                common.to,
+                &cfg,
+                &price_key,
+            )?;
             emit(&common.out, serde_json::to_string_pretty(&report)?)?;
         }
         Cmd::Sweep {
@@ -327,6 +348,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             specs,
             sort,
             top,
+            price_key,
         } => {
             let cfg = common.config();
             let raw = std::fs::read_to_string(&specs)?;
@@ -345,6 +367,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 common.from,
                 common.to,
                 &cfg,
+                &price_key,
                 sort.into(),
             );
             if let Some(n) = top {
@@ -357,6 +380,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             grid,
             sort,
             top,
+            price_key,
         } => {
             let cfg = common.config();
             let variants = load_grid_variants(&grid)?;
@@ -366,6 +390,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 common.from,
                 common.to,
                 &cfg,
+                &price_key,
                 sort.into(),
             );
             if let Some(n) = top {
