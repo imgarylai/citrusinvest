@@ -8,8 +8,8 @@ is_largest(sma(close, 2), 3)`;
 
 <div class="pg-wrap not-content" data-playground>
   <div>
-    <label for="pg-src" style="font-weight:600;font-size:0.85rem;">Strategy (lemon DSL)</label>
-    <textarea id="pg-src" class="pg-editor" spellcheck="false">{initial}</textarea>
+    <label style="font-weight:600;font-size:0.85rem;display:block;margin-bottom:0.35rem;">Strategy (lemon DSL)</label>
+    <div class="pg-editor" data-initial={initial}></div>
     <button class="pg-run" type="button">▶ Run backtest</button>
     <p class="pg-status" data-kind="info">Ready. Runs entirely in your browser on a synthetic sample dataset.</p>
   </div>

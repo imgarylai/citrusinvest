@@ -10,6 +10,8 @@
 // absent (e.g. a plain `astro build` with no CI step), the UI says so instead of
 // throwing.
 
+import { createLemonEditor } from './lemon-editor.ts';
+
 interface SampleData {
   dates: number[];
   symbols: string[];
@@ -152,11 +154,17 @@ function setStatus(el: HTMLElement, msg: string, kind: 'info' | 'error'): void {
 }
 
 export function initPlayground(root: HTMLElement): void {
-  const editor = root.querySelector<HTMLTextAreaElement>('.pg-editor')!;
+  const editorEl = root.querySelector<HTMLElement>('.pg-editor')!;
   const runBtn = root.querySelector<HTMLButtonElement>('.pg-run')!;
   const status = root.querySelector<HTMLElement>('.pg-status')!;
   const metricsEl = root.querySelector<HTMLElement>('.pg-metrics')!;
   const canvas = root.querySelector<HTMLCanvasElement>('.pg-chart')!;
+
+  const editor = createLemonEditor(
+    editorEl,
+    editorEl.dataset.initial ?? 'is_largest(sma(close, 2), 3)',
+    () => run(),
+  );
 
   async function run() {
     runBtn.disabled = true;
@@ -165,7 +173,7 @@ export function initPlayground(root: HTMLElement): void {
       setStatus(status, 'Loading engine + data…', 'info');
       const [s] = await Promise.all([loadSample(), loadWasm()]);
 
-      const parsed = JSON.parse(lemonMod!.parse(editor.value));
+      const parsed = JSON.parse(lemonMod!.parse(editor.getValue()));
       if (!parsed.ok) {
         const e = parsed.error;
         setStatus(status, `Syntax error (line ${e.line}, col ${e.col}): ${e.message}`, 'error');
@@ -218,10 +226,4 @@ export function initPlayground(root: HTMLElement): void {
   }
 
   runBtn.addEventListener('click', run);
-  editor.addEventListener('keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-      e.preventDefault();
-      run();
-    }
-  });
 }

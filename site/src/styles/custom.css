@@ -21,18 +21,10 @@
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 }
+/* The editor surface itself is styled by CodeMirror's theme in
+   components/lemon-editor.ts; just constrain its width here. */
 .pg-editor {
   width: 100%;
-  min-height: 16rem;
-  font-family: var(--sl-font-mono, monospace);
-  font-size: 0.9rem;
-  line-height: 1.5;
-  padding: 0.75rem;
-  border: 1px solid var(--sl-color-gray-5);
-  border-radius: 0.5rem;
-  background: var(--sl-color-black);
-  color: var(--sl-color-white);
-  resize: vertical;
 }
 .pg-run {
   margin-top: 0.75rem;
