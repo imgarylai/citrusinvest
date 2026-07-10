@@ -133,7 +133,7 @@ checklist for your sync job; re-verify endpoints when implementing a builder.
 | Snapshot scores / analyst series | Often limited, extra endpoints, or must **derive** | **Degraded / Derive** |
 | Full-universe **bulk** EOD/statements | Not on Starter | **Missing (ops scale)** — ops still run on small lists |
 | Historical **index constituents** (PIT) | Often weak or incomplete | **Degraded / Missing** |
-| **Delisted** names with complete price files | Easy to omit if you only sync “active” lists | **Degraded** unless you ingest delisteds |
+| **Delisted** names with complete price files | Easy to omit if you only sync “active” lists; `--include-delisted` ingests them (#124) | **Degraded** unless you pass `--include-delisted` |
 
 “Richer” FMP tiers mainly restore **depth**, **fuller fundamentals**, and
 **bulk** so large universes are practical. They do not unlock secret lemon ops.
@@ -195,7 +195,7 @@ the key stays on your machine and no FMP data is redistributed. FMP lives only i
 yuzu-cli fmp-sync --api-key "$FMP_API_KEY" --out ./mydata \
   --symbols AAPL,MSFT,GOOGL --from 20200101 --to 20251231 \
   [--include-fundamentals] [--include-industry] \
-  [--include-etf] [--min-market-cap 1b] [--all-symbols] [--exchange NASDAQ,NYSE,AMEX] \
+  [--include-etf] [--include-delisted] [--min-market-cap 1b] [--all-symbols] [--exchange NASDAQ,NYSE,AMEX] \
   [--rate-limit 300] [--max-retries 4] [--append | --resume]
 ```
 
@@ -205,6 +205,7 @@ yuzu-cli fmp-sync --api-key "$FMP_API_KEY" --out ./mydata \
 | `fundamentals/{SYM}.csv.gz` (dense forward-filled factors + `report_event`) | `--include-fundamentals` | `ratios` + `key-metrics` + `financial-growth` (annual) |
 | `tracked/universe.csv.gz` (`symbol,sector,market_cap`) | `--include-industry` | `profile` |
 | — (universe discovery / exchange, ETF & market-cap screen) | `--all-symbols`, `--exchange`, `--min-market-cap` | `company-screener`, `profile` |
+| — (delisted names unioned into the universe) | `--include-delisted` | `delisted-companies` |
 | symbol list file (`yuzu-cli fmp-symbols`) | `fmp-symbols --out …` | `company-screener` |
 
 ### Establishing the symbol list first
@@ -243,6 +244,15 @@ Universe & screening (from #52 review):
 - **Market-cap floor** — `--min-market-cap <usd>` drops symbols below that
   company market cap (`0` = off), read from the `profile` endpoint. Accepts unit
   suffixes: `1b`, `500m`, `10k`, `2.5t` (or a plain number / `1e9`).
+- **Delisted names** — `--include-delisted` unions FMP's `delisted-companies`
+  universe (filtered by `--exchange`) into the symbol list, so dead securities
+  are synced too. Their `prices/{SYM}.csv.gz` simply **ends at the delisting
+  date** and the engine's `delist_after` forced-exit does the rest (#124 / #26).
+  This removes survivorship bias at the data layer — without it, an
+  `--all-symbols` sync is survivors-only. Note: `delisted-companies` carries no
+  market cap, so `--min-market-cap` does **not** filter these names; and once
+  dead names are present, set a real `delist_after` (e.g. `10`) on the backtest
+  — the engine default stays `0` (survivorship-friendly) for compatibility.
 - Screening happens **before** the price fetch, so a filtered symbol costs no
   price request. A single profile GET per symbol serves the ETF/fund screen, the
   cap screen, and `--include-industry`. A profile-endpoint error fails **open**
@@ -265,10 +275,11 @@ Operational knobs (from #52 discussion):
 close/OHLC TA and cross-section ops on a modest symbol list (the acceptance path —
 `fmp-sync` then `yuzu-cli run`). Fundamentals are **best-effort** from the annual
 ratios/metrics/growth endpoints and are dense forward-filled onto the price
-calendar; fields the plan does not return are left `NaN`. Richer fundamentals,
-full-universe, point-in-time membership, and delist honesty are out of scope —
-see §2–§4 above for what a Starter key can and cannot honestly support, and #53
-for the follow-up.
+calendar; fields the plan does not return are left `NaN`. Delisted names can be
+unioned in with `--include-delisted` for survivorship-honest backtests (#124).
+Richer fundamentals, full-universe, and point-in-time index membership remain out
+of scope — see §2–§4 above for what a Starter key can and cannot honestly
+support, and #53 / #125 for the follow-up.
 
 ---
 

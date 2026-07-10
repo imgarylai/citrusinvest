@@ -21,12 +21,15 @@
 //! Enough to backtest **price-based** strategies over a short US window: close /
 //! OHLC TA and cross-section ops on a modest symbol list. Fundamentals are
 //! best-effort from the annual ratios/key-metrics/growth endpoints; richer
-//! fundamentals, full-universe, point-in-time, and delist honesty are out of
-//! scope (see #53). Which library features an FMP Starter key can *honestly*
+//! fundamentals, full-universe, and point-in-time index membership are out of
+//! scope (see #53 / #125). Delisted names can be unioned into the universe with
+//! `--include-delisted` for survivorship-honest backtests (#124 / #26) — see
+//! [`delisted`]. Which library features an FMP Starter key can *honestly*
 //! support — and which panels are missing — is documented in
 //! [`docs/fmp-data-source.md`](../../../docs/fmp-data-source.md) (#51).
 
 mod config;
+mod delisted;
 mod fundamentals;
 mod http;
 mod industry;
@@ -45,6 +48,7 @@ pub(crate) const FMP_BASE: &str = "https://financialmodelingprep.com";
 pub(crate) const INDUSTRY_KEY: &str = "tracked/universe.csv.gz";
 
 pub use config::{SyncConfig, SyncSummary, WriteMode};
+pub use delisted::{fetch_delisted, DelistedSymbol};
 pub use http::{HttpClient, HttpError, UreqClient};
 pub use sync::sync;
 pub use universe::{
