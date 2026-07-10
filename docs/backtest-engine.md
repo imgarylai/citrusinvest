@@ -636,7 +636,13 @@ it. A grid file is a spec template plus value lists — any JSON string equal to
   the previous window's last close — so long-lookback variants aren't
   handicapped in selection and the stitched curve doesn't drop returns at
   window seams. The very first train window has no earlier data and still
-  starts cold.
+  starts cold. **Holdings carry across seams:** each test segment starts from
+  the previous segment's terminal book (keyed by symbol), so a seam that keeps
+  the same names pays turnover only on the *difference* rather than a full
+  re-entry. With zero fees/slippage this changes nothing; it only matters under
+  costs, where the old flat-restart biased walk-forward against stable-holding
+  strategies. (Engine hook: `backtest::run_with_initial(..., initial_weights)`
+  plus `BacktestRun::terminal_weights`.)
 
 - `yuzu-cli lookahead --data D --spec s.json [--shift-days 1] [--profile]` —
   run the strategy as-is and again with the position matrix lagged (signals
@@ -664,9 +670,6 @@ These items are explicit scope cuts, not gaps:
 
 - **Advanced cost semantics** (`touched_exit` / `retain_cost_when_rebalance` / `stop_trading_next_period`) — the engine currently uses the simplified model described above.
 - **Portfolio optimization** (mean-variance, risk parity, etc.).
-- **Walk-forward position continuity** — each window still enters from flat
-  (paying entry cost) even when the previous window's winner held the same
-  names; holdings don't carry across the seam.
 
 Per-trade **MAE / MFE** (maximum adverse / favorable excursion) and factor
 **neutralization** (`neutralize` / `neutralize_industry` / `industry_rank` /
