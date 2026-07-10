@@ -200,12 +200,34 @@ yuzu-cli fmp-sync --api-key "$FMP_API_KEY" --out ./mydata \
 | `fundamentals/{SYM}.csv.gz` (dense forward-filled factors + `report_event`) | `--include-fundamentals` | `ratios` + `key-metrics` + `financial-growth` (annual) |
 | `tracked/universe.csv.gz` (`symbol,sector,market_cap`) | `--include-industry` | `profile` |
 | — (universe discovery / ETF & market-cap screen) | `--all-symbols`, `--min-market-cap`, default stock-only | `stock-list`, `profile` |
+| symbol list file (`yuzu-cli fmp-symbols`) | `fmp-symbols --out …` | `company-screener` |
+
+### Establishing the symbol list first
+
+For a whole-market backtest, build the sync universe as a reviewable artifact
+**before** pulling prices:
+
+```bash
+# 1. build a screened symbol list (FMP company screener)
+yuzu-cli fmp-symbols --api-key "$FMP_API_KEY" --out ./universe.txt \
+  --min-market-cap 1e9 --exchange NASDAQ,NYSE   # stocks only by default
+
+# 2. review/edit ./universe.txt, then sync prices for exactly that list
+yuzu-cli fmp-sync --api-key "$FMP_API_KEY" --out ./mydata \
+  --symbols-file ./universe.txt --from 20200101 --to 20251231
+```
+
+`fmp-symbols` writes one ticker per line (`#` comments allowed); `fmp-sync
+--symbols-file` reads that back (also accepts a `symbol,…` CSV). This decouples
+*which* symbols exist from *fetching* their data, so the universe can be curated,
+diffed, and re-synced.
 
 Universe & screening (from #52 review):
 
-- **Symbols** — `--symbols AAPL,MSFT,…` for an explicit list, or `--all-symbols`
-  to sync FMP's whole tradable universe (`stock-list`). The full universe is
-  large — pair it with `--min-market-cap` / `--rate-limit` / `--resume`.
+- **Symbols** — `--symbols AAPL,MSFT,…` (explicit list), `--symbols-file <path>`
+  (a prebuilt list, e.g. from `fmp-symbols`), or `--all-symbols` to sync FMP's
+  whole tradable universe (`stock-list`). Exactly one source per run. The full
+  universe is large — pair it with `--min-market-cap` / `--rate-limit` / `--resume`.
 - **Stocks only** — ETFs and mutual/closed-end funds are **skipped by default**
   (classified from the `profile` endpoint's `isEtf` / `isFund`); pass
   `--include-etf` to keep them.

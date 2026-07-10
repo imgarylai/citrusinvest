@@ -538,6 +538,95 @@ pub fn list_all_symbols<H: HttpClient>(
     Ok(syms)
 }
 
+/// Filters for [`build_symbol_list`] — a screened market universe.
+#[derive(Default)]
+pub struct SymbolFilter {
+    /// Only symbols at/above this company market cap (`0.0` = no floor).
+    pub min_market_cap: f64,
+    /// Restrict to one or more exchanges (comma-separated FMP codes, e.g.
+    /// `NASDAQ,NYSE`). `None` = all exchanges.
+    pub exchange: Option<String>,
+    /// Keep ETFs / funds (default: stocks only).
+    pub include_etf: bool,
+    /// Cap the number of returned symbols (`None` = the API default).
+    pub limit: Option<usize>,
+}
+
+/// Build a screened symbol universe from FMP's screener
+/// (`/stable/company-screener`) — the "establish the sync list first" step so a
+/// whole-market backtest has a persisted, reviewable symbol list to sync. The
+/// filters are pushed to the API *and* re-applied client-side as a safety net.
+/// Returns tickers, sorted and de-duplicated.
+pub fn build_symbol_list<H: HttpClient>(
+    http: &H,
+    api_key: &str,
+    cfg: &SyncConfig,
+    filter: &SymbolFilter,
+) -> Result<Vec<String>, String> {
+    let fetcher = Fetcher::new(http, cfg);
+    let mut url = format!("{FMP_BASE}/stable/company-screener?apikey={api_key}");
+    if filter.min_market_cap > 0.0 {
+        url.push_str(&format!(
+            "&marketCapMoreThan={}",
+            filter.min_market_cap as u64
+        ));
+    }
+    if !filter.include_etf {
+        url.push_str("&isEtf=false&isFund=false");
+    }
+    if let Some(ex) = &filter.exchange {
+        url.push_str(&format!("&exchange={ex}"));
+    }
+    if let Some(n) = filter.limit {
+        url.push_str(&format!("&limit={n}"));
+    }
+    let rows = fetcher.get_rows(&url)?;
+    let mut syms: Vec<String> = rows
+        .iter()
+        .filter_map(|r| {
+            let obj = r.as_object()?;
+            // Re-apply the screen client-side in case the API ignores a param.
+            if !filter.include_etf && (flag(obj, "isEtf") || flag(obj, "isFund")) {
+                return None;
+            }
+            if filter.min_market_cap > 0.0 {
+                if let Some(mc) = num(obj, &["marketCap", "marketCapitalization"]) {
+                    if mc < filter.min_market_cap {
+                        return None;
+                    }
+                }
+            }
+            obj.get("symbol")?
+                .as_str()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+        })
+        .collect();
+    syms.sort();
+    syms.dedup();
+    Ok(syms)
+}
+
+/// Parse a symbols-list file into tickers. One ticker per line; the first
+/// comma-separated field is taken (so a `symbol,...` CSV works), and blank
+/// lines, `#` comments, and a literal `symbol` header are skipped.
+pub fn parse_symbols_list(text: &str) -> Vec<String> {
+    text.lines()
+        .filter_map(|line| {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                return None;
+            }
+            let first = line.split(',').next()?.trim();
+            if first.is_empty() || first.eq_ignore_ascii_case("symbol") {
+                return None;
+            }
+            Some(first.to_string())
+        })
+        .collect()
+}
+
 // ---- orchestration ----------------------------------------------------------
 
 /// Sync `symbols` from FMP into the `out` tree per [`SyncConfig`]. Prices are

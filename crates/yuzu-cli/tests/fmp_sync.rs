@@ -5,7 +5,10 @@
 use std::cell::RefCell;
 use std::time::Duration;
 
-use yuzu_cli::fmp::{list_all_symbols, sync, HttpClient, HttpError, SyncConfig, WriteMode};
+use yuzu_cli::fmp::{
+    build_symbol_list, list_all_symbols, parse_symbols_list, sync, HttpClient, HttpError,
+    SymbolFilter, SyncConfig, WriteMode,
+};
 use yuzu_cli::run_single;
 use yuzu_data::csv_io::parse_series;
 use yuzu_data::fundamentals::parse_fundamentals;
@@ -446,6 +449,36 @@ fn list_all_symbols_pulls_the_full_universe() {
     let syms = list_all_symbols(&http, "KEY", &cfg()).unwrap();
     // Sorted, de-duplicated, blanks dropped.
     assert_eq!(syms, vec!["AAPL".to_string(), "MSFT".to_string()]);
+}
+
+#[test]
+fn build_symbol_list_screens_via_the_company_screener() {
+    // Screener returns four rows; stocks-only + a 1B cap should keep BIG & MID.
+    let http = MockHttp::new().ok(
+        "company-screener",
+        r#"[
+            {"symbol":"BIG","marketCap":5.0e12,"isEtf":false},
+            {"symbol":"SPY","marketCap":6.0e11,"isEtf":true},
+            {"symbol":"MID","marketCap":2.0e9,"isEtf":false},
+            {"symbol":"TINY","marketCap":1.0e8,"isEtf":false}
+        ]"#,
+    );
+    let filter = SymbolFilter {
+        min_market_cap: 1.0e9,
+        include_etf: false,
+        ..Default::default()
+    };
+    let syms = build_symbol_list(&http, "KEY", &cfg(), &filter).unwrap();
+    assert_eq!(syms, vec!["BIG".to_string(), "MID".to_string()]);
+}
+
+#[test]
+fn parse_symbols_list_handles_plain_lists_csv_and_comments() {
+    let text = "# my universe\nAAPL\nMSFT\n\nsymbol,name\nGOOGL,Alphabet\n";
+    assert_eq!(
+        parse_symbols_list(text),
+        vec!["AAPL".to_string(), "MSFT".to_string(), "GOOGL".to_string()]
+    );
 }
 
 #[test]
