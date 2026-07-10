@@ -12,6 +12,23 @@
     {
       "matchUpdateTypes": ["patch"],
       "automerge": true
+    },
+    {
+      "description": "Arrow + Parquet must share one major (dual versions break Array traits)",
+      "matchPackageNames": [
+        "parquet",
+        "arrow-array",
+        "arrow-cast",
+        "arrow-schema",
+        "arrow-buffer",
+        "arrow-data",
+        "arrow-select",
+        "arrow-ord",
+        "arrow-ipc",
+        "arrow"
+      ],
+      "groupName": "arrow + parquet",
+      "groupSlug": "arrow-parquet"
     }
   ]
 }
