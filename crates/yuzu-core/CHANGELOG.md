@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1](https://github.com/citrusquant/citrusquant/compare/yuzu-core-v0.5.0...yuzu-core-v0.5.1) - 2026-07-10
+
+### Fixed
+
+- *(clippy)* allow too_many_arguments on run_with_initial wrapper
+
+### Other
+
+- *(yuzu-core)* shared stat helpers and eval by op family
+- split backtest.rs and fmp.rs into module trees
+- citrusinvest -> citrusquant (brand, URLs, org/repo, site domain)
+
 ## [0.5.0](https://github.com/imgarylai/citrusinvest/compare/yuzu-core-v0.4.0...yuzu-core-v0.5.0) - 2026-07-10
 
 ### Added
