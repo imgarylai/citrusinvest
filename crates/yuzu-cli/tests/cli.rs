@@ -78,6 +78,18 @@ fn lists_symbols_and_runs_a_single_backtest() {
     let report = run_single(&dir, spec, 20240102, 20240104, &Default::default()).unwrap();
     assert_eq!(report.equity.len(), 3);
     assert!(report.metrics.total_return.is_finite());
+    assert!(report.live.is_none()); // no live block by default
+
+    // live_performance_start attaches a post-live segment (rows from 20240103).
+    let cfg = yuzu_core::backtest::BacktestConfig {
+        live_performance_start: Some(20240103),
+        ..Default::default()
+    };
+    let report = run_single(&dir, spec, 20240102, 20240104, &cfg).unwrap();
+    let seg = report.live.as_ref().unwrap();
+    assert_eq!(seg.start, 20240103);
+    assert_eq!(seg.days, 2);
+    assert!(seg.total_return.is_finite());
 }
 
 #[test]

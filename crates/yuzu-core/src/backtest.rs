@@ -64,6 +64,12 @@ pub struct BacktestConfig {
     /// Bootstrap block length in trading days; `0` (the default) auto-selects
     /// `⌊√n⌋`. Only used when `bootstrap_samples > 0`.
     pub bootstrap_block: usize,
+    /// Date (YYYYMMDD) a strategy went live. When set, `run_backtest` adds a
+    /// `live` block to the report with equity-curve metrics computed on the
+    /// segment from the first backtest date on or after this day. `None` (the
+    /// default) omits the block. The NAV loop ignores it — it is a report-only
+    /// concern and does not change the full-sample equity curve.
+    pub live_performance_start: Option<i32>,
 }
 
 impl Default for BacktestConfig {
@@ -81,6 +87,7 @@ impl Default for BacktestConfig {
             benchmark_key: None,
             bootstrap_samples: 0,
             bootstrap_block: 0,
+            live_performance_start: None,
         }
     }
 }

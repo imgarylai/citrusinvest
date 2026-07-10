@@ -65,8 +65,57 @@ pub struct Report {
     /// `BacktestConfig::bootstrap_samples > 0` (attached by `run_backtest`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bootstrap: Option<crate::bootstrap::BootstrapSummary>,
+    /// Metrics on the post-go-live segment of the equity curve — present only
+    /// when `BacktestConfig::live_performance_start` is set (attached by
+    /// `run_backtest`). See [`LiveSegment`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub live: Option<LiveSegment>,
     pub trades: Vec<Trade>,
     pub metrics: Metrics,
+}
+
+/// Equity-curve metrics for the segment starting on the first backtest date on
+/// or after `BacktestConfig::live_performance_start`.
+///
+/// Only metrics derivable from the equity curve are reported here; every one of
+/// them normalizes by the segment's first equity point, so the block is
+/// identical whether or not the segment is rebased to 1.0 (it is, in effect).
+/// Trade-based stats are intentionally excluded — a trade can straddle the
+/// live boundary, so slicing it by date is ambiguous.
+#[derive(Serialize)]
+pub struct LiveSegment {
+    /// First backtest date (YYYYMMDD) at or after the requested live start.
+    pub start: i32,
+    /// Number of equity points in the segment (inclusive of `start`).
+    pub days: usize,
+    pub total_return: f64,
+    pub cagr: f64,
+    pub ann_volatility: f64,
+    pub sharpe: f64,
+    pub sortino: f64,
+    pub max_drawdown: f64,
+    pub calmar: f64,
+}
+
+/// Compute the [`LiveSegment`] for the equity curve from the first date on or
+/// after `live_start` (YYYYMMDD). Returns `None` when no date qualifies (the
+/// live date is past the end of the backtest), matching `skip_serializing_if`.
+/// `dates` and `equity` are the report's full-sample series (equal length).
+pub fn live_segment(dates: &[i32], equity: &[f64], live_start: i32) -> Option<LiveSegment> {
+    let idx = dates.iter().position(|&d| d >= live_start)?;
+    let seg_dates = &dates[idx..];
+    let seg_eq = &equity[idx..];
+    Some(LiveSegment {
+        start: seg_dates[0],
+        days: seg_eq.len(),
+        total_return: metrics::total_return(seg_eq),
+        cagr: metrics::cagr(seg_eq, seg_dates),
+        ann_volatility: metrics::ann_volatility(seg_eq),
+        sharpe: metrics::sharpe(seg_eq),
+        sortino: metrics::sortino(seg_eq),
+        max_drawdown: metrics::max_drawdown(seg_eq),
+        calmar: metrics::calmar(seg_eq, seg_dates),
+    })
 }
 
 /// Window (trading days) for the rolling series in [`Report`].
@@ -127,6 +176,7 @@ pub fn build_report_with_benchmark(run: BacktestRun, benchmark: Option<Vec<f64>>
         rolling_sharpe,
         rolling_volatility,
         bootstrap: None,
+        live: None,
         trades: run.trades,
         metrics,
     }
@@ -232,6 +282,71 @@ mod tests {
         let json = serde_json::to_string(&report).unwrap();
         assert!(json.contains("\"benchmark\""));
         assert!(json.contains("\"information_ratio\""));
+    }
+
+    #[test]
+    fn live_segment_over_full_range_matches_full_sample_metrics() {
+        let dates = [20240102, 20240103, 20240104];
+        let eq = [100.0, 110.0, 121.0];
+        // live start on/before the first date -> whole curve.
+        let seg = live_segment(&dates, &eq, 20240101).unwrap();
+        assert_eq!(seg.start, 20240102);
+        assert_eq!(seg.days, 3);
+        assert!((seg.total_return - metrics::total_return(&eq)).abs() < 1e-12);
+        assert!((seg.cagr - metrics::cagr(&eq, &dates)).abs() < 1e-12);
+        assert!((seg.max_drawdown - metrics::max_drawdown(&eq)).abs() < 1e-12);
+        assert!((seg.sharpe - metrics::sharpe(&eq)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn live_segment_slices_from_first_date_on_or_after_start() {
+        let dates = [20240102, 20240103, 20240104];
+        let eq = [100.0, 110.0, 121.0];
+        // No date equals 20240103-1; first qualifying date is 20240103 itself.
+        let seg = live_segment(&dates, &eq, 20240103).unwrap();
+        assert_eq!(seg.start, 20240103);
+        assert_eq!(seg.days, 2);
+        // Segment [110, 121] -> 121/110 - 1 = 0.1, normalized to the segment's
+        // own first point (rebasing is a no-op for these metrics).
+        assert!((seg.total_return - 0.1).abs() < 1e-12);
+        assert!(seg.max_drawdown.abs() < 1e-12); // monotonic up -> no drawdown
+    }
+
+    #[test]
+    fn live_segment_after_end_is_none() {
+        let dates = [20240102, 20240103];
+        let eq = [100.0, 110.0];
+        assert!(live_segment(&dates, &eq, 20250101).is_none());
+    }
+
+    #[test]
+    fn report_live_block_present_only_when_set() {
+        let dates = [20240102, 20240103, 20240104];
+        let eq = [100.0, 110.0, 121.0];
+        // Absent by default.
+        let pos = Panel::from_rows(
+            vec![20240102, 20240103, 20240104],
+            vec!["A".into()],
+            vec![vec![1.0], vec![1.0], vec![1.0]],
+        )
+        .unwrap();
+        let px = Panel::from_rows(
+            vec![20240102, 20240103, 20240104],
+            vec!["A".into()],
+            vec![vec![10.0], vec![11.0], vec![12.0]],
+        )
+        .unwrap();
+        let report = build_report(run(&pos, &px, None, None, None, &BacktestConfig::default()));
+        assert!(report.live.is_none());
+        assert!(!serde_json::to_string(&report).unwrap().contains("\"live\""));
+
+        // Present once attached (mirrors run_backtest wiring).
+        let mut report = report;
+        report.live = live_segment(&dates, &eq, 20240103);
+        assert!(report.live.is_some());
+        let json = serde_json::to_string(&report).unwrap();
+        assert!(json.contains("\"live\""));
+        assert!(json.contains("\"total_return\""));
     }
 
     #[test]

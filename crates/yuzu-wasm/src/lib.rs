@@ -54,6 +54,8 @@ struct ConfigJson {
     bootstrap_samples: usize,
     #[serde(default)]
     bootstrap_block: usize,
+    #[serde(default)]
+    live_performance_start: Option<i32>,
 }
 
 #[derive(Deserialize)]
@@ -104,6 +106,7 @@ pub fn run_backtest_json(input_json: &str) -> Result<String, String> {
         benchmark_key: input.config.benchmark_key,
         bootstrap_samples: input.config.bootstrap_samples,
         bootstrap_block: input.config.bootstrap_block,
+        live_performance_start: input.config.live_performance_start,
     };
     let report =
         run_backtest_core(&spec_str, &ctx, &input.price_key, &cfg).map_err(|e| e.to_string())?;

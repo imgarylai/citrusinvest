@@ -75,6 +75,10 @@ struct CommonArgs {
     /// Bootstrap block length in days (0 = auto sqrt(n)).
     #[arg(long, default_value_t = 0)]
     bootstrap_block: usize,
+    /// Date (YYYYMMDD) the strategy went live; adds a `live` block of
+    /// post-live equity metrics to the report (unset = omit).
+    #[arg(long)]
+    live_performance_start: Option<i32>,
     /// Output file (default: stdout).
     #[arg(long)]
     out: Option<PathBuf>,
@@ -93,6 +97,7 @@ impl CommonArgs {
             benchmark_key: self.benchmark.clone(),
             bootstrap_samples: self.bootstrap_samples,
             bootstrap_block: self.bootstrap_block,
+            live_performance_start: self.live_performance_start,
             ..Default::default()
         }
     }
