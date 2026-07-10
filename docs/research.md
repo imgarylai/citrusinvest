@@ -67,6 +67,30 @@ yuzu-cli event --data ./mydata --spec event.json \
 `report_event` (the fundamentals 0/1 filing-day series in
 [`data-layout.md`](./data-layout.md)) is a natural event input.
 
+## In the browser (WASM)
+
+Both workflows are exposed at the `yuzu-wasm` JSON boundary, mirroring
+`run_backtest`: string in, string out, no market data crosses except the panels
+you supply.
+
+```js
+run_factor(JSON.stringify({
+  spec, panels, industry,            // panels: { name: { dates, symbols, data } }
+  horizon: 21, quantiles: 5,         // defaults: horizon 1, quantiles 5
+  neutralize_industry: false,        // demean the factor within sector first
+}));                                 // -> FactorReport JSON
+
+run_event(JSON.stringify({
+  spec, panels, industry,
+  pre: 5, post: 5,                   // defaults: 5 / 5
+}));                                 // -> EventStudy JSON
+```
+
+The factor / event panel comes from `spec` (any lemon/JSON `Expr`); forward
+returns (`run_factor`) and daily returns (`run_event`) both come from the `close`
+panel — a missing `close` is an error. The pure `run_factor_json` /
+`run_event_json` functions are unit-tested natively.
+
 ## Non-goals (v1)
 
 Model training / ML pipelines, charts, significance testing, and multi-factor
