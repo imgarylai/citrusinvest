@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0](https://github.com/imgarylai/citrusinvest/compare/yuzu-core-v0.4.0...yuzu-core-v0.5.0) - 2026-07-10
+
+### Added
+
+- *(server,wasm)* expose execution-layer stops in the request configs
+- *(core)* [**breaking**] execution-layer stops (stop-loss/take-profit/trailing) + touched fills
+
 ## [0.4.0](https://github.com/imgarylai/citrusinvest/compare/yuzu-core-v0.3.0...yuzu-core-v0.4.0) - 2026-07-10
 
 ### Added
