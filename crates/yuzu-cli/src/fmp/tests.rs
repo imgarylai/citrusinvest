@@ -1,0 +1,117 @@
+//! Unit tests for the FMP sync modules.
+
+use super::config::SyncConfig;
+use super::fundamentals::{densify_fundamentals, merge_fundamentals};
+use super::http::{redact, HttpError};
+use super::price::parse_price_rows;
+use super::universe::parse_market_cap;
+use super::util::{i32_to_iso, iso_to_i32};
+use yuzu_data::fundamentals::FUNDAMENTAL_FIELDS;
+
+#[test]
+fn parse_market_cap_handles_suffixes_and_plain_numbers() {
+    assert_eq!(parse_market_cap("1b").unwrap(), 1e9);
+    assert_eq!(parse_market_cap("500M").unwrap(), 5e8);
+    assert_eq!(parse_market_cap("2.5t").unwrap(), 2.5e12);
+    assert_eq!(parse_market_cap("10k").unwrap(), 1e4);
+    assert_eq!(parse_market_cap("1e9").unwrap(), 1e9);
+    assert_eq!(parse_market_cap("0").unwrap(), 0.0);
+    assert_eq!(parse_market_cap("1000000").unwrap(), 1e6);
+    assert!(parse_market_cap("").is_err());
+    assert!(parse_market_cap("1x").is_err());
+    assert!(parse_market_cap("-1b").is_err());
+}
+
+#[test]
+fn redacts_the_api_key() {
+    assert_eq!(
+        redact("https://x/stable/profile?symbol=AAPL&apikey=SECRET"),
+        "https://x/stable/profile?symbol=AAPL&apikey=***"
+    );
+    assert_eq!(
+        redact("https://x/y?apikey=SECRET&from=2020-01-01"),
+        "https://x/y?apikey=***&from=2020-01-01"
+    );
+    // No key → untouched.
+    assert_eq!(redact("https://x/y?symbol=AAPL"), "https://x/y?symbol=AAPL");
+}
+
+#[test]
+fn iso_date_roundtrips_and_tolerates_time_suffix() {
+    assert_eq!(iso_to_i32("2024-01-02"), Some(20240102));
+    assert_eq!(iso_to_i32("2024-01-02 00:00:00"), Some(20240102));
+    assert_eq!(i32_to_iso(20240102), "2024-01-02");
+    assert_eq!(iso_to_i32("garbage"), None);
+}
+
+#[test]
+fn retryable_classification() {
+    assert!(HttpError::Status(429).retryable());
+    assert!(HttpError::Status(503).retryable());
+    assert!(HttpError::Transport("reset".into()).retryable());
+    assert!(!HttpError::Status(401).retryable());
+    assert!(!HttpError::Status(404).retryable());
+}
+
+#[test]
+fn densify_forward_fills_and_marks_events() {
+    // Two annual snapshots; a 4-day trading calendar straddling both.
+    let snaps = vec![
+        (20240102, vec![10.0; FUNDAMENTAL_FIELDS.len()]),
+        (20240104, vec![20.0; FUNDAMENTAL_FIELDS.len()]),
+    ];
+    let days = [20240101, 20240102, 20240103, 20240104];
+    let rows = densify_fundamentals(&snaps, &days);
+    assert_eq!(rows.len(), 4);
+    // Before the first snapshot: NaN factors, no event.
+    assert!(rows[0].values[0].is_nan());
+    assert_eq!(rows[0].report_event, 0.0);
+    // Snapshot day: value applied, event flagged.
+    assert_eq!(rows[1].values[0], 10.0);
+    assert_eq!(rows[1].report_event, 1.0);
+    // Between snapshots: carried forward, no event.
+    assert_eq!(rows[2].values[0], 10.0);
+    assert_eq!(rows[2].report_event, 0.0);
+    // Second snapshot day.
+    assert_eq!(rows[3].values[0], 20.0);
+    assert_eq!(rows[3].report_event, 1.0);
+}
+
+#[test]
+fn merge_fundamentals_spreads_fields_across_endpoints() {
+    let ratios = vec![serde_json::json!({"date":"2024-01-02","priceToEarningsRatio":15.0})];
+    let metrics = vec![serde_json::json!({"date":"2024-01-02","marketCap":1.0e12})];
+    let growth = vec![serde_json::json!({"date":"2024-01-02","revenueGrowth":0.08})];
+    let snaps = merge_fundamentals(&[ratios, metrics, growth]);
+    assert_eq!(snaps.len(), 1);
+    let (day, vals) = &snaps[0];
+    assert_eq!(*day, 20240102);
+    assert_eq!(vals[0], 15.0); // pe
+    assert_eq!(vals[6], 1.0e12); // market_cap
+    assert_eq!(vals[11], 0.08); // revenue_growth
+}
+
+#[test]
+fn parse_price_rows_uses_close_fallback_and_clamps_range() {
+    let cfg = SyncConfig {
+        from: 20240102,
+        to: 20240103,
+        ..Default::default()
+    };
+    let rows = vec![
+        // out of range (dropped)
+        serde_json::json!({"date":"2024-01-01","adjClose":9.0}),
+        // adjusted OHLC present
+        serde_json::json!({"date":"2024-01-02","adjOpen":9.5,"adjHigh":11.0,"adjLow":9.0,"adjClose":10.0,"volume":1000}),
+        // close only → OHL fall back to close, volume 0
+        serde_json::json!({"date":"2024-01-03","adjClose":11.0}),
+    ];
+    let out = parse_price_rows(&rows, &cfg);
+    assert_eq!(out.len(), 2);
+    assert_eq!(out[0].day, 20240102);
+    assert_eq!(out[0].adj_high, 11.0);
+    assert_eq!(out[0].volume, 1000.0);
+    assert_eq!(out[1].day, 20240103);
+    assert_eq!(out[1].adj_open, 11.0); // fallback to close
+    assert_eq!(out[1].volume, 0.0);
+}
