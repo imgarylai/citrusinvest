@@ -17,8 +17,8 @@ name = "yuzu-cli"
 path = "src/main.rs"
 
 [dependencies]
-yuzu-core = { path = "../yuzu-core", version = "0.5.0" }
-yuzu-data = { path = "../yuzu-data", version = "0.5.0" }
+yuzu-core = { path = "../yuzu-core", version = "0.5.1" }
+yuzu-data = { path = "../yuzu-data", version = "0.5.1" }
 clap = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true }
