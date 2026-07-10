@@ -28,22 +28,34 @@ interface Report {
 const BASE: string = (import.meta as { env: { BASE_URL: string } }).env.BASE_URL;
 
 let sample: SampleData | null = null;
-// lemon/yuzu wasm modules, loaded lazily on first Run.
-let lemonMod: { parse(src: string): string } | null = null;
+// lemon/yuzu wasm modules. lemon is loaded eagerly (it drives editor
+// highlighting via tokens()); yuzu is loaded on the first Run.
+interface LemonMod {
+  parse(src: string): string;
+  tokens(src: string): string;
+}
+let lemonMod: LemonMod | null = null;
 let yuzuMod: { run_backtest(input: string): string } | null = null;
 
-async function loadWasm(): Promise<void> {
-  if (lemonMod && yuzuMod) return;
-  const lemonUrl = new URL(`${BASE}wasm/lemon/lemon.js`, location.href).href;
-  const yuzuUrl = new URL(`${BASE}wasm/yuzu/yuzu.js`, location.href).href;
-  const [lemon, yuzu] = await Promise.all([
-    import(/* @vite-ignore */ lemonUrl),
-    import(/* @vite-ignore */ yuzuUrl),
-  ]);
+async function loadLemon(): Promise<LemonMod> {
+  if (lemonMod) return lemonMod;
+  const url = new URL(`${BASE}wasm/lemon/lemon.js`, location.href).href;
+  const lemon = await import(/* @vite-ignore */ url);
   await lemon.default();
-  await yuzu.default();
   lemonMod = lemon;
+  return lemon;
+}
+
+async function loadYuzu(): Promise<void> {
+  if (yuzuMod) return;
+  const url = new URL(`${BASE}wasm/yuzu/yuzu.js`, location.href).href;
+  const yuzu = await import(/* @vite-ignore */ url);
+  await yuzu.default();
   yuzuMod = yuzu;
+}
+
+async function loadWasm(): Promise<void> {
+  await Promise.all([loadLemon(), loadYuzu()]);
 }
 
 async function loadSample(): Promise<SampleData> {
@@ -165,6 +177,13 @@ export function initPlayground(root: HTMLElement): void {
     editorEl.dataset.initial ?? 'is_largest(sma(close, 2), 3)',
     () => run(),
   );
+
+  // Load the lemon WASM up front so the editor highlights from the engine's own
+  // lexer (tokens()) immediately — independent of running a backtest. Failure
+  // here is non-fatal: the editor just stays uncolored.
+  loadLemon()
+    .then((m) => editor.setTokenizer((src) => JSON.parse(m.tokens(src))))
+    .catch(() => {});
 
   async function run() {
     runBtn.disabled = true;
