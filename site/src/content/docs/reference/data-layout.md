@@ -291,7 +291,16 @@ The engine does **not** maintain historical index constituents.
 |----------|-----|
 | Fixed list | Pass today’s (or any fixed) ticker list as `symbols` — simple, not true PIT |
 | PIT list per run | Your code chooses “listed as of `from`” tickers, then passes that `symbols` | 
-| Membership panel | Library path: put a dates×symbols 0/1 panel in context (e.g. name `in_sp500`) and `mask(signal, in_sp500)` in lemon — only if that series is loaded into the context |
+| Membership panel | A `dates×symbols` 0/1 panel named `in_<index>` (e.g. `in_sp500`) in `panels/`; `mask(signal, in_sp500)` in lemon holds a name only while it was a member |
+
+**Membership-panel convention.** A membership panel is a normal combined panel
+(`panels/in_sp500.csv.gz`, wide `day,SYM,…` 0/1). The CLI (`run` / `sweep`)
+auto-loads `in_sp500` / `in_nasdaq` / `in_dowjones` from `panels/` when present,
+so `mask(signal, in_sp500)` works without hand-building the context. The library
+path can insert any such panel directly; `yuzu-server` does **not** auto-load
+custom series. `yuzu-cli fmp-sync --index sp500` produces both the panel and the
+ever-member price universe. Reconstruction is index-scoped and **degrades for
+very old dates** (the vendor change log thins out).
 
 Delisted names: keep `prices/{SYM}.*` files that **end** on the last trading
 day. Pair with `BacktestConfig.delist_after` / `delist_haircut` so the NAV loop

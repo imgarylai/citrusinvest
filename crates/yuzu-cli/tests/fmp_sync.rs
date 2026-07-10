@@ -6,14 +6,14 @@ use std::cell::RefCell;
 use std::time::Duration;
 
 use yuzu_cli::fmp::{
-    build_symbol_list, fetch_delisted, parse_symbols_list, sync, HttpClient, HttpError,
-    SymbolFilter, SyncConfig, WriteMode, US_EXCHANGES,
+    build_symbol_list, fetch_delisted, parse_symbols_list, sync, HttpClient, HttpError, Index,
+    IndexMembership, SymbolFilter, SyncConfig, WriteMode, US_EXCHANGES,
 };
-use yuzu_cli::run_single;
+use yuzu_cli::{run_single, write_index_membership};
 use yuzu_core::backtest::BacktestConfig;
 use yuzu_data::csv_io::parse_series;
 use yuzu_data::fundamentals::parse_fundamentals;
-use yuzu_data::{Field, LocalSource, ObjectSource};
+use yuzu_data::{load_combined_panel, Field, LocalSource, ObjectSource, PANELS_DIR};
 
 /// A scripted mock HTTP client. Each entry maps a URL *substring* to a queue of
 /// responses; each GET pops the next response for the first matching pattern
@@ -254,6 +254,78 @@ fn delisted_symbol_price_file_ends_at_delist_date_and_engine_forces_exit() {
         "delist forced-exit did not change the result: survivor={} honest={}",
         survivor.metrics.total_return,
         honest.metrics.total_return
+    );
+}
+
+#[test]
+fn index_pit_membership_reconstructs_syncs_and_masks_a_backtest() {
+    // #125 acceptance: reconstruct S&P 500 membership from the current snapshot +
+    // change log, sync the ever-members, write the in_sp500 panel, and consume it
+    // via mask(signal, in_sp500) in a backtest.
+    let dir = tmp("pit");
+    let from = 20240102;
+    let to = 20240104;
+
+    // Today's index = {AAA, BBB}. One change: on 2024-01-03 AAA joined and DDD
+    // left. So before 01-03 the member set is {BBB, DDD}; on/after it is {AAA,BBB}.
+    let current = r#"[{"symbol":"AAA"},{"symbol":"BBB"}]"#;
+    let changes = r#"[{"date":"2024-01-03","symbol":"AAA","removedTicker":"DDD","reason":"x"}]"#;
+    // All three names trade the full window (DDD keeps trading after leaving).
+    let px = |a: f64, b: f64, c: f64| {
+        format!(
+            r#"[{{"date":"2024-01-02","adjClose":{a},"volume":100}},
+                {{"date":"2024-01-03","adjClose":{b},"volume":100}},
+                {{"date":"2024-01-04","adjClose":{c},"volume":100}}]"#
+        )
+    };
+    let http = MockHttp::new()
+        // historical-* must be routed before the current snapshot (substring match).
+        .ok("historical-sp-500", changes)
+        .ok("sp-500", current)
+        .ok("symbol=AAA", &px(10.0, 11.0, 12.0))
+        .ok("symbol=BBB", &px(10.0, 10.0, 10.0))
+        .ok("symbol=DDD", &px(10.0, 9.0, 8.0));
+
+    // Reconstruct + confirm the universe includes the name that left (DDD).
+    let mut c = cfg();
+    c.from = from;
+    c.to = to;
+    let membership = IndexMembership::fetch(&http, "KEY", Index::Sp500, &c).unwrap();
+    let universe = membership.ever_members(from, to);
+    assert_eq!(universe, vec!["AAA", "BBB", "DDD"]);
+
+    // Sync those prices, then write the membership panel over the price calendar.
+    sync(&http, "KEY", &universe, &dir, &c).unwrap();
+    let (days, cols) = write_index_membership(&dir, &membership, from, to).unwrap();
+    assert_eq!((days, cols), (3, 3));
+
+    // The written panel is the expected per-day 0/1 grid.
+    let src = LocalSource::new(&dir);
+    let cols_v: Vec<String> = ["AAA", "BBB", "DDD"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    let panel = load_combined_panel(&src, "in_sp500", &cols_v, from, to, PANELS_DIR)
+        .unwrap()
+        .unwrap();
+    // 01-02: {BBB,DDD}; 01-03 & 01-04: {AAA,BBB}.
+    assert_eq!(panel.data.row(0).to_vec(), vec![0.0, 1.0, 1.0]);
+    assert_eq!(panel.data.row(1).to_vec(), vec![1.0, 1.0, 0.0]);
+    assert_eq!(panel.data.row(2).to_vec(), vec![1.0, 1.0, 0.0]);
+
+    // Consuming it: masking by in_sp500 gates holdings to members and changes the
+    // result vs. the unmasked strategy (which keeps holding DDD after it left).
+    let base = r#"{"op":"IsLargest","of":{"op":"Data","name":"close"},"n":3}"#;
+    let masked = format!(r#"{{"op":"Mask","of":{base},"by":{{"op":"Data","name":"in_sp500"}}}}"#);
+    let unmasked = run_single(&dir, base, from, to, &BacktestConfig::default(), "close").unwrap();
+    let gated = run_single(&dir, &masked, from, to, &BacktestConfig::default(), "close").unwrap();
+    assert_eq!(gated.equity.len(), 3);
+    assert!(gated.metrics.total_return.is_finite());
+    assert!(
+        (unmasked.metrics.total_return - gated.metrics.total_return).abs() > 1e-9,
+        "membership gating had no effect: unmasked={} gated={}",
+        unmasked.metrics.total_return,
+        gated.metrics.total_return
     );
 }
 
