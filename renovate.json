@@ -5,30 +5,50 @@
     "group:allNonMajor",
     "schedule:weekly"
   ],
+  "labels": ["dependencies"],
+  "prConcurrentLimit": 6,
+  "prHourlyLimit": 4,
   "lockFileMaintenance": {
     "enabled": true
   },
+  "ignorePaths": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "crates/**/pkg/**"
+  ],
   "packageRules": [
     {
+      "description": "Automerge patch updates once CI is green",
       "matchUpdateTypes": ["patch"],
-      "automerge": true
+      "automerge": true,
+      "automergeType": "pr"
     },
     {
-      "description": "Arrow + Parquet must share one major (dual versions break Array traits)",
-      "matchPackageNames": [
-        "parquet",
-        "arrow-array",
-        "arrow-cast",
-        "arrow-schema",
-        "arrow-buffer",
-        "arrow-data",
-        "arrow-select",
-        "arrow-ord",
-        "arrow-ipc",
-        "arrow"
-      ],
+      "description": "Apache Arrow + Parquet must share one major — dual arrow_array versions break Array trait resolution (see #92–#95 / #114)",
+      "matchDatasources": ["crate"],
+      "matchPackageNames": ["/^arrow(-|$)/", "parquet"],
       "groupName": "arrow + parquet",
       "groupSlug": "arrow-parquet"
+    },
+    {
+      "description": "Astro core + official @astrojs/* integrations move together on majors",
+      "matchDatasources": ["npm"],
+      "matchPackageNames": ["astro", "/^@astrojs//"],
+      "groupName": "astro monorepo",
+      "groupSlug": "astro-monorepo"
+    },
+    {
+      "description": "CodeMirror packages are version-coupled; bump as one group",
+      "matchDatasources": ["npm"],
+      "matchPackageNames": ["/^@codemirror//", "/^@lezer//"],
+      "groupName": "codemirror",
+      "groupSlug": "codemirror"
+    },
+    {
+      "description": "Published by this repo's wasm release workflow — not Renovate",
+      "matchDatasources": ["npm"],
+      "matchPackageNames": ["/^@citrusquant//"],
+      "enabled": false
     }
   ]
 }
