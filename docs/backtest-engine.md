@@ -517,13 +517,17 @@ renders charts and tables.
   },
   "trades": [
     {
-      "symbol":     "AAPL",
-      "entry_date": 20240102,
-      "exit_date":  20240115,   // null for open (mark-to-market) trades
-      "ret":        0.043,      // net return (fees deducted for closed; MTM for open)
-      "period":     9,          // trading days held
-      "mae":       -0.041,      // worst unrealized excursion vs entry (null if no high/low)
-      "mfe":        0.112       // best unrealized excursion vs entry (null if no high/low)
+      "symbol":      "AAPL",
+      "entry_date":  20240102,
+      "exit_date":   20240115,   // null for open (mark-to-market) trades
+      "ret":         0.043,      // net return (fees deducted for closed; MTM for open)
+      "period":      9,          // trading days held
+      "mae":        -0.041,      // worst unrealized excursion vs entry (null if no high/low)
+      "mfe":         0.112,      // best unrealized excursion vs entry (null if no high/low)
+      "entry_price": 182.4,      // price-panel fill on entry_date (null if missing)
+      "exit_price":  190.2,      // fill on exit_date, or last-valid × (1 - delist_haircut)
+                                 //   for a delisting exit; omitted for open trades
+      "side":        "long"      // "long" / "short", from the sign of the entry weight
     }
   ],
   "metrics": {

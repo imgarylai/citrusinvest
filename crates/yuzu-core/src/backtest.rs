@@ -6,6 +6,15 @@ use crate::panel::Panel;
 use ndarray::Array2;
 use std::collections::HashMap;
 
+/// Direction of a trade — `long` when the entry weight was positive, `short`
+/// when negative. Serialized lowercase (`"long"` / `"short"`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TradeSide {
+    Long,
+    Short,
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct Trade {
     pub symbol: String,
@@ -15,6 +24,16 @@ pub struct Trade {
     pub period: u32,
     pub mae: Option<f64>,
     pub mfe: Option<f64>,
+    /// Fill price the position was opened at (the price-panel value on
+    /// `entry_date`). May be `null` if that cell was missing.
+    pub entry_price: f64,
+    /// Fill price the position was closed at — the panel value on `exit_date`,
+    /// or the last valid price less `delist_haircut` for a delisting exit.
+    /// Absent for open (mark-to-market) trades.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exit_price: Option<f64>,
+    /// `long` / `short`, from the sign of the entry weight.
+    pub side: TradeSide,
 }
 
 #[derive(Debug, Clone)]
@@ -195,6 +214,17 @@ fn conform_to(grid: &Panel, other: Option<&Panel>) -> Option<Array2<f64>> {
 /// Direction-aware MAE/MFE over rows er..=exit for column c vs entry price ep.
 /// MFE = best unrealized return; MAE = worst. (None, None) when high/low absent
 /// or ep invalid. NaN high/low days are skipped.
+/// Map an entry-weight sign (`dir`) to a [`TradeSide`]. A zero/NaN direction
+/// never reaches here (a trade only opens on a non-zero weight); treat the
+/// non-negative case as long.
+fn side_of(dir: f64) -> TradeSide {
+    if dir < 0.0 {
+        TradeSide::Short
+    } else {
+        TradeSide::Long
+    }
+}
+
 fn excursion(
     hi: &Option<Array2<f64>>,
     lo: &Option<Array2<f64>>,
@@ -438,6 +468,9 @@ pub fn run(
                     period: (r - er) as u32,
                     mae,
                     mfe,
+                    entry_price: ep,
+                    exit_price: Some(xp),
+                    side: side_of(dir),
                 });
             }
         }
@@ -458,6 +491,9 @@ pub fn run(
                 period: (nrows - 1 - er) as u32,
                 mae,
                 mfe,
+                entry_price: ep,
+                exit_price: None, // open trade: no realized exit fill
+                side: side_of(dir),
             });
         }
     }
@@ -910,5 +946,48 @@ mod tests {
         // No high/low → None.
         let r2 = run(&pos, &close, None, None, None, &BacktestConfig::default());
         assert!(r2.trades.iter().all(|t| t.mae.is_none() && t.mfe.is_none()));
+
+        // Fill prices and side come off the same panel cells that drive returns.
+        assert_eq!(long.side, TradeSide::Long);
+        assert!((long.entry_price - 10.0).abs() < 1e-12); // close on entry day
+        assert!((long.exit_price.unwrap() - 11.0).abs() < 1e-12); // close on exit day
+        assert_eq!(short.side, TradeSide::Short);
+        assert!((short.entry_price - 10.0).abs() < 1e-12);
+        assert!(short.exit_price.is_none()); // open trade: no realized exit
+    }
+
+    #[test]
+    fn delisting_exit_price_is_haircut_last_valid() {
+        use crate::panel::Panel;
+        // Held from day 0; price goes missing from day 2 on -> delisted after 1
+        // missing row. Exit fills at the last valid price (20) less a 10% haircut.
+        let dates = vec![20240102, 20240103, 20240104, 20240105];
+        let pos = Panel::from_rows(
+            dates.clone(),
+            vec!["A".into()],
+            vec![vec![1.0], vec![1.0], vec![1.0], vec![1.0]],
+        )
+        .unwrap();
+        let px = Panel::from_rows(
+            dates.clone(),
+            vec!["A".into()],
+            vec![vec![10.0], vec![20.0], vec![f64::NAN], vec![f64::NAN]],
+        )
+        .unwrap();
+        let cfg = BacktestConfig {
+            delist_after: 1,
+            delist_haircut: 0.1,
+            ..Default::default()
+        };
+        let r = run(&pos, &px, None, None, None, &cfg);
+        let t = &r.trades[0];
+        assert_eq!(t.side, TradeSide::Long);
+        assert!((t.entry_price - 10.0).abs() < 1e-12);
+        assert!(t.exit_date.is_some(), "delisting force-closes the trade");
+        assert!(
+            (t.exit_price.unwrap() - 18.0).abs() < 1e-12,
+            "exit fills at 20 * (1 - 0.1) = 18, got {:?}",
+            t.exit_price
+        );
     }
 }
