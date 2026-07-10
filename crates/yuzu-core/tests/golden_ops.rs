@@ -230,3 +230,17 @@ fn hold_until_trail_stop_matches_reference() {
         0.0,
     );
 }
+
+#[test]
+fn vol_target_matches_reference() {
+    let v = load_golden("vol_target_2");
+    let weights = panel_from_json(&v, "weights");
+    let prices = panel_from_json(&v, "prices");
+    let target = v["target"].as_f64().unwrap();
+    let n = v["n"].as_u64().unwrap() as usize;
+    assert_panel_eq(
+        &weights.vol_target(&prices, target, n),
+        &panel_from_json(&v, "expected"),
+        1e-12,
+    );
+}

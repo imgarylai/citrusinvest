@@ -474,6 +474,14 @@ static ROWS: &[Row] = &[
         desc: "Scale each row so gross weight (sum of |w|) is 1 — turns a raw signal into explicit portfolio weights. NaN preserved; zero rows unchanged.",
     },
     Row {
+        names: &["vol_target"],
+        sig: OpSig {
+            tag: "VolTarget",
+            fields: &[Expr("of"), Expr("prices"), NumOpt("target"), NumOpt("n")],
+        },
+        desc: "Scale each row of the weight panel `of` toward an annualized portfolio-volatility `target` (default 0.1) over a trailing `n`-return window (default 63) of `prices`; deleverage only (scale capped at 1, warmup passes through).",
+    },
+    Row {
         names: &["hold_until"],
         sig: OpSig {
             tag: "HoldUntil",
@@ -572,6 +580,8 @@ pub fn field_default(tag: &str, field_name: &str) -> Option<serde_json::Value> {
         ("Neutralize", "add_const") => Some(json!(true)),
         ("NeutralizeIndustry", "add_const") => Some(json!(true)),
         ("CapIndustry", "max_weight") => Some(json!(0.3)),
+        ("VolTarget", "target") => Some(json!(0.1)),
+        ("VolTarget", "n") => Some(json!(63)),
         _ => None,
     }
 }
@@ -746,6 +756,7 @@ pub static ALL_OP_TAGS: &[&str] = &[
     "Rank",
     "Mask",
     "NormalizeRow",
+    "VolTarget",
     "HoldUntil",
     "Rebalance",
     "Neutralize",

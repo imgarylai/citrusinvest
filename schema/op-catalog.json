@@ -1102,6 +1102,37 @@
     "args": [
       {
         "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
+        "kind": "expr",
+        "name": "prices",
+        "required": true
+      },
+      {
+        "default": 0.1,
+        "kind": "number",
+        "name": "target",
+        "required": false
+      },
+      {
+        "default": 63,
+        "kind": "number",
+        "name": "n",
+        "required": false
+      }
+    ],
+    "description": "Scale each row of the weight panel `of` toward an annualized portfolio-volatility `target` (default 0.1) over a trailing `n`-return window (default 63) of `prices`; deleverage only (scale capped at 1, warmup passes through).",
+    "form": "function",
+    "name": "vol_target",
+    "tag": "VolTarget"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
         "name": "entry",
         "required": true
       },

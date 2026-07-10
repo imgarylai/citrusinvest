@@ -3,6 +3,7 @@
 //! NaN is never selected; ties keep original column order (Rust's stable `sort_by`).
 //! Preprocess toolkit: `winsorize`, `zscore`, `bucket`, `demean` (all NaN-aware).
 
+use crate::align::align;
 use crate::panel::{bool_to_f64, Panel};
 use ndarray::Array2;
 
@@ -108,6 +109,87 @@ impl Panel {
             if total > 0.0 {
                 for c in 0..ncols {
                     data[[r, c]] /= total;
+                }
+            }
+        }
+        Panel {
+            dates: self.dates.clone(),
+            symbols: self.symbols.clone(),
+            data,
+        }
+    }
+
+    /// `vol_target`: scale each row of this weight panel so the implied
+    /// portfolio's annualized realized volatility targets `target`, capping the
+    /// scale at 1 (deleverage only — never lever up). The scale for row `t` is
+    /// `min(1, target / realized_vol[t])`, where `realized_vol[t]` is the
+    /// annualized (×√252) sample std (ddof=1) of the portfolio's daily returns
+    /// over the trailing `n`-return window ending at `t`.
+    ///
+    /// The portfolio's daily return on row `t` is `Σ_c w[t,c] · (p[t,c]/p[t-1,c]
+    /// − 1)` over `prices` (`p`), aligned onto this panel's grid; a cell with a
+    /// missing weight or price contributes nothing.
+    ///
+    /// Warmup: until `n` finite portfolio returns are available in the window
+    /// (i.e. before row `n`, and across any price gap that voids a window),
+    /// `realized_vol` is undefined and the row's weights pass through unscaled.
+    /// A zero realized vol also passes through (no finite scale to apply).
+    /// `n < 2` (std undefined) and `target <= 0` / NaN are no-ops — a degenerate
+    /// target must not zero or flip the book. NaN weight cells stay NaN.
+    ///
+    /// The window ends at the current row, so it includes row `t`'s own return;
+    /// for strictly-causal sizing, lag the weights (e.g. `shift`) relative to the
+    /// prices. I/O-free and composable — prices come in as an explicit argument.
+    pub fn vol_target(&self, prices: &Panel, target: f64, n: usize) -> Panel {
+        let unchanged = || Panel {
+            dates: self.dates.clone(),
+            symbols: self.symbols.clone(),
+            data: self.data.clone(),
+        };
+        if n < 2 || target <= 0.0 || target.is_nan() {
+            return unchanged();
+        }
+        // Align prices onto this panel's exact (dates × symbols) grid.
+        let (_, px_aligned) = align(self, prices);
+        let px = px_aligned.project_onto(&self.dates, &self.symbols);
+
+        let (nrows, ncols) = self.data.dim();
+        // Implied-portfolio daily returns (NaN where no cell contributes).
+        let mut pret = vec![f64::NAN; nrows];
+        for t in 1..nrows {
+            let mut acc = 0.0;
+            let mut any = false;
+            for c in 0..ncols {
+                let w = self.data[[t, c]];
+                let (p0, p1) = (px[[t - 1, c]], px[[t, c]]);
+                if w.is_finite() && p0.is_finite() && p1.is_finite() && p0 != 0.0 {
+                    acc += w * (p1 / p0 - 1.0);
+                    any = true;
+                }
+            }
+            if any {
+                pret[t] = acc;
+            }
+        }
+
+        let ann = 252.0_f64.sqrt();
+        let m = n as f64;
+        let mut data = self.data.clone();
+        for t in 0..nrows {
+            if t + 1 < n {
+                continue; // window would underflow — fewer than n rows so far
+            }
+            let window = &pret[t + 1 - n..=t];
+            if window.iter().any(|v| !v.is_finite()) {
+                continue; // warmup or a price gap voids the window → passthrough
+            }
+            let mean = window.iter().sum::<f64>() / m;
+            let var = window.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / (m - 1.0);
+            let vol = var.sqrt() * ann;
+            if vol > 0.0 {
+                let scale = (target / vol).min(1.0);
+                for c in 0..ncols {
+                    data[[t, c]] *= scale;
                 }
             }
         }
@@ -304,6 +386,88 @@ mod normalize_row_tests {
         assert_eq!(n.data[[1, 2]], 0.5);
         assert_eq!(n.data[[2, 0]], 0.0);
         assert!(n.data[[2, 2]].is_nan());
+    }
+}
+
+#[cfg(test)]
+mod vol_target_tests {
+    use crate::panel::Panel;
+    use ndarray::array;
+
+    // 1 symbol, weights 1.0; prices give returns +.10,-.10,+.10; n=2.
+    fn fixture() -> (Panel, Panel) {
+        let dates = vec![20240102, 20240103, 20240104, 20240105];
+        let w = Panel::new(
+            dates.clone(),
+            vec!["A".into()],
+            array![[1.0], [1.0], [1.0], [1.0]],
+        )
+        .unwrap();
+        let px = Panel::new(
+            dates,
+            vec!["A".into()],
+            array![[100.0], [110.0], [99.0], [108.9]],
+        )
+        .unwrap();
+        (w, px)
+    }
+
+    #[test]
+    fn warmup_passes_through_then_deleverages_to_target() {
+        let (w, px) = fixture();
+        let out = w.vol_target(&px, 0.10, 2);
+        // Rows 0-1 warmup: no full finite window (row0 return is NaN).
+        assert_eq!(out.data[[0, 0]], 1.0);
+        assert_eq!(out.data[[1, 0]], 1.0);
+        // Row 2: vol = sqrt(0.02 * 252) = 2.244994; scale = 0.10 / vol.
+        let vol = (0.02f64 * 252.0).sqrt();
+        let scale = 0.10 / vol;
+        assert!((out.data[[2, 0]] - scale).abs() < 1e-12);
+        assert!((out.data[[3, 0]] - scale).abs() < 1e-12);
+    }
+
+    #[test]
+    fn low_vol_never_levers_up() {
+        // Tiny returns -> target/vol > 1 -> scale capped at 1 (weights unchanged).
+        let dates = vec![20240102, 20240103, 20240104];
+        let w = Panel::new(dates.clone(), vec!["A".into()], array![[1.0], [1.0], [1.0]]).unwrap();
+        let px = Panel::new(dates, vec!["A".into()], array![[100.0], [100.1], [100.0]]).unwrap();
+        let out = w.vol_target(&px, 0.50, 2);
+        assert_eq!(out.data[[2, 0]], 1.0);
+    }
+
+    #[test]
+    fn degenerate_args_are_noops() {
+        let (w, px) = fixture();
+        // n < 2, non-positive target, and NaN target all pass weights through.
+        for out in [
+            w.vol_target(&px, 0.10, 1),
+            w.vol_target(&px, 0.0, 2),
+            w.vol_target(&px, -0.1, 2),
+            w.vol_target(&px, f64::NAN, 2),
+        ] {
+            assert!(out.data.iter().all(|&v| v == 1.0));
+        }
+    }
+
+    #[test]
+    fn nan_weight_cells_stay_nan() {
+        let dates = vec![20240102, 20240103, 20240104];
+        let w = Panel::new(
+            dates.clone(),
+            vec!["A".into(), "B".into()],
+            array![[1.0, f64::NAN], [1.0, f64::NAN], [1.0, f64::NAN]],
+        )
+        .unwrap();
+        let px = Panel::new(
+            dates,
+            vec!["A".into(), "B".into()],
+            array![[100.0, 100.0], [110.0, 100.0], [99.0, 100.0]],
+        )
+        .unwrap();
+        let out = w.vol_target(&px, 0.10, 2);
+        assert!(out.data[[2, 1]].is_nan()); // scaled column-B weight was NaN
+        assert!(out.data[[2, 0]] < 1.0); // column A got deleveraged
     }
 }
 

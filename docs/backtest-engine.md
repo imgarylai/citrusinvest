@@ -188,8 +188,16 @@ below names ops by their engine behavior; the DSL surface names map through
 `|`, or `!` — logical AND/OR/NOT are the words `and` / `or` / `not`, and there
 is no equality operator. `normalize_row` scales each row to unit gross weight
 (explicit portfolio weights, e.g. inverse-vol via `normalize_row(sig / std(close, 20))`).
-`exit_when(entry, exit)` holds from an entry edge until exit; `quantile_row(of, c)`
-returns a one-column per-row quantile panel (both are lemon-callable).
+`vol_target(w, close, target=0.10, n=63)` is the risk-managed overlay: it scales
+each row's weights by `min(1, target / realized_vol)`, where `realized_vol` is
+the annualized (×√252) rolling-`n` std of the **implied portfolio's** daily
+returns over `close`; it deleverages only (never levers up), passes through
+during warmup / `n<2` / `target≤0`, and — being I/O-free — takes the price panel
+as an explicit argument rather than reading it from the NAV loop. Its rolling
+window ends at the current row, so lag the weights (`shift`) for strictly-causal
+sizing. `exit_when(entry, exit)` holds from an entry edge until exit;
+`quantile_row(of, c)` returns a one-column per-row quantile panel (both are
+lemon-callable).
 
 OHLCV technical indicators (`atr`, `natr`, `cci`, `aroon`, `stoch`, `adx`/`±di`,
 `obv`, `mfi`, `willr`, and `vwap` = rolling-`n` `Σ(tp·vol)/Σvol` over typical

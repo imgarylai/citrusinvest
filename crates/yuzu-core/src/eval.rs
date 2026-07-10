@@ -222,6 +222,12 @@ pub fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
         Or { l, r } => eval(l, ctx)?.or(&eval(r, ctx)?),
         Not { of } => eval(of, ctx)?.not(),
         NormalizeRow { of } => eval(of, ctx)?.normalize_row(),
+        VolTarget {
+            of,
+            prices,
+            target,
+            n,
+        } => eval(of, ctx)?.vol_target(&eval(prices, ctx)?, *target, *n),
         Add { l, r } => num_binop(l, r, ctx, |x, y| x + y)?,
         Sub { l, r } => num_binop(l, r, ctx, |x, y| x - y)?,
         Mul { l, r } => num_binop(l, r, ctx, |x, y| x * y)?,
@@ -1028,6 +1034,7 @@ mod tests {
             format!(r#"{{"op":"NeutralizeIndustry","of":{d},"add_const":true}}"#),
             format!(r#"{{"op":"IndustryRank","of":{d},"categories":null}}"#),
             format!(r#"{{"op":"CapIndustry","of":{d},"max_weight":0.3}}"#),
+            format!(r#"{{"op":"VolTarget","of":{d},"prices":{d},"target":0.1,"n":63}}"#),
             format!(r#"{{"op":"GroupbyCategory","of":{d},"agg":"mean"}}"#),
         ];
         for s in &specs {

@@ -32,6 +32,14 @@ fn default_cap_max_weight() -> f64 {
     0.3
 }
 
+fn default_vol_target() -> f64 {
+    0.1
+}
+
+fn default_vol_target_n() -> usize {
+    63
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(tag = "op")]
 pub enum Expr {
@@ -264,6 +272,17 @@ pub enum Expr {
     Mask { of: Box<Expr>, by: Box<Expr> },
     /// Scale each row so gross weight (Σ|w|) is 1; NaN preserved, zero rows unchanged.
     NormalizeRow { of: Box<Expr> },
+    /// Scale each row of the weight panel `of` toward an annualized portfolio-vol
+    /// `target` (default 0.1) over a trailing `n`-return window (default 63) of
+    /// `prices`; deleverage only (scale capped at 1).
+    VolTarget {
+        of: Box<Expr>,
+        prices: Box<Expr>,
+        #[serde(default = "default_vol_target")]
+        target: f64,
+        #[serde(default = "default_vol_target_n")]
+        n: usize,
+    },
     /// Stateful rotation: enter on `entry`, exit on `exit`, hold up to `nstocks_limit` (prioritised by `rank`), with optional stop_loss/take_profit/trail_stop/trail_stop_activation.
     HoldUntil {
         entry: Box<Expr>,

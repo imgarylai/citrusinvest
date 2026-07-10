@@ -1,0 +1,10 @@
+{
+  "note": "single symbol, weights all 1.0, n=2, target=0.10. Returns are +0.10, -0.10, +0.10 from prices 100/110/99/108.9. Rows 0-1 are warmup (fewer than 2 finite portfolio returns in-window) -> passthrough. Rows 2-3 each have window std(ddof=1)=sqrt(0.02), annualized sqrt(0.02*252)=2.2449944; scale=min(1,0.10/2.2449944)=0.0445435403187374.",
+  "dates": ["2024-01-02", "2024-01-03", "2024-01-04", "2024-01-05"],
+  "symbols": ["A"],
+  "target": 0.10,
+  "n": 2,
+  "weights": [[1.0], [1.0], [1.0], [1.0]],
+  "prices": [[100.0], [110.0], [99.0], [108.9]],
+  "expected": [[1.0], [1.0], [0.0445435403187374], [0.0445435403187374]]
+}

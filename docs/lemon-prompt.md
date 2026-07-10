@@ -41,7 +41,8 @@ boolean "hold this symbol" panel or a selection/rotation.
 `quantile_row(of, c)` (per-row quantile, e.g. `c=0.5` median) ·
 `winsorize(of, lower, upper)` · `zscore(of)` · `bucket(of, n)` · `demean(of)` ·
 `mask(of, by)` (keep `of` where `by` is true) · `normalize_row(of)` (scale each row to unit
-gross weight — explicit portfolio weights, e.g. inverse-vol: `normalize_row(sig / std(close, 20))`).
+gross weight — explicit portfolio weights, e.g. inverse-vol: `normalize_row(sig / std(close, 20))`) ·
+`vol_target(of, prices, target?=0.1, n?=63)` (scale weights toward annualized portfolio-vol target; deleverage only).
 
 **Streaks, edges & rotation**: `sustain(of, nwindow, nsatisfy?)` · `is_entry(of)` / `is_exit(of)`
 (rising/falling edge) · `exit_when(entry, exit)` · `hold_until(entry, exit, nstocks_limit?, rank?, stop_loss?, take_profit?,
