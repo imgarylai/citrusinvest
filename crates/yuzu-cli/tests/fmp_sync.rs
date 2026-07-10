@@ -5,7 +5,7 @@
 use std::cell::RefCell;
 use std::time::Duration;
 
-use yuzu_cli::fmp::{sync, HttpClient, HttpError, SyncConfig, WriteMode};
+use yuzu_cli::fmp::{list_all_symbols, sync, HttpClient, HttpError, SyncConfig, WriteMode};
 use yuzu_cli::run_single;
 use yuzu_data::csv_io::parse_series;
 use yuzu_data::fundamentals::parse_fundamentals;
@@ -76,6 +76,8 @@ fn cfg() -> SyncConfig {
         to: 20240104,
         include_fundamentals: false,
         include_industry: false,
+        skip_non_stocks: false, // most tests isolate prices; screening tests opt in
+        min_market_cap: 0.0,
         rate_limit_per_min: 0, // no throttle in tests
         max_retries: 4,
         backoff_base: Duration::ZERO, // no sleeps in tests
@@ -351,6 +353,99 @@ fn decode(bytes: &[u8]) -> String {
         .read_to_string(&mut out)
         .unwrap();
     out
+}
+
+#[test]
+fn skips_etfs_and_funds_by_default() {
+    let dir = tmp("etf");
+    let http = MockHttp::new()
+        .ok("historical-price-eod", AAPL_PRICES)
+        .ok(
+            "profile?symbol=SPY",
+            r#"[{"symbol":"SPY","isEtf":true,"isFund":false,"sector":""}]"#,
+        )
+        .ok(
+            "profile?symbol=VFIAX",
+            r#"[{"symbol":"VFIAX","isEtf":false,"isFund":true,"sector":""}]"#,
+        )
+        .ok(
+            "profile?symbol=AAPL",
+            r#"[{"symbol":"AAPL","isEtf":false,"isFund":false,"sector":"Technology"}]"#,
+        );
+    let mut c = cfg();
+    c.skip_non_stocks = true;
+    let syms = vec!["SPY".to_string(), "VFIAX".to_string(), "AAPL".to_string()];
+    let summary = sync(&http, "KEY", &syms, &dir, &c).unwrap();
+
+    assert_eq!(summary.symbols_filtered, 2); // SPY (ETF) + VFIAX (fund)
+    assert_eq!(summary.symbols_written, 1); // AAPL only
+                                            // Screened before prices: the ETF/fund never cost a price request.
+    assert_eq!(http.hit_count("dividend-adjusted?symbol=SPY"), 0);
+    let src = LocalSource::new(&dir);
+    assert!(src.get("prices/SPY.csv.gz").unwrap().is_none());
+    assert!(src.get("prices/AAPL.csv.gz").unwrap().is_some());
+}
+
+#[test]
+fn include_etf_keeps_them_and_skips_the_profile_fetch() {
+    let dir = tmp("etf_keep");
+    // Only prices are mocked; with screening off no profile GET should happen.
+    let http = MockHttp::new().ok("historical-price-eod", AAPL_PRICES);
+    let mut c = cfg();
+    c.skip_non_stocks = false; // == --include-etf
+    let summary = sync(&http, "KEY", &[String::from("SPY")], &dir, &c).unwrap();
+    assert_eq!(summary.symbols_written, 1);
+    assert_eq!(summary.symbols_filtered, 0);
+    assert_eq!(http.hit_count("profile"), 0);
+}
+
+#[test]
+fn min_market_cap_filters_small_caps() {
+    let dir = tmp("mcap");
+    let http = MockHttp::new()
+        .ok("historical-price-eod", AAPL_PRICES)
+        .ok(
+            "profile?symbol=BIG",
+            r#"[{"symbol":"BIG","isEtf":false,"marketCap":5.0e12,"sector":"Tech"}]"#,
+        )
+        .ok(
+            "profile?symbol=SMALL",
+            r#"[{"symbol":"SMALL","isEtf":false,"marketCap":1.0e8,"sector":"Tech"}]"#,
+        );
+    let mut c = cfg();
+    c.min_market_cap = 1.0e9; // 1B floor
+    let summary = sync(&http, "KEY", &["BIG".into(), "SMALL".into()], &dir, &c).unwrap();
+
+    assert_eq!(summary.symbols_written, 1); // BIG
+    assert_eq!(summary.symbols_filtered, 1); // SMALL
+    let src = LocalSource::new(&dir);
+    assert!(src.get("prices/BIG.csv.gz").unwrap().is_some());
+    assert!(src.get("prices/SMALL.csv.gz").unwrap().is_none());
+}
+
+#[test]
+fn profile_error_fails_open_and_still_syncs_prices() {
+    let dir = tmp("failopen");
+    // Profile endpoint hard-fails, but prices are fine: the symbol must still land.
+    let http = MockHttp::new()
+        .ok("historical-price-eod", AAPL_PRICES)
+        .seq("profile?symbol=AAA", vec![Err(HttpError::Status(403))]);
+    let mut c = cfg();
+    c.skip_non_stocks = true;
+    let summary = sync(&http, "KEY", &[String::from("AAA")], &dir, &c).unwrap();
+    assert_eq!(summary.symbols_written, 1);
+    assert_eq!(summary.symbols_filtered, 0);
+}
+
+#[test]
+fn list_all_symbols_pulls_the_full_universe() {
+    let http = MockHttp::new().ok(
+        "stock-list",
+        r#"[{"symbol":"MSFT","companyName":"Microsoft"},{"symbol":"AAPL","companyName":"Apple"},{"symbol":"","companyName":"blank"}]"#,
+    );
+    let syms = list_all_symbols(&http, "KEY", &cfg()).unwrap();
+    // Sorted, de-duplicated, blanks dropped.
+    assert_eq!(syms, vec!["AAPL".to_string(), "MSFT".to_string()]);
 }
 
 #[test]

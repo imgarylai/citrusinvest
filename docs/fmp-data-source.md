@@ -190,6 +190,7 @@ the key stays on your machine and no FMP data is redistributed. FMP lives only i
 yuzu-cli fmp-sync --api-key "$FMP_API_KEY" --out ./mydata \
   --symbols AAPL,MSFT,GOOGL --from 20200101 --to 20251231 \
   [--include-fundamentals] [--include-industry] \
+  [--include-etf] [--min-market-cap 1e9] [--all-symbols] \
   [--rate-limit 300] [--max-retries 4] [--append | --resume]
 ```
 
@@ -198,6 +199,22 @@ yuzu-cli fmp-sync --api-key "$FMP_API_KEY" --out ./mydata \
 | `prices/{SYM}.csv.gz` (adjusted OHLCV) | always | `historical-price-eod/dividend-adjusted` |
 | `fundamentals/{SYM}.csv.gz` (dense forward-filled factors + `report_event`) | `--include-fundamentals` | `ratios` + `key-metrics` + `financial-growth` (annual) |
 | `tracked/universe.csv.gz` (`symbol,sector,market_cap`) | `--include-industry` | `profile` |
+| — (universe discovery / ETF & market-cap screen) | `--all-symbols`, `--min-market-cap`, default stock-only | `stock-list`, `profile` |
+
+Universe & screening (from #52 review):
+
+- **Symbols** — `--symbols AAPL,MSFT,…` for an explicit list, or `--all-symbols`
+  to sync FMP's whole tradable universe (`stock-list`). The full universe is
+  large — pair it with `--min-market-cap` / `--rate-limit` / `--resume`.
+- **Stocks only** — ETFs and mutual/closed-end funds are **skipped by default**
+  (classified from the `profile` endpoint's `isEtf` / `isFund`); pass
+  `--include-etf` to keep them.
+- **Market-cap floor** — `--min-market-cap <usd>` drops symbols below that
+  company market cap (`0` = off), read from the `profile` endpoint.
+- Screening happens **before** the price fetch, so a filtered symbol costs no
+  price request. A single profile GET per symbol serves the ETF/fund screen, the
+  cap screen, and `--include-industry`. A profile-endpoint error fails **open**
+  (the symbol is kept) so a secondary hiccup never drops the price sync.
 
 Operational knobs (from #52 discussion):
 

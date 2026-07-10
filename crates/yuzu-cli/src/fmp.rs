@@ -144,6 +144,12 @@ pub struct SyncConfig {
     pub include_fundamentals: bool,
     /// Also fetch company sector → `tracked/universe.csv.gz`.
     pub include_industry: bool,
+    /// Skip ETFs / mutual & closed-end funds (default on) — keep only individual
+    /// stocks. Classified from the profile endpoint's `isEtf` / `isFund`.
+    pub skip_non_stocks: bool,
+    /// Skip symbols whose company market cap is below this (`0.0` = off). Read
+    /// from the profile endpoint's `marketCap`.
+    pub min_market_cap: f64,
     /// Max requests per minute (`0` = no throttle). FMP imposes a per-plan rate
     /// limit; set this to your plan's ceiling. Starter-class keys are commonly
     /// ~300/min — verify against your own plan.
@@ -164,6 +170,8 @@ impl Default for SyncConfig {
             to: 99991231,
             include_fundamentals: false,
             include_industry: false,
+            skip_non_stocks: true,
+            min_market_cap: 0.0,
             rate_limit_per_min: 300,
             max_retries: 4,
             backoff_base: Duration::from_secs(2),
@@ -179,6 +187,8 @@ pub struct SyncSummary {
     pub symbols_written: usize,
     /// Symbols skipped because they already existed (`--resume`).
     pub symbols_skipped: usize,
+    /// Symbols screened out by the ETF/fund or market-cap filters.
+    pub symbols_filtered: usize,
     /// Total price rows written across all symbols.
     pub price_rows: usize,
     /// Symbols with fundamentals written.
@@ -498,6 +508,36 @@ fn densify_fundamentals(snapshots: &[(i32, Vec<f64>)], price_days: &[i32]) -> Ve
     rows
 }
 
+// ---- universe discovery -----------------------------------------------------
+
+/// Fetch the full tradable-symbol universe from FMP (`/stable/stock-list`) and
+/// return every ticker, sorted and de-duplicated. This is the "sync all symbols"
+/// universe; the per-symbol ETF/fund and market-cap screens in [`sync`] still
+/// apply. The list can be very large (thousands of names) — pair it with
+/// `min_market_cap`, `rate_limit_per_min`, and `WriteMode::Resume`.
+pub fn list_all_symbols<H: HttpClient>(
+    http: &H,
+    api_key: &str,
+    cfg: &SyncConfig,
+) -> Result<Vec<String>, String> {
+    let fetcher = Fetcher::new(http, cfg);
+    let rows = fetcher.get_rows(&format!("{FMP_BASE}/stable/stock-list?apikey={api_key}"))?;
+    let mut syms: Vec<String> = rows
+        .iter()
+        .filter_map(|r| {
+            r.as_object()?
+                .get("symbol")?
+                .as_str()
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+        })
+        .collect();
+    syms.sort();
+    syms.dedup();
+    Ok(syms)
+}
+
 // ---- orchestration ----------------------------------------------------------
 
 /// Sync `symbols` from FMP into the `out` tree per [`SyncConfig`]. Prices are
@@ -533,12 +573,53 @@ pub fn sync<H: HttpClient>(
         BTreeMap::new()
     };
 
+    // One profile GET per symbol serves the ETF/fund screen, the market-cap
+    // screen, and the industry map — fetch it only when at least one needs it.
+    let need_profile = cfg.skip_non_stocks || cfg.min_market_cap > 0.0 || cfg.include_industry;
+
     for sym in symbols {
         let price_key = format!("{PRICES_DIR}/{sym}.csv.gz");
         if cfg.mode == WriteMode::Resume && sink.get(&price_key).ok().flatten().is_some() {
             eprintln!("{sym}: already present, skipping (resume)");
             summary.symbols_skipped += 1;
             continue;
+        }
+
+        // Screen before fetching prices so filtered symbols cost no price request.
+        // A profile hiccup fails *open* (keep the symbol) — a transient error on
+        // the secondary endpoint must not drop the primary price sync.
+        let mut profile: Option<Profile> = None;
+        if need_profile {
+            match fetch_profile(&fetcher, sym, api_key) {
+                Ok(Some(p)) => {
+                    if cfg.skip_non_stocks && (p.is_etf || p.is_fund) {
+                        let kind = if p.is_etf { "ETF" } else { "fund" };
+                        eprintln!("{sym}: {kind}, skipping (pass --include-etf to keep)");
+                        summary.symbols_filtered += 1;
+                        continue;
+                    }
+                    if cfg.min_market_cap > 0.0 {
+                        match p.market_cap {
+                            Some(mc) if mc < cfg.min_market_cap => {
+                                eprintln!(
+                                    "{sym}: market cap {mc:.0} < {:.0}, skipping",
+                                    cfg.min_market_cap
+                                );
+                                summary.symbols_filtered += 1;
+                                continue;
+                            }
+                            None => eprintln!("{sym}: market cap unknown, keeping (cannot screen)"),
+                            _ => {}
+                        }
+                    }
+                    profile = Some(p);
+                }
+                Ok(None) if cfg.skip_non_stocks || cfg.min_market_cap > 0.0 => {
+                    eprintln!("{sym}: no profile data, cannot screen (keeping)");
+                }
+                Ok(None) => {}
+                Err(e) => eprintln!("{sym}: profile unavailable, cannot screen (keeping): {e}"),
+            }
         }
 
         eprintln!("{sym}: fetching prices…");
@@ -604,15 +685,15 @@ pub fn sync<H: HttpClient>(
         }
 
         if cfg.include_industry {
-            match fetch_sector(&fetcher, sym, api_key) {
-                Ok(Some((sector, mcap))) => {
+            // Reuse the profile fetched above for the screen.
+            match profile
+                .as_ref()
+                .and_then(|p| p.sector.as_ref().map(|s| (s.clone(), p.market_cap)))
+            {
+                Some((sector, mcap)) => {
                     industry.insert(sym.clone(), (sector, mcap));
                 }
-                Ok(None) => eprintln!("{sym}: no sector in profile"),
-                Err(e) => {
-                    eprintln!("{sym}: industry skipped: {e}");
-                    summary.failures.push((format!("{sym} (industry)"), e));
-                }
+                None => eprintln!("{sym}: no sector in profile"),
             }
         }
     }
@@ -657,12 +738,31 @@ fn sync_fundamentals<H: HttpClient>(
     Ok(true)
 }
 
-/// Pull `(sector, market_cap)` from the company profile endpoint.
-fn fetch_sector<H: HttpClient>(
+/// The bits of the company profile the sync uses: sector (for the industry
+/// map), market cap (cap screen), and security-type flags (stock-only screen).
+struct Profile {
+    sector: Option<String>,
+    market_cap: Option<f64>,
+    is_etf: bool,
+    is_fund: bool,
+}
+
+/// A boolean profile flag that FMP may serialize as a JSON bool or a string.
+fn flag(obj: &serde_json::Map<String, Value>, key: &str) -> bool {
+    match obj.get(key) {
+        Some(Value::Bool(b)) => *b,
+        Some(Value::String(s)) => s.eq_ignore_ascii_case("true"),
+        _ => false,
+    }
+}
+
+/// Fetch the company profile. `Ok(None)` = the endpoint returned no row for the
+/// symbol (unknown ticker on this plan).
+fn fetch_profile<H: HttpClient>(
     fetcher: &Fetcher<H>,
     sym: &str,
     api_key: &str,
-) -> Result<Option<(String, Option<f64>)>, String> {
+) -> Result<Option<Profile>, String> {
     let rows = fetcher.get_rows(&profile_url(sym, api_key))?;
     let Some(obj) = rows.first().and_then(Value::as_object) else {
         return Ok(None);
@@ -671,12 +771,13 @@ fn fetch_sector<H: HttpClient>(
         .get("sector")
         .and_then(Value::as_str)
         .map(str::trim)
-        .filter(|s| !s.is_empty());
-    Ok(sector.map(|s| {
-        (
-            s.to_string(),
-            num(obj, &["marketCap", "marketCapitalization"]),
-        )
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    Ok(Some(Profile {
+        sector,
+        market_cap: num(obj, &["marketCap", "marketCapitalization"]),
+        is_etf: flag(obj, "isEtf"),
+        is_fund: flag(obj, "isFund"),
     }))
 }
 
