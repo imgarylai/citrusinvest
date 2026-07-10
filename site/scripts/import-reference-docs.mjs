@@ -28,7 +28,7 @@ const DOCS = [
 // Map a repo-relative doc path to its on-site slug (for cross-links).
 const DOC_TO_SLUG = new Map(DOCS.map(([src, slug]) => [src.replace(/^docs\//, ''), slug]));
 
-const GH_BLOB = 'https://github.com/imgarylai/citrusinvest/blob/main';
+const GH_BLOB = 'https://github.com/citrusquant/citrusquant/blob/main';
 
 function yamlEscape(s) {
   return s.replace(/"/g, '\\"');

@@ -9,7 +9,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
 
-const REPO = "imgarylai/citrusinvest";
+const REPO = "citrusquant/citrusquant";
 const BIN = "lemon-lsp";
 
 /** The GitHub release-asset target for the current OS/arch, or undefined. */
@@ -231,7 +231,7 @@ function fetchStream(
     }
     const req = https.get(
       url,
-      { headers: { "User-Agent": "citrusinvest-lemon-vscode", Accept: "*/*" } },
+      { headers: { "User-Agent": "citrusquant-lemon-vscode", Accept: "*/*" } },
       (res) => {
         const status = res.statusCode ?? 0;
         if (status >= 300 && status < 400 && res.headers.location) {

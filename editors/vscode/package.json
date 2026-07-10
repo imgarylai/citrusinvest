@@ -1,9 +1,9 @@
 {
   "name": "lemon-lang",
-  "displayName": "Lemon (citrusinvest)",
+  "displayName": "Lemon (citrusquant)",
   "description": "Syntax highlighting and language server support for the lemon strategy DSL.",
   "version": "0.1.0",
-  "publisher": "citrusinvest",
+  "publisher": "citrusquant",
   "license": "MIT",
   "icon": "icon.png",
   "keywords": [
@@ -15,12 +15,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/imgarylai/citrusinvest",
+    "url": "https://github.com/citrusquant/citrusquant",
     "directory": "editors/vscode"
   },
-  "homepage": "https://github.com/imgarylai/citrusinvest/tree/main/editors/vscode#readme",
+  "homepage": "https://github.com/citrusquant/citrusquant/tree/main/editors/vscode#readme",
   "bugs": {
-    "url": "https://github.com/imgarylai/citrusinvest/issues"
+    "url": "https://github.com/citrusquant/citrusquant/issues"
   },
   "qna": false,
   "engines": {

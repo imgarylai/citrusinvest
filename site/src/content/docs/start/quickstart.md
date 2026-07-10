@@ -18,8 +18,8 @@ and metrics. This is the fastest way to get a feel for lemon.
 You need a recent stable Rust toolchain.
 
 ```bash
-git clone https://github.com/imgarylai/citrusinvest
-cd citrusinvest
+git clone https://github.com/citrusquant/citrusquant
+cd citrusquant
 cargo run -p yuzu-core --example basic_backtest
 ```
 

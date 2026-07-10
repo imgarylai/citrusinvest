@@ -2,8 +2,8 @@
 #
 # One-time setup on pypi.org (Account → Publishing → Add a pending publisher):
 #   PyPI project name: yuzu-backtest
-#   Owner:             imgarylai
-#   Repository:        citrusinvest
+#   Owner:             citrusquant
+#   Repository:        citrusquant
 #   Workflow name:     release-python.yml
 #   Environment:       pypi
 #

@@ -1,4 +1,4 @@
-# FMP Starter data gaps vs citrusinvest features
+# FMP Starter data gaps vs citrusquant features
 
 **Snapshot date:** 2026-07-09. FMP product names, history depth, and endpoint
 access change over time — re-check [FMP’s own docs and pricing](https://site.financialmodelingprep.com/pricing-plans)
@@ -7,7 +7,7 @@ before relying on tier-specific claims below.
 This document answers one question:
 
 > If I only have an **FMP Starter**-class key (short US history, limited
-> fundamentals depth, no bulk), which citrusinvest **features can I honestly
+> fundamentals depth, no bulk), which citrusquant **features can I honestly
 > backtest**, and which ones are blocked because the **input panels** are missing
 > or too coarse?
 
@@ -137,7 +137,7 @@ checklist for your sync job; re-verify endpoints when implementing a builder.
 
 ## 4. Gap table: Starter → what you cannot honestly backtest
 
-| If your Starter-fed tree is weak on… | Then these citrusinvest capabilities are blocked or misleading |
+| If your Starter-fed tree is weak on… | Then these citrusquant capabilities are blocked or misleading |
 |--------------------------------------|------------------------------------------------------------------|
 | History longer than ~5y | **Any** strategy needing longer samples: long walk-forwards (#21), multi-regime TA, long factor studies — all op families |
 | `close` only (no high/low) | **OHLCV TA**: `atr`, `natr`, `willr`, `cci`, `stoch_*`, `aroon_*`, `adx`, `±di`; MAE/MFE quality; future **touched_exit** (#20) |

@@ -50,7 +50,7 @@ so it is safe to store, publish, and re-run in another browser.
   [`fmp-data-source.md`](../reference/fmp-data-source)).
 
 The machine-readable schema is
-[`schema/strategy-envelope.schema.json`](https://github.com/imgarylai/citrusinvest/blob/main/schema/strategy-envelope.schema.json).
+[`schema/strategy-envelope.schema.json`](https://github.com/citrusquant/citrusquant/blob/main/schema/strategy-envelope.schema.json).
 
 ## Validation
 

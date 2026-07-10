@@ -1,8 +1,8 @@
-# citrusinvest engine
+# citrusquant engine
 
-[![CI](https://github.com/imgarylai/citrusinvest/actions/workflows/ci.yml/badge.svg)](https://github.com/imgarylai/citrusinvest/actions/workflows/ci.yml) [![docs](https://img.shields.io/badge/docs-pages-blue)](https://imgarylai.github.io/citrusinvest/) [![yuzu-core](https://img.shields.io/crates/v/yuzu-core?label=yuzu-core)](https://crates.io/crates/yuzu-core) [![lemon-lang](https://img.shields.io/crates/v/lemon-lang?label=lemon-lang)](https://crates.io/crates/lemon-lang) ![license](https://img.shields.io/badge/license-MIT-blue)
+[![CI](https://github.com/citrusquant/citrusquant/actions/workflows/ci.yml/badge.svg)](https://github.com/citrusquant/citrusquant/actions/workflows/ci.yml) [![docs](https://img.shields.io/badge/docs-pages-blue)](https://citrusquant.com/) [![yuzu-core](https://img.shields.io/crates/v/yuzu-core?label=yuzu-core)](https://crates.io/crates/yuzu-core) [![lemon-lang](https://img.shields.io/crates/v/lemon-lang?label=lemon-lang)](https://crates.io/crates/lemon-lang) ![license](https://img.shields.io/badge/license-MIT-blue)
 
-The open-source Rust backtest + strategy engine behind **citrusinvest** — the
+The open-source Rust backtest + strategy engine behind **citrusquant** — the
 **yuzu** backtest core plus the **lemon** strategy DSL. Pure, I/O-free math:
 `(strategy spec JSON, data panels) -> Report`. It compiles to both native
 (batch backtests via Rayon) and WASM (browser/Worker).

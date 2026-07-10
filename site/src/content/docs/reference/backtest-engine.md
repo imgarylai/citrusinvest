@@ -7,7 +7,7 @@ sourceFile: docs/backtest-engine.md
 <!-- Imported from docs/backtest-engine.md by site/scripts/import-reference-docs.mjs — edit the source, then re-run `npm run import:docs`. -->
 A Rust workspace for **US stocks**: build a strategy in the **Lemon** DSL,
 evaluate it over price/fundamental data, and backtest it. This is the engine
-behind citrusinvest — the repo root is the Cargo workspace.
+behind citrusquant — the repo root is the Cargo workspace.
 
 > **Why Rust?** The engine runs two ways from one codebase: in the browser/Worker
 > via **WASM**, and as a native batch binary (large-scale backtests via Rayon).

@@ -1,6 +1,6 @@
 # Input data layout
 
-This is the **canonical contract** for data you feed into citrusinvest.
+This is the **canonical contract** for data you feed into citrusquant.
 The engine does **not** ship market data. You bring your own files (or any
 [`ObjectSource`](../crates/yuzu-data/src/source.rs) that serves the same keys).
 

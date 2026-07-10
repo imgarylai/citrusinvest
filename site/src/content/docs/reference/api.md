@@ -16,14 +16,14 @@ on this site; these links are always current with the latest release.
 
 The `wasm`, `cli`, and `server` crates are not published to crates.io — they are
 application boundaries, not public library API. Read their source in the
-[repository](https://github.com/imgarylai/citrusinvest/tree/main/crates).
+[repository](https://github.com/citrusquant/citrusquant/tree/main/crates).
 
 ## Machine-readable schemas
 
 For tool-use and structured generation, two artifacts in the repo describe the
 language precisely:
 
-- [Lemon op catalog (JSON)](https://github.com/imgarylai/citrusinvest/blob/main/schema/op-catalog.json)
+- [Lemon op catalog (JSON)](https://github.com/citrusquant/citrusquant/blob/main/schema/op-catalog.json)
   — every operator, its arguments, types, and defaults.
-- [Lemon spec JSON Schema](https://github.com/imgarylai/citrusinvest/blob/main/schema/lemon-spec.schema.json)
+- [Lemon spec JSON Schema](https://github.com/citrusquant/citrusquant/blob/main/schema/lemon-spec.schema.json)
   — schema for the tagged `Expr` tree.

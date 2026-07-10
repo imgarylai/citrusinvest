@@ -5,9 +5,9 @@ sourceFile: docs/data-layout.md
 ---
 
 <!-- Imported from docs/data-layout.md by site/scripts/import-reference-docs.mjs — edit the source, then re-run `npm run import:docs`. -->
-This is the **canonical contract** for data you feed into citrusinvest.
+This is the **canonical contract** for data you feed into citrusquant.
 The engine does **not** ship market data. You bring your own files (or any
-[`ObjectSource`](https://github.com/imgarylai/citrusinvest/blob/main/crates/yuzu-data/src/source.rs) that serves the same keys).
+[`ObjectSource`](https://github.com/citrusquant/citrusquant/blob/main/crates/yuzu-data/src/source.rs) that serves the same keys).
 
 `yuzu-core` only sees in-memory [`Panel`](../reference/backtest-engine#the-data-model-panel)
 values. The on-disk layout below is what **`yuzu-data`** reads and what
@@ -208,7 +208,7 @@ Example row:
 
 Same date and NaN conventions as prices. Column order must match
 `FUNDAMENTAL_FIELDS` + trailing `report_event` in
-[`crates/yuzu-data/src/fundamentals.rs`](https://github.com/imgarylai/citrusinvest/blob/main/crates/yuzu-data/src/fundamentals.rs).
+[`crates/yuzu-data/src/fundamentals.rs`](https://github.com/citrusquant/citrusquant/blob/main/crates/yuzu-data/src/fundamentals.rs).
 
 ---
 
@@ -372,7 +372,7 @@ yuzu_core::run_backtest(&spec_json, &ctx, "close", &BacktestConfig::default())?;
 ```
 
 Server request shape: see
-[`crates/yuzu-server/examples/backtest-request.json`](https://github.com/imgarylai/citrusinvest/blob/main/crates/yuzu-server/examples/backtest-request.json).
+[`crates/yuzu-server/examples/backtest-request.json`](https://github.com/citrusquant/citrusquant/blob/main/crates/yuzu-server/examples/backtest-request.json).
 Data root via `YUZU_DATA_DIR` (or equivalent) must contain `prices/` (and
 optionally `fundamentals/`, `panels/`).
 
@@ -399,5 +399,5 @@ If this doc and the code disagree, **trust the code** and update this file.
 
 - [`backtest-engine.md`](../reference/backtest-engine) — panels, backtest, Report JSON  
 - [`lemon.md`](../reference/lemon) — strategy language  
-- [`crates/yuzu-data/README.md`](https://github.com/imgarylai/citrusinvest/blob/main/crates/yuzu-data/README.md) — crate feature flags  
+- [`crates/yuzu-data/README.md`](https://github.com/citrusquant/citrusquant/blob/main/crates/yuzu-data/README.md) — crate feature flags  
 

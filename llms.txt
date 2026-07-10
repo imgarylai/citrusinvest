@@ -1,4 +1,4 @@
-# citrusinvest
+# citrusquant
 
 > Open-source Rust backtest + strategy engine: the **yuzu** backtest core and the **lemon**
 > strategy DSL. Strategies are authored in lemon (a small text DSL) and lowered to a JSON `Expr`

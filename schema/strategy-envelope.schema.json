@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/imgarylai/citrusinvest/schema/strategy-envelope.schema.json",
+  "$id": "https://github.com/citrusquant/citrusquant/schema/strategy-envelope.schema.json",
   "title": "Lemon strategy envelope",
   "description": "A shareable, versioned strategy document: metadata + a strategy (as lemon `source` text or a lowered `spec` Expr tree) + reproducibility hints. Contains NO market data — it references series names and a universe window only. The authoritative validator is `lemon check` (crates/lemon-lang); this schema mirrors it for external consumers.",
   "type": "object",

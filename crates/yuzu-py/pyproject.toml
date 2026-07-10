@@ -16,7 +16,7 @@ classifiers = [
 ]
 
 [project.urls]
-Repository = "https://github.com/imgarylai/citrusinvest"
+Repository = "https://github.com/citrusquant/citrusquant"
 
 [tool.maturin]
 module-name = "yuzu"

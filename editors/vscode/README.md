@@ -1,7 +1,7 @@
 # Lemon for VS Code
 
 Editor support for the **lemon** strategy DSL (part of the
-[citrusinvest](https://github.com/imgarylai/citrusinvest) engine):
+[citrusquant](https://github.com/citrusquant/citrusquant) engine):
 
 - **Syntax highlighting** — a TextMate grammar (`syntaxes/lemon.tmLanguage.json`)
   for `.lemon` files. Works standalone, no server required.
