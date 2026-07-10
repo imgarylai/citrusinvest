@@ -28,11 +28,12 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    # On a release event there are no inputs, so default to the packages that
-    # are already onboarded on npm (have a Trusted Publisher configured). Add
-    # yuzu-wasm here once it has been published + trusted once.
+    # On a release event there are no inputs, so default to all packages that
+    # are onboarded on npm (published once + Trusted Publisher configured):
+    # lemon-wasm and yuzu-wasm. The per-step "already published?" guard skips
+    # any that are already at this version.
     env:
-      PACKAGE: ${{ github.event_name == 'release' && 'lemon-wasm' || inputs.package }}
+      PACKAGE: ${{ github.event_name == 'release' && 'both' || inputs.package }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
