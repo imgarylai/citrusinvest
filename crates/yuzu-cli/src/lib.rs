@@ -405,6 +405,7 @@ pub fn max_lookback(spec: &serde_json::Value) -> usize {
 /// Evaluate `spec` over `[eval_from, to]` but run the NAV loop only over
 /// `[nav_from, to]`: indicators warm up on the earlier rows, P&L does not
 /// include them. Returns the NAV range's (dates, equity).
+#[allow(clippy::type_complexity)]
 fn run_windowed(
     ctx: &EvalContext,
     spec: &str,
@@ -412,7 +413,8 @@ fn run_windowed(
     eval_from: i32,
     nav_from: i32,
     to: i32,
-) -> Result<(Vec<i32>, Vec<f64>), String> {
+    initial_weights: Option<&std::collections::HashMap<String, f64>>,
+) -> Result<(Vec<i32>, Vec<f64>, std::collections::HashMap<String, f64>), String> {
     let eval_ctx = slice_ctx(ctx, eval_from, to);
     let positions = yuzu_core::run_strategy(spec, &eval_ctx).map_err(|e| e.to_string())?;
     let positions = positions.slice_dates(nav_from, to);
@@ -425,8 +427,16 @@ fn run_windowed(
         .panels
         .get("volume")
         .map(|p| p.slice_dates(nav_from, to));
-    let run = yuzu_core::backtest::run(&positions, &prices, None, None, volume.as_ref(), cfg);
-    Ok((run.dates, run.equity))
+    let run = yuzu_core::backtest::run_with_initial(
+        &positions,
+        &prices,
+        None,
+        None,
+        volume.as_ref(),
+        cfg,
+        initial_weights,
+    );
+    Ok((run.dates, run.equity, run.terminal_weights))
 }
 
 /// Window/selection settings for [`run_walkforward`].
@@ -501,6 +511,12 @@ pub fn run_walkforward(
     let mut oos_dates: Vec<i32> = Vec::new();
     let mut oos_equity: Vec<f64> = Vec::new();
     let mut scale = 1.0_f64;
+    // Book carried across OOS seams: the previous test segment's terminal
+    // holdings become the next segment's starting book, so a seam that keeps
+    // the same names pays turnover only on the difference (#21). `None` for the
+    // first segment (it enters flat). Only affects cost-bearing runs — with
+    // zero fees/slippage the stitched curve is unchanged.
+    let mut carry: Option<std::collections::HashMap<String, f64>> = None;
 
     let mut start = 0usize;
     while start + train_days < dates.len() {
@@ -518,9 +534,11 @@ pub fn run_walkforward(
             .par_iter()
             .enumerate()
             .filter_map(|(i, (_, spec))| {
-                run_windowed(&ctx, spec, cfg, train_eval_from, train_from, train_to)
+                // In-sample scoring is an independent selection experiment per
+                // variant — always from flat (no carry).
+                run_windowed(&ctx, spec, cfg, train_eval_from, train_from, train_to, None)
                     .ok()
-                    .map(|(d, e)| (i, metric_from_curve(&d, &e, sort_by)))
+                    .map(|(d, e, _)| (i, metric_from_curve(&d, &e, sort_by)))
                     .filter(|(_, m)| !m.is_nan())
             })
             .collect();
@@ -535,14 +553,17 @@ pub fn run_walkforward(
         // stitching (its date belongs to the previous segment).
         let test_eval_from = dates[test_start.saturating_sub(warmup)];
         let nav_from = dates[test_start - 1];
-        let (seg_dates, seg_equity) = run_windowed(
+        let (seg_dates, seg_equity, seg_terminal) = run_windowed(
             &ctx,
             &variants[best].1,
             cfg,
             test_eval_from,
             nav_from,
             test_to,
+            carry.as_ref(),
         )?;
+        // Carry this segment's terminal book into the next seam.
+        carry = Some(seg_terminal);
         windows.push(WalkForwardWindow {
             train_from,
             train_to,

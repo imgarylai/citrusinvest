@@ -321,6 +321,68 @@ fn factor_and_event_report_over_the_tree() {
 }
 
 #[test]
+fn walkforward_carries_holdings_across_seams() {
+    // Flat prices → nothing drifts, so the winner's book is a constant {AAA:1.0}
+    // every window. `close > 0` holds AAA with zero lookback, so the boundary
+    // rows are live too. With a 2% fee, the FIRST window pays a full entry cost;
+    // the SECOND enters from the carried book (identical target) and pays ZERO
+    // seam turnover — the crux of #21.
+    let dir = std::env::temp_dir().join("yuzu_cli_wf_carry");
+    let _ = fs::remove_dir_all(&dir);
+    let rows: Vec<OhlcvRow> = (0..12)
+        .map(|i| OhlcvRow {
+            day: 20240102 + i as i32,
+            adj_open: 10.0,
+            adj_high: 10.0,
+            adj_low: 10.0,
+            adj_close: 10.0,
+            volume: 0.0,
+        })
+        .collect();
+    let p = dir.join("prices");
+    fs::create_dir_all(&p).unwrap();
+    fs::write(p.join("AAA.csv.gz"), write_series(&rows).unwrap()).unwrap();
+
+    let variants = vec![(
+        "always".to_string(),
+        r#"{"op":"Gt","l":{"op":"Data","name":"close"},"r":{"op":"Const","value":0.0}}"#
+            .to_string(),
+    )];
+    let cfg = yuzu_core::backtest::BacktestConfig {
+        fee_ratio: 0.02,
+        ..Default::default()
+    };
+    let report = yuzu_cli::run_walkforward(
+        &dir,
+        &variants,
+        &yuzu_cli::WalkForwardParams {
+            from: 20240102,
+            to: 20240113,
+            train_days: 4,
+            test_days: 3,
+            sort_by: SortKey::TotalReturn, // flat curve → total_return 0, not NaN
+            warmup_days: None,
+        },
+        &cfg,
+    )
+    .unwrap();
+
+    assert_eq!(report.windows.len(), 2);
+    // Window 0 enters flat: a full 2% entry cost on flat prices.
+    assert!(
+        (report.windows[0].oos_return - (-0.02)).abs() < 1e-12,
+        "first seam should pay the entry fee, got {}",
+        report.windows[0].oos_return
+    );
+    // Window 1 carries the identical book → zero seam turnover, no fee.
+    assert!(
+        report.windows[1].oos_return.abs() < 1e-12,
+        "carried seam should pay no turnover, got {}",
+        report.windows[1].oos_return
+    );
+}
+
+#[test]
 fn list_symbols_is_empty_when_prices_dir_is_absent() {
     let dir = std::env::temp_dir().join("yuzu_cli_no_prices");
     let _ = fs::remove_dir_all(&dir);

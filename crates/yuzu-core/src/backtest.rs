@@ -261,8 +261,13 @@ pub struct BacktestRun {
     pub equity: Vec<f64>,
     pub trades: Vec<Trade>,
     pub exposure: Vec<f64>,
+    /// Drifted book weight per symbol on the final row (only non-zero holdings).
+    /// Feed this into the next segment's [`run_with_initial`] to pay seam
+    /// turnover only on the difference (walk-forward carry-over, #21).
+    pub terminal_weights: HashMap<String, f64>,
 }
 
+/// Run the NAV loop from a flat starting book. See [`run_with_initial`].
 pub fn run(
     positions: &Panel,
     prices: &Panel,
@@ -270,6 +275,24 @@ pub fn run(
     low: Option<&Panel>,
     volume: Option<&Panel>,
     cfg: &BacktestConfig,
+) -> BacktestRun {
+    run_with_initial(positions, prices, high, low, volume, cfg, None)
+}
+
+/// Like [`run`], but the book starts holding `initial_weights` (symbol → weight)
+/// instead of flat. Day-0 pays turnover only on the difference between those
+/// carried holdings and the day-0 target, so stitching segments that keep the
+/// same names doesn't pay a full entry cost at every seam. Keyed by symbol, so
+/// it survives a differing column order / universe between segments; symbols
+/// absent from the map (or from this segment's panel) start flat.
+pub fn run_with_initial(
+    positions: &Panel,
+    prices: &Panel,
+    high: Option<&Panel>,
+    low: Option<&Panel>,
+    volume: Option<&Panel>,
+    cfg: &BacktestConfig,
+    initial_weights: Option<&HashMap<String, f64>>,
 ) -> BacktestRun {
     let (pos, px) = align(positions, prices);
     let hi = conform_to(&px, high);
@@ -342,7 +365,17 @@ pub fn run(
 
     let mut equity = vec![1.0_f64; nrows];
     let mut value = 1.0_f64;
-    // actual (drifted) weights carried into each day; start flat then set to day-0 target.
+    // The book carried into day 0: the prior segment's holdings projected onto
+    // this panel's symbols (flat when unset / a symbol is absent).
+    let w_start: Vec<f64> = match initial_weights {
+        Some(m) => px
+            .symbols
+            .iter()
+            .map(|s| m.get(s).copied().unwrap_or(0.0))
+            .collect(),
+        None => vec![0.0_f64; n],
+    };
+    // actual (drifted) weights carried into each day; start at the day-0 target.
     let mut w_prev = vec![0.0_f64; n];
     for c in 0..n {
         w_prev[c] = target[[0, c]];
@@ -356,8 +389,8 @@ pub fn run(
             .as_ref()
             .map(|dv| (0..n).map(|c| dv[[r, c]]).collect())
     };
-    // day-0 entry cost (flat -> first target)
-    value *= 1.0 - rebalance_cost(&vec![0.0; n], &w_prev, dv_row(0).as_deref(), cfg);
+    // day-0 entry cost (carried book -> first target; flat when unset)
+    value *= 1.0 - rebalance_cost(&w_start, &w_prev, dv_row(0).as_deref(), cfg);
     equity[0] = value;
 
     for r in 1..nrows {
@@ -498,11 +531,22 @@ pub fn run(
         }
     }
 
+    // Final drifted book, keyed by symbol (non-zero holdings only) — the
+    // starting book a following segment carries in via `run_with_initial`.
+    let terminal_weights: HashMap<String, f64> = px
+        .symbols
+        .iter()
+        .zip(&w_prev)
+        .filter(|(_, &w)| w != 0.0)
+        .map(|(s, &w)| (s.clone(), w))
+        .collect();
+
     BacktestRun {
         dates,
         equity,
         trades,
         exposure,
+        terminal_weights,
     }
 }
 
@@ -989,5 +1033,83 @@ mod tests {
             "exit fills at 20 * (1 - 0.1) = 18, got {:?}",
             t.exit_price
         );
+    }
+
+    #[test]
+    fn terminal_weights_report_the_final_book() {
+        use crate::panel::Panel;
+        // Hold A every day; end drifted book is A at weight 1.0 (single name).
+        let dates = vec![20240102, 20240103];
+        let pos =
+            Panel::from_rows(dates.clone(), vec!["A".into()], vec![vec![1.0], vec![1.0]]).unwrap();
+        let px = Panel::from_rows(dates, vec!["A".into()], vec![vec![10.0], vec![11.0]]).unwrap();
+        let r = run(&pos, &px, None, None, None, &BacktestConfig::default());
+        assert_eq!(r.terminal_weights.len(), 1);
+        assert!((r.terminal_weights["A"] - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn initial_weights_pay_seam_turnover_only_on_the_difference() {
+        use crate::panel::Panel;
+        // One name held every day, flat prices so nothing drifts; a 1% fee makes
+        // the day-0 turnover visible in equity.
+        let dates = vec![20240102, 20240103, 20240104];
+        let pos = Panel::from_rows(
+            dates.clone(),
+            vec!["A".into()],
+            vec![vec![1.0], vec![1.0], vec![1.0]],
+        )
+        .unwrap();
+        let px = Panel::from_rows(
+            dates,
+            vec!["A".into()],
+            vec![vec![10.0], vec![10.0], vec![10.0]],
+        )
+        .unwrap();
+        let cfg = BacktestConfig {
+            fee_ratio: 0.01,
+            ..Default::default()
+        };
+
+        // Flat start: day-0 buys the whole book, paying 1% on turnover 1.0.
+        let flat = run(&pos, &px, None, None, None, &cfg);
+        assert!((flat.equity[0] - 0.99).abs() < 1e-12);
+        assert!((flat.terminal_weights["A"] - 1.0).abs() < 1e-12);
+
+        // Carrying the identical book -> zero seam turnover, no day-0 cost.
+        let carried = HashMap::from([("A".to_string(), 1.0)]);
+        let warm = run_with_initial(&pos, &px, None, None, None, &cfg, Some(&carried));
+        assert!((warm.equity[0] - 1.0).abs() < 1e-12, "no seam cost");
+        assert!((warm.equity[2] - 1.0).abs() < 1e-12);
+
+        // Carrying half the target -> turnover 0.5, so only half the entry fee.
+        let half = HashMap::from([("A".to_string(), 0.5)]);
+        let partial = run_with_initial(&pos, &px, None, None, None, &cfg, Some(&half));
+        assert!((partial.equity[0] - (1.0 - 0.01 * 0.5)).abs() < 1e-12);
+
+        // A carried symbol that isn't in this segment's target still costs to
+        // unwind: hold B, carry A -> turnover |0-1| (sell A) + |1-0| (buy B) = 2.
+        let posb = Panel::from_rows(
+            vec![20240102, 20240103],
+            vec!["A".into(), "B".into()],
+            vec![vec![0.0, 1.0], vec![0.0, 1.0]],
+        )
+        .unwrap();
+        let pxb = Panel::from_rows(
+            vec![20240102, 20240103],
+            vec!["A".into(), "B".into()],
+            vec![vec![10.0, 10.0], vec![10.0, 10.0]],
+        )
+        .unwrap();
+        let cross = run_with_initial(
+            &posb,
+            &pxb,
+            None,
+            None,
+            None,
+            &cfg,
+            Some(&HashMap::from([("A".to_string(), 1.0)])),
+        );
+        assert!((cross.equity[0] - (1.0 - 0.01 * 2.0)).abs() < 1e-12);
     }
 }
