@@ -147,8 +147,9 @@ pub struct SyncConfig {
     /// Skip ETFs / mutual & closed-end funds (default on) — keep only individual
     /// stocks. Classified from the profile endpoint's `isEtf` / `isFund`.
     pub skip_non_stocks: bool,
-    /// Skip symbols whose company market cap is below this (`0.0` = off). Read
-    /// from the profile endpoint's `marketCap`.
+    /// Skip symbols whose company market cap is below this, in **USD**
+    /// (`0.0` = off). Read from the profile endpoint's `marketCap`. The CLI
+    /// accepts unit suffixes (`1b`, `500m`) via [`parse_market_cap`].
     pub min_market_cap: f64,
     /// Max requests per minute (`0` = no throttle). FMP imposes a per-plan rate
     /// limit; set this to your plan's ceiling. Starter-class keys are commonly
@@ -156,8 +157,9 @@ pub struct SyncConfig {
     pub rate_limit_per_min: u32,
     /// Retries per request on a retryable error before giving up on the symbol.
     pub max_retries: u32,
-    /// Base backoff; the Nth retry waits `base * 2^(N-1)` (0 disables the sleep,
-    /// used by tests).
+    /// Base backoff **duration**; the Nth retry waits `base * 2^(N-1)` — e.g. a
+    /// 2-second base gives 2s, 4s, 8s, 16s. `Duration::ZERO` disables the sleep
+    /// (used by tests).
     pub backoff_base: Duration,
     /// How to treat an already-present tree.
     pub mode: WriteMode,
@@ -608,6 +610,34 @@ pub fn build_symbol_list<H: HttpClient>(
     Ok(syms)
 }
 
+/// Parse a market-cap threshold with an optional magnitude suffix — `k`, `m`,
+/// `b`, `t` (thousand / million / billion / trillion), case-insensitive. Plain
+/// numbers and scientific notation pass through. Examples: `1b` → 1e9,
+/// `500m` → 5e8, `2.5t` → 2.5e12, `1e9` → 1e9, `0` → 0.
+pub fn parse_market_cap(s: &str) -> Result<f64, String> {
+    let s = s.trim();
+    if s.is_empty() {
+        return Err("empty market-cap value".to_string());
+    }
+    let mult = match s.chars().last().unwrap().to_ascii_lowercase() {
+        'k' => 1e3,
+        'm' => 1e6,
+        'b' => 1e9,
+        't' => 1e12,
+        _ => 1.0,
+    };
+    // Strip the suffix only when one matched (ASCII, so 1-byte).
+    let digits = if mult == 1.0 { s } else { &s[..s.len() - 1] };
+    let val: f64 = digits
+        .trim()
+        .parse()
+        .map_err(|_| format!("invalid market cap '{s}' (try 1b, 500m, or a plain number)"))?;
+    if val < 0.0 || !val.is_finite() {
+        return Err(format!("market cap must be a non-negative number: '{s}'"));
+    }
+    Ok(val * mult)
+}
+
 /// Parse a symbols-list file into tickers. One ticker per line; the first
 /// comma-separated field is taken (so a `symbol,...` CSV works), and blank
 /// lines, `#` comments, and a literal `symbol` header are skipped.
@@ -920,6 +950,20 @@ fn encode_industry(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_market_cap_handles_suffixes_and_plain_numbers() {
+        assert_eq!(parse_market_cap("1b").unwrap(), 1e9);
+        assert_eq!(parse_market_cap("500M").unwrap(), 5e8);
+        assert_eq!(parse_market_cap("2.5t").unwrap(), 2.5e12);
+        assert_eq!(parse_market_cap("10k").unwrap(), 1e4);
+        assert_eq!(parse_market_cap("1e9").unwrap(), 1e9);
+        assert_eq!(parse_market_cap("0").unwrap(), 0.0);
+        assert_eq!(parse_market_cap("1000000").unwrap(), 1e6);
+        assert!(parse_market_cap("").is_err());
+        assert!(parse_market_cap("1x").is_err());
+        assert!(parse_market_cap("-1b").is_err());
+    }
 
     #[test]
     fn redacts_the_api_key() {

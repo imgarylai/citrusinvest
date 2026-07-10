@@ -226,9 +226,9 @@ enum Cmd {
         /// endpoint and skipped).
         #[arg(long)]
         include_etf: bool,
-        /// Skip symbols whose company market cap is below this (0 = off).
-        /// Reads the profile endpoint's marketCap.
-        #[arg(long, default_value_t = 0.0)]
+        /// Skip symbols whose company market cap is below this, in USD (0 = off).
+        /// Accepts unit suffixes: 1b, 500m, 10k, 2.5t (or a plain number / 1e9).
+        #[arg(long, default_value = "0", value_parser = yuzu_cli::fmp::parse_market_cap)]
         min_market_cap: f64,
         /// Max requests per minute (0 = no throttle). Match your FMP plan's
         /// rate limit (Starter-class keys are commonly ~300/min).
@@ -264,8 +264,9 @@ enum Cmd {
         /// Output file for the symbol list (one ticker per line).
         #[arg(long)]
         out: PathBuf,
-        /// Only symbols at/above this company market cap (0 = no floor).
-        #[arg(long, default_value_t = 0.0)]
+        /// Only symbols at/above this company market cap, in USD (0 = no floor).
+        /// Accepts unit suffixes: 1b, 500m, 10k, 2.5t (or a plain number / 1e9).
+        #[arg(long, default_value = "0", value_parser = yuzu_cli::fmp::parse_market_cap)]
         min_market_cap: f64,
         /// Restrict to one or more exchanges (comma-separated FMP codes,
         /// e.g. NASDAQ,NYSE). Default: all exchanges.

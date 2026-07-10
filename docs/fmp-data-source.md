@@ -232,7 +232,8 @@ Universe & screening (from #52 review):
   (classified from the `profile` endpoint's `isEtf` / `isFund`); pass
   `--include-etf` to keep them.
 - **Market-cap floor** — `--min-market-cap <usd>` drops symbols below that
-  company market cap (`0` = off), read from the `profile` endpoint.
+  company market cap (`0` = off), read from the `profile` endpoint. Accepts unit
+  suffixes: `1b`, `500m`, `10k`, `2.5t` (or a plain number / `1e9`).
 - Screening happens **before** the price fetch, so a filtered symbol costs no
   price request. A single profile GET per symbol serves the ETF/fund screen, the
   cap screen, and `--include-industry`. A profile-endpoint error fails **open**
