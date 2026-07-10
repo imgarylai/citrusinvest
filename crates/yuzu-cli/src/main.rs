@@ -152,6 +152,41 @@ enum Cmd {
         #[arg(long, default_value = "close")]
         price_key: String,
     },
+    /// Factor diagnostics (rank IC / ICIR, quantile-portfolio returns,
+    /// long-short spread) of a factor spec vs forward returns. Research JSON —
+    /// not a backtest.
+    Factor {
+        #[command(flatten)]
+        common: CommonArgs,
+        /// Path to a JSON Expr spec evaluated to the factor panel.
+        #[arg(long)]
+        spec: PathBuf,
+        /// Forward-return horizon in trading days.
+        #[arg(long, default_value_t = 1)]
+        horizon: usize,
+        /// Number of factor quantile buckets.
+        #[arg(long, default_value_t = 5)]
+        quantiles: usize,
+        /// Demean the factor within each sector before ranking (needs an
+        /// industry map in the data tree).
+        #[arg(long)]
+        neutralize_industry: bool,
+    },
+    /// Event study: average (and cumulative) return around a 0/1 event spec
+    /// over a [-pre, +post] window. Research JSON — not a backtest.
+    Event {
+        #[command(flatten)]
+        common: CommonArgs,
+        /// Path to a JSON Expr spec evaluated to the 0/1 event panel.
+        #[arg(long)]
+        spec: PathBuf,
+        /// Rows before each event to include.
+        #[arg(long, default_value_t = 5)]
+        pre: usize,
+        /// Rows after each event to include.
+        #[arg(long, default_value_t = 5)]
+        post: usize,
+    },
     /// Compare a strategy against a signal-lagged rerun to flag lookahead
     /// bias / same-close execution dependence.
     Lookahead {
@@ -397,6 +432,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 board.truncate(n);
             }
             emit(&common.out, serde_json::to_string_pretty(&board)?)?;
+        }
+        Cmd::Factor {
+            common,
+            spec,
+            horizon,
+            quantiles,
+            neutralize_industry,
+        } => {
+            let spec_json = std::fs::read_to_string(&spec)?;
+            let report = yuzu_cli::run_factor(
+                &common.data,
+                &spec_json,
+                common.from,
+                common.to,
+                horizon,
+                quantiles,
+                neutralize_industry,
+            )?;
+            emit(&common.out, serde_json::to_string_pretty(&report)?)?;
+        }
+        Cmd::Event {
+            common,
+            spec,
+            pre,
+            post,
+        } => {
+            let spec_json = std::fs::read_to_string(&spec)?;
+            let report =
+                yuzu_cli::run_event(&common.data, &spec_json, common.from, common.to, pre, post)?;
+            emit(&common.out, serde_json::to_string_pretty(&report)?)?;
         }
         Cmd::Lookahead {
             common,

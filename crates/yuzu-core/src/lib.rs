@@ -18,6 +18,7 @@ pub mod metrics;
 pub mod ops;
 pub mod panel;
 pub mod report;
+pub mod research;
 
 pub use lemon::spec;
 
