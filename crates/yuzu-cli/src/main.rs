@@ -179,6 +179,53 @@ enum Cmd {
         #[arg(long, value_enum, default_value_t = SortArg::Sharpe)]
         sort: SortArg,
     },
+    /// Sync FMP data with YOUR OWN API key into a local `data-layout.md` tree.
+    ///
+    /// Direct HTTP (no third-party FMP SDK); the key stays on this machine and
+    /// no FMP data is redistributed. MVP is enough for close/OHLC TA and
+    /// cross-section ops over a short US window — see docs/fmp-data-source.md
+    /// for what an FMP Starter key can and cannot honestly backtest.
+    ///
+    /// Example:
+    ///   yuzu-cli fmp-sync --api-key "$FMP_API_KEY" --out ./mydata \
+    ///     --symbols AAPL,MSFT,GOOGL --from 20200101 --to 20251231
+    #[cfg(feature = "fmp-sync")]
+    FmpSync {
+        /// FMP API key (kept local). Falls back to $FMP_API_KEY if unset.
+        #[arg(long)]
+        api_key: Option<String>,
+        /// Output data root: writes prices/ (+ fundamentals/, tracked/ if asked).
+        #[arg(long)]
+        out: PathBuf,
+        /// Comma-separated tickers, e.g. AAPL,MSFT,GOOGL.
+        #[arg(long, value_delimiter = ',')]
+        symbols: Vec<String>,
+        #[arg(long, default_value_t = 20000101)]
+        from: i32,
+        #[arg(long, default_value_t = 20991231)]
+        to: i32,
+        /// Also fetch annual fundamentals (best-effort; see #51 / #53).
+        #[arg(long)]
+        include_fundamentals: bool,
+        /// Also fetch each symbol's sector → tracked/universe.csv.gz.
+        #[arg(long)]
+        include_industry: bool,
+        /// Max requests per minute (0 = no throttle). Match your FMP plan's
+        /// rate limit (Starter-class keys are commonly ~300/min).
+        #[arg(long, default_value_t = 300)]
+        rate_limit: u32,
+        /// Retries per request on 429 / 5xx / transport errors.
+        #[arg(long, default_value_t = 4)]
+        max_retries: u32,
+        /// Merge fetched rows into existing files instead of overwriting
+        /// (extend an existing tree's history).
+        #[arg(long)]
+        append: bool,
+        /// Skip symbols that already have a price file (resume an interrupted
+        /// run). Takes precedence over --append.
+        #[arg(long)]
+        resume: bool,
+    },
 }
 
 fn emit(out: &Option<PathBuf>, json: String) -> std::io::Result<()> {
@@ -316,6 +363,66 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 &cfg,
             )?;
             emit(&common.out, serde_json::to_string_pretty(&report)?)?;
+        }
+        #[cfg(feature = "fmp-sync")]
+        Cmd::FmpSync {
+            api_key,
+            out,
+            symbols,
+            from,
+            to,
+            include_fundamentals,
+            include_industry,
+            rate_limit,
+            max_retries,
+            append,
+            resume,
+        } => {
+            let api_key = api_key
+                .or_else(|| std::env::var("FMP_API_KEY").ok())
+                .filter(|k| !k.trim().is_empty())
+                .ok_or("provide --api-key or set FMP_API_KEY")?;
+            let symbols: Vec<String> = symbols
+                .into_iter()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            if symbols.is_empty() {
+                return Err("provide --symbols AAPL,MSFT,... (comma-separated)".into());
+            }
+            let mode = if resume {
+                yuzu_cli::fmp::WriteMode::Resume
+            } else if append {
+                yuzu_cli::fmp::WriteMode::Append
+            } else {
+                yuzu_cli::fmp::WriteMode::Overwrite
+            };
+            let cfg = yuzu_cli::fmp::SyncConfig {
+                from,
+                to,
+                include_fundamentals,
+                include_industry,
+                rate_limit_per_min: rate_limit,
+                max_retries,
+                backoff_base: std::time::Duration::from_secs(2),
+                mode,
+            };
+            let client = yuzu_cli::fmp::UreqClient::new();
+            let summary = yuzu_cli::fmp::sync(&client, &api_key, &symbols, &out, &cfg)?;
+            eprintln!(
+                "done: {} symbols written, {} skipped, {} price rows, {} fundamentals, {} failures",
+                summary.symbols_written,
+                summary.symbols_skipped,
+                summary.price_rows,
+                summary.fundamentals_written,
+                summary.failures.len(),
+            );
+            for (sym, err) in &summary.failures {
+                eprintln!("  FAILED {sym}: {err}");
+            }
+            if summary.symbols_written == 0 {
+                return Err("no symbols were written".into());
+            }
         }
     }
     Ok(())

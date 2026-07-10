@@ -178,7 +178,52 @@ list and ≤ ~5y:
 
 ---
 
-## 6. ToS / product boundary
+## 6. The `fmp-sync` builder (bring-your-own key)
+
+`yuzu-cli fmp-sync` fetches from FMP with **your own** API key and writes the
+[`data-layout.md`](data-layout.md) tree. Direct HTTPS, **no third-party FMP SDK**;
+the key stays on your machine and no FMP data is redistributed. FMP lives only in
+`yuzu-cli` (behind the default-on `fmp-sync` cargo feature) — never in
+`yuzu-core` / `yuzu-data` / WASM.
+
+```bash
+yuzu-cli fmp-sync --api-key "$FMP_API_KEY" --out ./mydata \
+  --symbols AAPL,MSFT,GOOGL --from 20200101 --to 20251231 \
+  [--include-fundamentals] [--include-industry] \
+  [--rate-limit 300] [--max-retries 4] [--append | --resume]
+```
+
+| Output | Flag | FMP endpoint (stable) |
+|--------|------|-----------------------|
+| `prices/{SYM}.csv.gz` (adjusted OHLCV) | always | `historical-price-eod/dividend-adjusted` |
+| `fundamentals/{SYM}.csv.gz` (dense forward-filled factors + `report_event`) | `--include-fundamentals` | `ratios` + `key-metrics` + `financial-growth` (annual) |
+| `tracked/universe.csv.gz` (`symbol,sector,market_cap`) | `--include-industry` | `profile` |
+
+Operational knobs (from #52 discussion):
+
+- **Rate limit** — `--rate-limit` requests/minute (`0` = no throttle). Set it to
+  your plan's ceiling; Starter-class keys are commonly ~300/min. The tool does
+  **not** auto-detect your tier — check your plan and pass the value.
+- **Retry** — `--max-retries` with exponential backoff on `429` / `5xx` /
+  transport errors; a `4xx` (bad key/symbol) fails fast. The API key is redacted
+  from every log line and error message.
+- **Resume** — `--resume` skips symbols that already have a price file, to
+  continue an interrupted multi-symbol run.
+- **Append** — `--append` merges freshly fetched rows into existing files
+  (extend an existing tree's history); fetched rows win on a date collision.
+
+**MVP scope.** Enough for **price-based** strategies over a short US window:
+close/OHLC TA and cross-section ops on a modest symbol list (the acceptance path —
+`fmp-sync` then `yuzu-cli run`). Fundamentals are **best-effort** from the annual
+ratios/metrics/growth endpoints and are dense forward-filled onto the price
+calendar; fields the plan does not return are left `NaN`. Richer fundamentals,
+full-universe, point-in-time membership, and delist honesty are out of scope —
+see §2–§4 above for what a Starter key can and cannot honestly support, and #53
+for the follow-up.
+
+---
+
+## 7. ToS / product boundary
 
 - Bring-your-own API key; keep vendor data on the user’s machine.
 - Displaying or redistributing vendor data to end users may require a separate
@@ -190,7 +235,7 @@ honesty (#26).
 
 ---
 
-## 7. Source of truth in this repo
+## 8. Source of truth in this repo
 
 | Topic | Where |
 |-------|--------|
@@ -199,3 +244,4 @@ honesty (#26).
 | NAV / costs / MAE | [`backtest-engine.md`](backtest-engine.md) |
 | Fundamental field list | `crates/yuzu-data/src/fundamentals.rs` |
 | TA vs single-series indicators | `ops/ta.rs` vs `ops/indicators.rs` |
+| `fmp-sync` builder (endpoints, field mapping) | `crates/yuzu-cli/src/fmp.rs` |

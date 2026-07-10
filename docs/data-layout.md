@@ -384,6 +384,7 @@ optionally `fundamentals/`, `panels/`).
 | Format probe | `crates/yuzu-data/src/format.rs` |
 | Server series routing | `crates/yuzu-server/src/lib.rs` → `price_field`, `handle_backtest` |
 | CLI price discovery | `crates/yuzu-cli/src/lib.rs` → `list_symbols`, `load_ctx` |
+| FMP builder (writes this tree) | `crates/yuzu-cli/src/fmp.rs` → `yuzu-cli fmp-sync` |
 
 If this doc and the code disagree, **trust the code** and update this file.
 
