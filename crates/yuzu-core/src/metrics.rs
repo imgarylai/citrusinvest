@@ -2,7 +2,7 @@
 //! functions operate on a daily equity curve (`&[f64]`, base 1.0) or a daily
 //! returns slice. Conventions: annualization 252, rf = 0, std ddof = 1.
 
-use chrono::NaiveDate;
+use chrono::{Datelike, NaiveDate};
 
 pub fn to_returns(equity: &[f64]) -> Vec<f64> {
     let mut out = vec![f64::NAN; equity.len()];
@@ -417,6 +417,175 @@ pub fn benchmark_return(bench: &[f64]) -> f64 {
     }
 }
 
+// ---- distribution / tail metrics ------------------------------------------
+// All operate on the non-NaN daily returns of the equity curve.
+
+/// Non-NaN daily returns (drops the leading NaN that `to_returns` emits).
+fn clean_returns(equity: &[f64]) -> Vec<f64> {
+    to_returns(equity)
+        .into_iter()
+        .filter(|x| !x.is_nan())
+        .collect()
+}
+
+/// Largest single-day return; NaN when there are no returns.
+pub fn best_day(equity: &[f64]) -> f64 {
+    let r = clean_returns(equity);
+    if r.is_empty() {
+        return f64::NAN;
+    }
+    r.into_iter().fold(f64::NEG_INFINITY, f64::max)
+}
+
+/// Smallest (most negative) single-day return; NaN when there are no returns.
+pub fn worst_day(equity: &[f64]) -> f64 {
+    let r = clean_returns(equity);
+    if r.is_empty() {
+        return f64::NAN;
+    }
+    r.into_iter().fold(f64::INFINITY, f64::min)
+}
+
+/// Population central moments `(n, mean, m2, m3, m4)` of `r` (divide by `n`).
+fn central_moments(r: &[f64]) -> (usize, f64, f64, f64, f64) {
+    let n = r.len();
+    if n == 0 {
+        return (0, f64::NAN, f64::NAN, f64::NAN, f64::NAN);
+    }
+    let nf = n as f64;
+    let mean = r.iter().sum::<f64>() / nf;
+    let (mut m2, mut m3, mut m4) = (0.0, 0.0, 0.0);
+    for &x in r {
+        let d = x - mean;
+        m2 += d * d;
+        m3 += d * d * d;
+        m4 += d * d * d * d;
+    }
+    (n, mean, m2 / nf, m3 / nf, m4 / nf)
+}
+
+/// Skewness of daily returns (population Fisher-Pearson `m3 / m2^1.5`); NaN for
+/// fewer than two returns or a zero-variance (degenerate) distribution.
+pub fn skew(equity: &[f64]) -> f64 {
+    let (n, _, m2, m3, _) = central_moments(&clean_returns(equity));
+    if n < 2 || m2 == 0.0 {
+        return f64::NAN;
+    }
+    m3 / m2.powf(1.5)
+}
+
+/// Excess kurtosis of daily returns (population `m4 / m2^2 − 3`); NaN under the
+/// same degenerate conditions as [`skew`].
+pub fn kurtosis(equity: &[f64]) -> f64 {
+    let (n, _, m2, _, m4) = central_moments(&clean_returns(equity));
+    if n < 2 || m2 == 0.0 {
+        return f64::NAN;
+    }
+    m4 / (m2 * m2) - 3.0
+}
+
+/// `q`-quantile (`0..=1`) of `xs` by linear interpolation between order
+/// statistics (NumPy's default 'linear' method); NaN for empty input.
+fn percentile(xs: &[f64], q: f64) -> f64 {
+    if xs.is_empty() {
+        return f64::NAN;
+    }
+    let mut s = xs.to_vec();
+    s.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    if s.len() == 1 {
+        return s[0];
+    }
+    let pos = q * (s.len() as f64 - 1.0);
+    let lo = pos.floor() as usize;
+    let hi = pos.ceil() as usize;
+    s[lo] + (s[hi] - s[lo]) * (pos - lo as f64)
+}
+
+/// Historical Value-at-Risk at 95%: the 5th-percentile daily return. A loss
+/// shows as a negative number. NaN when there are no returns.
+pub fn var_95(equity: &[f64]) -> f64 {
+    percentile(&clean_returns(equity), 0.05)
+}
+
+/// Conditional VaR / expected shortfall at 95%: mean of the daily returns at or
+/// below [`var_95`]. NaN when there are no returns.
+pub fn cvar_95(equity: &[f64]) -> f64 {
+    let r = clean_returns(equity);
+    if r.is_empty() {
+        return f64::NAN;
+    }
+    let v = percentile(&r, 0.05);
+    let tail: Vec<f64> = r.iter().copied().filter(|&x| x <= v).collect();
+    if tail.is_empty() {
+        return v;
+    }
+    tail.iter().sum::<f64>() / tail.len() as f64
+}
+
+/// Mean of the drawdown series (zeros at new highs included); a non-positive
+/// fraction. NaN for an empty curve.
+pub fn avg_drawdown(equity: &[f64]) -> f64 {
+    if equity.is_empty() {
+        return f64::NAN;
+    }
+    let dd = drawdown_series(equity);
+    dd.iter().sum::<f64>() / dd.len() as f64
+}
+
+/// Ulcer index: root-mean-square drawdown over the curve, reported as a
+/// fraction (consistent with [`max_drawdown`]; not scaled to percent). NaN for
+/// an empty curve.
+pub fn ulcer_index(equity: &[f64]) -> f64 {
+    if equity.is_empty() {
+        return f64::NAN;
+    }
+    let dd = drawdown_series(equity);
+    (dd.iter().map(|d| d * d).sum::<f64>() / dd.len() as f64).sqrt()
+}
+
+// ---- lookback returns ------------------------------------------------------
+
+/// Shift a `YYYYMMDD` date by `delta` years, clamping an invalid Feb-29 target
+/// to Feb-28. Anchors the trailing-return windows.
+fn shift_years(yyyymmdd: i32, delta: i32) -> i32 {
+    let d = to_naive(yyyymmdd);
+    let y = d.year() + delta;
+    let shifted = d
+        .with_year(y)
+        .unwrap_or_else(|| NaiveDate::from_ymd_opt(y, d.month(), 28).unwrap());
+    shifted.year() * 10000 + shifted.month() as i32 * 100 + shifted.day() as i32
+}
+
+/// Return from the last equity point on or before `target` (YYYYMMDD) to the
+/// final point. `None` when the series starts after `target` (window not
+/// covered) or the anchor equity is zero.
+fn return_since(dates: &[i32], equity: &[f64], target: i32) -> Option<f64> {
+    if dates.is_empty() || dates.len() != equity.len() {
+        return None;
+    }
+    let base = dates.iter().rposition(|&d| d <= target)?;
+    let last = equity.len() - 1;
+    if equity[base] == 0.0 {
+        return None;
+    }
+    Some(equity[last] / equity[base] - 1.0)
+}
+
+/// Year-to-date return: from the last close of the prior calendar year to the
+/// final point. `None` when the backtest does not reach into a prior year.
+pub fn ytd_return(dates: &[i32], equity: &[f64]) -> Option<f64> {
+    let last = *dates.last()?;
+    let prior_year_end = (last / 10000 - 1) * 10000 + 1231;
+    return_since(dates, equity, prior_year_end)
+}
+
+/// Trailing return over the last `years` calendar years (e.g. `1`, `3`); `None`
+/// when the backtest is shorter than the window.
+pub fn trailing_return(dates: &[i32], equity: &[f64], years: i32) -> Option<f64> {
+    let last = *dates.last()?;
+    return_since(dates, equity, shift_years(last, -years))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -628,5 +797,59 @@ mod tests {
         assert!((avg_exposure(&exposure) - 0.5).abs() < 1e-12); // (1+0+0.5+0.5)/4
         assert!(time_in_market(&[]).is_nan());
         assert!(avg_exposure(&[]).is_nan());
+    }
+
+    #[test]
+    fn distribution_and_tail_metrics() {
+        // equity -> daily returns [0.1, -0.1, 0.1]; hand-computed moments below.
+        let eq = [100.0, 110.0, 99.0, 108.9];
+        assert!((best_day(&eq) - 0.1).abs() < 1e-12);
+        assert!((worst_day(&eq) + 0.1).abs() < 1e-12);
+        // mean 1/30; m2 = 0.0088889, m3 = -0.000592593, m4 = 1.18519e-4.
+        assert!((skew(&eq) + 0.5_f64.sqrt()).abs() < 1e-9); // -1/sqrt(2)
+        assert!((kurtosis(&eq) + 1.5).abs() < 1e-9);
+        // sorted returns [-0.1, 0.1, 0.1]; 5th pct = -0.1 + 0.2*0.1 = -0.08.
+        assert!((var_95(&eq) + 0.08).abs() < 1e-12);
+        // only -0.1 is <= -0.08 -> cvar = -0.1.
+        assert!((cvar_95(&eq) + 0.1).abs() < 1e-12);
+        // degenerate / empty guards.
+        assert!(skew(&[1.0]).is_nan());
+        assert!(best_day(&[1.0]).is_nan());
+        assert!(var_95(&[1.0, 1.0, 1.0]).abs() < 1e-12); // all-zero returns
+    }
+
+    #[test]
+    fn drawdown_shape_metrics() {
+        // drawdown series [0, 0, -0.1, -0.01] for this curve.
+        let eq = [100.0, 110.0, 99.0, 108.9];
+        assert!((avg_drawdown(&eq) + 0.0275).abs() < 1e-12); // (0+0-0.1-0.01)/4
+        let want = ((0.1_f64.powi(2) + 0.01_f64.powi(2)) / 4.0).sqrt();
+        assert!((ulcer_index(&eq) - want).abs() < 1e-12);
+        assert!(avg_drawdown(&[]).is_nan());
+        assert!(ulcer_index(&[]).is_nan());
+    }
+
+    #[test]
+    fn lookback_returns_anchor_and_gate_on_history() {
+        let dates = [20210701, 20220701, 20230701, 20231231, 20240701];
+        let eq = [100.0, 110.0, 120.0, 125.0, 132.0];
+        // YTD anchors at the prior-year-end row (20231231 = 125).
+        assert!((ytd_return(&dates, &eq).unwrap() - (132.0 / 125.0 - 1.0)).abs() < 1e-12);
+        // 1y anchors at 20230701 = 120; 3y at 20210701 = 100.
+        assert!((trailing_return(&dates, &eq, 1).unwrap() - (132.0 / 120.0 - 1.0)).abs() < 1e-12);
+        assert!((trailing_return(&dates, &eq, 3).unwrap() - 0.32).abs() < 1e-12);
+
+        // A backtest entirely within the current year: every window is None.
+        let d2 = [20240102, 20240103];
+        let e2 = [100.0, 110.0];
+        assert!(ytd_return(&d2, &e2).is_none());
+        assert!(trailing_return(&d2, &e2, 1).is_none());
+        assert!(trailing_return(&d2, &e2, 3).is_none());
+    }
+
+    #[test]
+    fn shift_years_clamps_leap_day() {
+        assert_eq!(shift_years(20240229, -1), 20230228);
+        assert_eq!(shift_years(20240701, -3), 20210701);
     }
 }

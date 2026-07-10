@@ -413,6 +413,30 @@ golden-tested.
 | `time_in_market`       | fraction of rows with gross exposure > 0                                     |
 | `avg_exposure`         | mean per-day gross exposure (`Σ|weight|`)                                    |
 
+**Distribution / tail & drawdown-shape metrics** (always emitted; over daily
+returns unless noted):
+
+| Metric          | Definition                                                                   |
+| --------------- | ---------------------------------------------------------------------------- |
+| `best_day` / `worst_day` | max / min single-day return                                         |
+| `skew`          | population skewness `m3 / m2^1.5` (NaN if < 2 returns or zero variance)       |
+| `kurtosis`      | population **excess** kurtosis `m4 / m2² − 3`                                 |
+| `var_95`        | historical 5th-percentile daily return (linear interpolation); a loss is negative |
+| `cvar_95`       | mean of daily returns at or below `var_95` (expected shortfall)              |
+| `avg_drawdown`  | mean of the drawdown series (zeros at new highs included; ≤ 0)               |
+| `ulcer_index`   | root-mean-square drawdown, as a **fraction** (not ×100), consistent with `max_drawdown` |
+
+**Lookback returns** (emitted only when the backtest covers the window;
+`skip_serializing_if` omits the rest): each is `equity_last / equity_anchor − 1`.
+
+| Metric       | Anchor                                                                        |
+| ------------ | ----------------------------------------------------------------------------- |
+| `ytd`        | last equity point of the **prior calendar year**; omitted if the run never reaches a prior year |
+| `one_year`   | last point on or before the same date one year earlier; omitted if history < 1y |
+| `three_year` | same, three years earlier; omitted if history < 3y                            |
+
+(Inception-to-date return is `total_return`, so it is not repeated here.)
+
 **Benchmark-relative metrics** (emitted only when `benchmark_key` is set; the
 benchmark series is forward-filled onto the report dates and rebased to 1.0 at
 its first observation):
@@ -525,6 +549,17 @@ renders charts and tables.
     "max_drawdown_duration": 34,
     "time_in_market":      0.78,
     "avg_exposure":        0.64,
+    "best_day":            0.041,
+    "worst_day":          -0.038,
+    "skew":               -0.32,
+    "kurtosis":            2.10,
+    "var_95":             -0.021,
+    "cvar_95":            -0.030,
+    "avg_drawdown":       -0.018,
+    "ulcer_index":         0.043,
+    "ytd":                 0.07,    // lookbacks: only when the window is covered
+    "one_year":            0.15,
+    "three_year":          0.62,
     // only when benchmark_key is set:
     "benchmark_return":    0.11,
     "alpha":               0.06,

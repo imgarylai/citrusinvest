@@ -29,6 +29,24 @@ pub struct Metrics {
     pub max_drawdown_duration: f64,
     pub time_in_market: f64,
     pub avg_exposure: f64,
+    // Distribution / tail of daily returns.
+    pub best_day: f64,
+    pub worst_day: f64,
+    pub skew: f64,
+    pub kurtosis: f64,
+    pub var_95: f64,
+    pub cvar_95: f64,
+    // Drawdown shape.
+    pub avg_drawdown: f64,
+    pub ulcer_index: f64,
+    // Lookback returns — present only when the backtest is long enough to cover
+    // the window (YTD needs a prior calendar-year anchor).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ytd: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub one_year: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub three_year: Option<f64>,
     // Benchmark-relative metrics — present only when a benchmark was supplied.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub benchmark_return: Option<f64>,
@@ -154,6 +172,17 @@ pub fn build_report_with_benchmark(run: BacktestRun, benchmark: Option<Vec<f64>>
         max_drawdown_duration: metrics::max_drawdown_duration(eq),
         time_in_market: metrics::time_in_market(&run.exposure),
         avg_exposure: metrics::avg_exposure(&run.exposure),
+        best_day: metrics::best_day(eq),
+        worst_day: metrics::worst_day(eq),
+        skew: metrics::skew(eq),
+        kurtosis: metrics::kurtosis(eq),
+        var_95: metrics::var_95(eq),
+        cvar_95: metrics::cvar_95(eq),
+        avg_drawdown: metrics::avg_drawdown(eq),
+        ulcer_index: metrics::ulcer_index(eq),
+        ytd: metrics::ytd_return(dates, eq),
+        one_year: metrics::trailing_return(dates, eq, 1),
+        three_year: metrics::trailing_return(dates, eq, 3),
         benchmark_return: bench.map(metrics::benchmark_return),
         alpha: bench.map(|b| metrics::alpha(eq, b)),
         beta: bench.map(|b| metrics::beta(eq, b)),
@@ -243,6 +272,18 @@ mod tests {
         assert!(json.contains("\"recovery_factor\""));
         assert!(json.contains("\"max_drawdown_duration\""));
         assert!(json.contains("\"max_consecutive_losses\""));
+        // distribution / tail + drawdown-shape metrics are always present
+        assert!(json.contains("\"best_day\""));
+        assert!(json.contains("\"var_95\""));
+        assert!(json.contains("\"cvar_95\""));
+        assert!(json.contains("\"ulcer_index\""));
+        assert!((report.metrics.best_day - 0.1).abs() < 1e-9); // 11/10 - 1
+                                                               // lookback returns omitted for a 3-day, single-year backtest
+        assert!(report.metrics.ytd.is_none());
+        assert!(report.metrics.one_year.is_none());
+        assert!(!json.contains("\"ytd\""));
+        assert!(!json.contains("\"one_year\""));
+        assert!(!json.contains("\"three_year\""));
         // no benchmark supplied -> benchmark fields absent from the JSON
         assert!(!json.contains("\"benchmark\""));
         assert!(!json.contains("\"alpha\""));
