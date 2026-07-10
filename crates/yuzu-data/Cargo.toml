@@ -19,7 +19,7 @@ rayon.workspace = true
 # published lib and default builds stay lean (CSV/gzip need no extra deps). MSRV
 # 1.85 for parquet 57+, within the workspace's 1.86.
 parquet = { version = "57", default-features = false, features = ["arrow", "snap", "zstd", "lz4"], optional = true }
-arrow-array = { version = "57", default-features = false, optional = true }
+arrow-array = { version = "59", default-features = false, optional = true }
 arrow-cast = { version = "57", default-features = false, optional = true }
 arrow-schema = { version = "57", default-features = false, optional = true }
 bytes = { version = "1", optional = true }
