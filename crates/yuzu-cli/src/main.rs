@@ -197,10 +197,15 @@ enum Cmd {
         /// Output data root: writes prices/ (+ fundamentals/, tracked/ if asked).
         #[arg(long)]
         out: PathBuf,
-        /// Comma-separated tickers, e.g. AAPL,MSFT,GOOGL. Omit and pass
-        /// --all-symbols to sync the whole FMP universe instead.
+        /// Comma-separated tickers, e.g. AAPL,MSFT,GOOGL. Or use --symbols-file
+        /// to sync a prebuilt list, or --all-symbols for the whole universe.
         #[arg(long, value_delimiter = ',')]
         symbols: Vec<String>,
+        /// Read the symbol universe from a file (one ticker per line, or a
+        /// `symbol,...` CSV) — e.g. one built by `yuzu-cli fmp-symbols`.
+        /// Mutually exclusive with --symbols / --all-symbols.
+        #[arg(long)]
+        symbols_file: Option<PathBuf>,
         /// Sync every symbol FMP lists (its full stock universe) instead of an
         /// explicit --symbols list. Large — combine with --min-market-cap /
         /// --rate-limit / --resume. Mutually exclusive with --symbols.
@@ -240,6 +245,44 @@ enum Cmd {
         /// run). Takes precedence over --append.
         #[arg(long)]
         resume: bool,
+    },
+    /// Build a screened symbol universe from FMP and write it to a file — the
+    /// "establish the sync list first" step for whole-market backtests.
+    ///
+    /// The output (one ticker per line) is meant to be reviewed/edited and then
+    /// fed to `fmp-sync --symbols-file`. Uses FMP's company screener, so filters
+    /// are applied server-side (with a client-side re-check).
+    ///
+    /// Example:
+    ///   yuzu-cli fmp-symbols --api-key "$FMP_API_KEY" --out ./universe.txt \
+    ///     --min-market-cap 1e9 --exchange NASDAQ,NYSE
+    #[cfg(feature = "fmp-sync")]
+    FmpSymbols {
+        /// FMP API key (kept local). Falls back to $FMP_API_KEY if unset.
+        #[arg(long)]
+        api_key: Option<String>,
+        /// Output file for the symbol list (one ticker per line).
+        #[arg(long)]
+        out: PathBuf,
+        /// Only symbols at/above this company market cap (0 = no floor).
+        #[arg(long, default_value_t = 0.0)]
+        min_market_cap: f64,
+        /// Restrict to one or more exchanges (comma-separated FMP codes,
+        /// e.g. NASDAQ,NYSE). Default: all exchanges.
+        #[arg(long)]
+        exchange: Option<String>,
+        /// Include ETFs and funds (default: stocks only).
+        #[arg(long)]
+        include_etf: bool,
+        /// Cap the number of symbols returned (default: the API's).
+        #[arg(long)]
+        limit: Option<usize>,
+        /// Max requests per minute (0 = no throttle).
+        #[arg(long, default_value_t = 300)]
+        rate_limit: u32,
+        /// Retries on 429 / 5xx / transport errors.
+        #[arg(long, default_value_t = 4)]
+        max_retries: u32,
     },
 }
 
@@ -384,6 +427,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             api_key,
             out,
             symbols,
+            symbols_file,
             all_symbols,
             from,
             to,
@@ -405,11 +449,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty())
                 .collect();
-            if all_symbols && !explicit.is_empty() {
-                return Err("--symbols and --all-symbols are mutually exclusive".into());
+            // Exactly one universe source: --symbols, --symbols-file, or --all-symbols.
+            let sources = [!explicit.is_empty(), symbols_file.is_some(), all_symbols]
+                .iter()
+                .filter(|b| **b)
+                .count();
+            if sources > 1 {
+                return Err("choose one of --symbols, --symbols-file, or --all-symbols".into());
             }
-            if !all_symbols && explicit.is_empty() {
-                return Err("provide --symbols AAPL,MSFT,... or --all-symbols".into());
+            if sources == 0 {
+                return Err(
+                    "provide --symbols AAPL,MSFT,..., --symbols-file <path>, or --all-symbols"
+                        .into(),
+                );
             }
             let mode = if resume {
                 yuzu_cli::fmp::WriteMode::Resume
@@ -436,6 +488,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let all = yuzu_cli::fmp::list_all_symbols(&client, &api_key, &cfg)?;
                 eprintln!("universe: {} symbols", all.len());
                 all
+            } else if let Some(path) = symbols_file {
+                let text = std::fs::read_to_string(&path)
+                    .map_err(|e| format!("reading {}: {e}", path.display()))?;
+                let syms = yuzu_cli::fmp::parse_symbols_list(&text);
+                if syms.is_empty() {
+                    return Err(format!("no symbols in {}", path.display()).into());
+                }
+                eprintln!("universe: {} symbols from {}", syms.len(), path.display());
+                syms
             } else {
                 explicit
             };
@@ -455,6 +516,47 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if summary.symbols_written == 0 {
                 return Err("no symbols were written".into());
             }
+        }
+        #[cfg(feature = "fmp-sync")]
+        Cmd::FmpSymbols {
+            api_key,
+            out,
+            min_market_cap,
+            exchange,
+            include_etf,
+            limit,
+            rate_limit,
+            max_retries,
+        } => {
+            let api_key = api_key
+                .or_else(|| std::env::var("FMP_API_KEY").ok())
+                .filter(|k| !k.trim().is_empty())
+                .ok_or("provide --api-key or set FMP_API_KEY")?;
+            let cfg = yuzu_cli::fmp::SyncConfig {
+                rate_limit_per_min: rate_limit,
+                max_retries,
+                backoff_base: std::time::Duration::from_secs(2),
+                ..Default::default()
+            };
+            let filter = yuzu_cli::fmp::SymbolFilter {
+                min_market_cap,
+                exchange,
+                include_etf,
+                limit,
+            };
+            let client = yuzu_cli::fmp::UreqClient::new();
+            eprintln!("building symbol universe from FMP screener…");
+            let syms = yuzu_cli::fmp::build_symbol_list(&client, &api_key, &cfg, &filter)?;
+            if syms.is_empty() {
+                return Err("screener returned no symbols (loosen the filters?)".into());
+            }
+            let mut body = String::from("# symbols built by `yuzu-cli fmp-symbols`\n");
+            for s in &syms {
+                body.push_str(s);
+                body.push('\n');
+            }
+            std::fs::write(&out, body).map_err(|e| format!("writing {}: {e}", out.display()))?;
+            eprintln!("wrote {} symbols to {}", syms.len(), out.display());
         }
     }
     Ok(())
