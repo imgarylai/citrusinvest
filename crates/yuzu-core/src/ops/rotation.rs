@@ -5,6 +5,7 @@
 //! so `hold_until` is pure selection.
 
 use crate::align::align;
+use crate::ops::stat::argsort_stable;
 use crate::panel::{bool_to_f64, is_true, Panel};
 use ndarray::Array2;
 
@@ -12,13 +13,6 @@ use ndarray::Array2;
 pub struct HoldUntilOpts {
     pub nstocks_limit: Option<usize>,
     pub rank: Option<Panel>,
-}
-
-/// indices that would sort `xs` ascending, ties broken by original index (stable).
-fn argsort_stable(xs: &[f64]) -> Vec<usize> {
-    let mut idx: Vec<usize> = (0..xs.len()).collect();
-    idx.sort_by(|&a, &b| xs[a].partial_cmp(&xs[b]).unwrap().then(a.cmp(&b)));
-    idx
 }
 
 impl Panel {

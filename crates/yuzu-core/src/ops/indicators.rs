@@ -3,6 +3,7 @@
 //! `rank_cs` (cross-sectional rank), `quantile_row` (per-row quantile),
 //! `rsi` (Wilder's RSI, TA-Lib compatible).
 
+use crate::ops::stat::{average_ranks, sorted_quantile};
 use crate::panel::Panel;
 use ndarray::Array2;
 
@@ -144,39 +145,25 @@ impl Panel {
         let (nrows, ncols) = self.data.dim();
         let mut out = Array2::from_elem((nrows, ncols), f64::NAN);
         for r in 0..nrows {
-            let mut valid: Vec<(usize, f64)> = (0..ncols)
-                .filter_map(|c| {
-                    let v = self.data[[r, c]];
-                    if v.is_nan() {
-                        None
-                    } else {
-                        Some((c, v))
-                    }
-                })
-                .collect();
-            valid.sort_by(|a, b| {
-                let o = a.1.partial_cmp(&b.1).unwrap();
-                if ascending {
-                    o
-                } else {
-                    o.reverse()
+            let mut cols = Vec::new();
+            let mut vals = Vec::new();
+            for c in 0..ncols {
+                let v = self.data[[r, c]];
+                if !v.is_nan() {
+                    cols.push(c);
+                    // Negate for descending so shared average_ranks (ascending)
+                    // yields low ranks for high values.
+                    vals.push(if ascending { v } else { -v });
                 }
-            });
-            let count = valid.len() as f64;
-            // average rank for ties (pandas default "average")
-            let mut i = 0usize;
-            while i < valid.len() {
-                let mut j = i + 1;
-                while j < valid.len() && valid[j].1 == valid[i].1 {
-                    j += 1;
-                }
-                // ranks i+1..=j averaged
-                let avg = ((i + 1 + j) as f64) / 2.0;
-                for k in i..j {
-                    let rank = if pct { avg / count } else { avg };
-                    out[[r, valid[k].0]] = rank;
-                }
-                i = j;
+            }
+            if vals.is_empty() {
+                continue;
+            }
+            let ranks = average_ranks(&vals);
+            let count = vals.len() as f64;
+            for (i, &c) in cols.iter().enumerate() {
+                let avg = ranks[i];
+                out[[r, c]] = if pct { avg / count } else { avg };
             }
         }
         Panel {
@@ -392,12 +379,7 @@ impl Panel {
                 continue;
             }
             vals.sort_by(|a, b| a.partial_cmp(b).unwrap());
-            // linear interpolation (pandas default)
-            let pos = c * (vals.len() as f64 - 1.0);
-            let lo = pos.floor() as usize;
-            let hi = pos.ceil() as usize;
-            let frac = pos - lo as f64;
-            out[[r, 0]] = vals[lo] * (1.0 - frac) + vals[hi] * frac;
+            out[[r, 0]] = sorted_quantile(&vals, c);
         }
         Panel {
             dates: self.dates.clone(),

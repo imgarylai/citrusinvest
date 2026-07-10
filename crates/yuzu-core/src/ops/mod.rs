@@ -8,4 +8,5 @@ pub mod neutralize;
 pub mod rebalance;
 pub mod rotation;
 pub mod signals;
+pub mod stat;
 pub mod ta;

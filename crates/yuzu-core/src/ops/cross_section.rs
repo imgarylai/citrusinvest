@@ -4,17 +4,9 @@
 //! Preprocess toolkit: `winsorize`, `zscore`, `bucket`, `demean` (all NaN-aware).
 
 use crate::align::align;
+use crate::ops::stat::{average_ranks, mean_std, sorted_quantile};
 use crate::panel::{bool_to_f64, Panel};
 use ndarray::Array2;
-
-/// Linear-interpolation quantile of a **sorted** non-empty slice (pandas default).
-fn sorted_quantile(sorted: &[f64], q: f64) -> f64 {
-    let pos = q.clamp(0.0, 1.0) * (sorted.len() as f64 - 1.0);
-    let lo = pos.floor() as usize;
-    let hi = pos.ceil() as usize;
-    let frac = pos - lo as f64;
-    sorted[lo] * (1.0 - frac) + sorted[hi] * frac
-}
 
 impl Panel {
     fn top_n(&self, n: usize, largest: bool) -> Panel {
@@ -251,10 +243,7 @@ impl Panel {
             if vals.is_empty() {
                 continue;
             }
-            let n = vals.len() as f64;
-            let mean = vals.iter().sum::<f64>() / n;
-            let var = vals.iter().map(|v| (v - mean) * (v - mean)).sum::<f64>() / n;
-            let std = var.sqrt();
+            let (mean, std) = mean_std(&vals, 0);
             for c in 0..ncols {
                 let v = self.data[[r, c]];
                 if v.is_nan() {
@@ -285,29 +274,22 @@ impl Panel {
             };
         }
         for r in 0..nrows {
-            let mut valid: Vec<(usize, f64)> = (0..ncols)
-                .filter_map(|c| {
-                    let v = self.data[[r, c]];
-                    if v.is_nan() {
-                        None
-                    } else {
-                        Some((c, v))
-                    }
-                })
-                .collect();
-            if valid.is_empty() {
+            let mut cols = Vec::new();
+            let mut vals = Vec::new();
+            for c in 0..ncols {
+                let v = self.data[[r, c]];
+                if !v.is_nan() {
+                    cols.push(c);
+                    vals.push(v);
+                }
+            }
+            if vals.is_empty() {
                 continue;
             }
-            valid.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
-            let count = valid.len() as f64;
-            let mut i = 0usize;
-            while i < valid.len() {
-                let mut j = i + 1;
-                while j < valid.len() && valid[j].1 == valid[i].1 {
-                    j += 1;
-                }
-                // average 1-based ranks for the tie group
-                let avg_rank = ((i + 1 + j) as f64) / 2.0;
+            let ranks = average_ranks(&vals);
+            let count = vals.len() as f64;
+            for (i, &c) in cols.iter().enumerate() {
+                let avg_rank = ranks[i];
                 let mut b = ((avg_rank - 1.0) / count * n as f64).floor() as usize + 1;
                 if b > n {
                     b = n;
@@ -315,10 +297,7 @@ impl Panel {
                 if b == 0 {
                     b = 1;
                 }
-                for k in i..j {
-                    data[[r, valid[k].0]] = b as f64;
-                }
-                i = j;
+                data[[r, c]] = b as f64;
             }
         }
         Panel {
@@ -334,19 +313,14 @@ impl Panel {
         let (nrows, ncols) = self.data.dim();
         let mut data = self.data.clone();
         for r in 0..nrows {
-            let mut sum = 0.0;
-            let mut count = 0usize;
-            for c in 0..ncols {
-                let v = data[[r, c]];
-                if !v.is_nan() {
-                    sum += v;
-                    count += 1;
-                }
-            }
-            if count == 0 {
+            let vals: Vec<f64> = (0..ncols)
+                .map(|c| data[[r, c]])
+                .filter(|v| !v.is_nan())
+                .collect();
+            if vals.is_empty() {
                 continue;
             }
-            let mean = sum / count as f64;
+            let (mean, _) = mean_std(&vals, 0);
             for c in 0..ncols {
                 if !data[[r, c]].is_nan() {
                     data[[r, c]] -= mean;

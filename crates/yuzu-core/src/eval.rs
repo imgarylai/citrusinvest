@@ -65,27 +65,125 @@ fn num_binop(
     }
 }
 
+/// Evaluate an expression tree. The top-level match is grouped by op family and
+/// stays **exhaustive** — a new `Expr` variant that is not listed here fails to
+/// compile. Family helpers also match exhaustively over their subset.
 pub fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
     use Expr::*;
-    Ok(match expr {
+    match expr {
+        // Leaves
+        e @ (Data { .. } | Const { .. }) => eval_leaf(e, ctx),
+
+        // Unary time-series indicators
+        e @ (Average { .. }
+        | Ema { .. }
+        | Std { .. }
+        | Rsi { .. }
+        | PctChange { .. }
+        | Rise { .. }
+        | Fall { .. }
+        | Shift { .. }
+        | RollingMax { .. }
+        | RollingMin { .. }
+        | BollingerMid { .. }
+        | BollingerUpper { .. }
+        | BollingerLower { .. }
+        | Macd { .. }
+        | MacdSignal { .. }
+        | MacdHist { .. }
+        | DonchianHigh { .. }
+        | DonchianLow { .. }
+        | DonchianMid { .. }) => eval_ts(e, ctx),
+
+        // Multi-series technical analysis (high/low/close/volume)
+        e @ (Atr { .. }
+        | Natr { .. }
+        | WillR { .. }
+        | Cci { .. }
+        | StochK { .. }
+        | StochD { .. }
+        | AroonUp { .. }
+        | AroonDown { .. }
+        | Adx { .. }
+        | PlusDi { .. }
+        | MinusDi { .. }
+        | Obv { .. }
+        | Mfi { .. }
+        | Vwap { .. }) => eval_ta(e, ctx),
+
+        // Cross-section selection, ranks, preprocess, entry/exit signals
+        e @ (IsLargest { .. }
+        | IsSmallest { .. }
+        | Sustain { .. }
+        | IsEntry { .. }
+        | IsExit { .. }
+        | ExitWhen { .. }
+        | QuantileRow { .. }
+        | Winsorize { .. }
+        | Zscore { .. }
+        | Bucket { .. }
+        | Demean { .. }
+        | Rank { .. }) => eval_cs(e, ctx),
+
+        // Arithmetic, comparisons, logic, mask
+        e @ (Gt { .. }
+        | Lt { .. }
+        | Ge { .. }
+        | Le { .. }
+        | And { .. }
+        | Or { .. }
+        | Not { .. }
+        | Add { .. }
+        | Sub { .. }
+        | Mul { .. }
+        | Div { .. }
+        | Neg { .. }
+        | Ceil { .. }
+        | Mask { .. }) => eval_arith(e, ctx),
+
+        // Portfolio construction / scheduling
+        e @ (NormalizeRow { .. } | VolTarget { .. } | HoldUntil { .. } | Rebalance { .. }) => {
+            eval_portfolio(e, ctx)
+        }
+
+        // Industry / neutralization
+        e @ (Neutralize { .. }
+        | NeutralizeIndustry { .. }
+        | IndustryRank { .. }
+        | CapIndustry { .. }
+        | GroupbyCategory { .. }
+        | InSector { .. }) => eval_industry(e, ctx),
+    }
+}
+
+fn eval_leaf(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
+    use Expr::*;
+    match expr {
         Data { name } => ctx
             .panels
             .get(name)
             .cloned()
-            .ok_or_else(|| EngineError::Eval(format!("unknown series '{name}'")))?,
+            .ok_or_else(|| EngineError::Eval(format!("unknown series '{name}'"))),
         Const { value } => {
             // Const is only meaningful inside scalar ops, handled by callers.
-            // Reject standalone evaluation.
-            return Err(EngineError::Eval(format!(
+            Err(EngineError::Eval(format!(
                 "bare Const {value} not allowed at top level"
-            )));
+            )))
         }
+        _ => unreachable!("eval_leaf: not a leaf"),
+    }
+}
+
+fn eval_ts(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
+    use Expr::*;
+    Ok(match expr {
         Average { of, n } => eval(of, ctx)?.average(*n),
         Ema { of, n } => eval(of, ctx)?.ema(*n),
         Std { of, n } => eval(of, ctx)?.rolling_std(*n),
         Rsi { of, n } => eval(of, ctx)?.rsi(*n),
         PctChange { of, n } => eval(of, ctx)?.pct_change(*n),
         Rise { of, n } => eval(of, ctx)?.rise(*n),
+        Fall { of, n } => eval(of, ctx)?.fall(*n),
         Shift { of, n } => eval(of, ctx)?.shift(*n),
         RollingMax { of, n } => eval(of, ctx)?.rolling_max(*n),
         RollingMin { of, n } => eval(of, ctx)?.rolling_min(*n),
@@ -108,6 +206,13 @@ pub fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
         DonchianHigh { of, n } => eval(of, ctx)?.donchian_high(*n),
         DonchianLow { of, n } => eval(of, ctx)?.donchian_low(*n),
         DonchianMid { of, n } => eval(of, ctx)?.donchian_mid(*n),
+        _ => unreachable!("eval_ts: not a unary TS op"),
+    })
+}
+
+fn eval_ta(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
+    use Expr::*;
+    Ok(match expr {
         Atr {
             high,
             low,
@@ -198,7 +303,13 @@ pub fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
             &eval(volume, ctx)?,
             *n,
         ),
-        Fall { of, n } => eval(of, ctx)?.fall(*n),
+        _ => unreachable!("eval_ta: not a multi-series TA op"),
+    })
+}
+
+fn eval_cs(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
+    use Expr::*;
+    Ok(match expr {
         IsLargest { of, n } => eval(of, ctx)?.is_largest(*n),
         IsSmallest { of, n } => eval(of, ctx)?.is_smallest(*n),
         Sustain {
@@ -214,6 +325,14 @@ pub fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
         Zscore { of } => eval(of, ctx)?.zscore(),
         Bucket { of, n } => eval(of, ctx)?.bucket(*n),
         Demean { of } => eval(of, ctx)?.demean(),
+        Rank { of, pct, ascending } => eval(of, ctx)?.rank_cs(*pct, *ascending),
+        _ => unreachable!("eval_cs: not a cross-section op"),
+    })
+}
+
+fn eval_arith(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
+    use Expr::*;
+    Ok(match expr {
         Gt { l, r } => num_binop(l, r, ctx, |x, y| bool_to_f64(x > y))?,
         Lt { l, r } => num_binop(l, r, ctx, |x, y| bool_to_f64(x < y))?,
         Ge { l, r } => num_binop(l, r, ctx, |x, y| bool_to_f64(x >= y))?,
@@ -221,21 +340,27 @@ pub fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
         And { l, r } => eval(l, ctx)?.and(&eval(r, ctx)?),
         Or { l, r } => eval(l, ctx)?.or(&eval(r, ctx)?),
         Not { of } => eval(of, ctx)?.not(),
-        NormalizeRow { of } => eval(of, ctx)?.normalize_row(),
-        VolTarget {
-            of,
-            prices,
-            target,
-            n,
-        } => eval(of, ctx)?.vol_target(&eval(prices, ctx)?, *target, *n),
         Add { l, r } => num_binop(l, r, ctx, |x, y| x + y)?,
         Sub { l, r } => num_binop(l, r, ctx, |x, y| x - y)?,
         Mul { l, r } => num_binop(l, r, ctx, |x, y| x * y)?,
         Div { l, r } => num_binop(l, r, ctx, |x, y| x / y)?,
         Neg { of } => eval(of, ctx)?.neg(),
         Ceil { of } => eval(of, ctx)?.ceil(),
-        Rank { of, pct, ascending } => eval(of, ctx)?.rank_cs(*pct, *ascending),
         Mask { of, by } => eval(of, ctx)?.mask(&eval(by, ctx)?),
+        _ => unreachable!("eval_arith: not an arithmetic/logic op"),
+    })
+}
+
+fn eval_portfolio(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
+    use Expr::*;
+    match expr {
+        NormalizeRow { of } => Ok(eval(of, ctx)?.normalize_row()),
+        VolTarget {
+            of,
+            prices,
+            target,
+            n,
+        } => Ok(eval(of, ctx)?.vol_target(&eval(prices, ctx)?, *target, *n)),
         HoldUntil {
             entry,
             exit,
@@ -252,26 +377,26 @@ pub fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
                 nstocks_limit: *nstocks_limit,
                 rank: rank_panel,
             };
-            e.hold_until(&x, &opts)
+            Ok(e.hold_until(&x, &opts))
         }
         Rebalance { of, freq, on } => {
             let p = eval(of, ctx)?;
             match (freq.as_deref(), on) {
-                (Some(_), Some(_)) => {
-                    return Err(EngineError::Eval(
-                        "Rebalance takes either freq or on, not both".into(),
-                    ))
-                }
-                (None, None) => return Err(EngineError::Eval("Rebalance needs freq or on".into())),
+                (Some(_), Some(_)) => Err(EngineError::Eval(
+                    "Rebalance takes either freq or on, not both".into(),
+                )),
+                (None, None) => Err(EngineError::Eval("Rebalance needs freq or on".into())),
                 (Some(freq), None) => {
                     let f = match freq {
                         "W" => Freq::Weekly,
                         "ME" => Freq::MonthEnd,
                         "QE" => Freq::QuarterEnd,
                         "YE" => Freq::YearEnd,
-                        other => return Err(EngineError::Eval(format!("bad freq '{other}'"))),
+                        other => {
+                            return Err(EngineError::Eval(format!("bad freq '{other}'")));
+                        }
                     };
-                    p.rebalance_freq(f)
+                    Ok(p.rebalance_freq(f))
                 }
                 (None, Some(on)) => {
                     let trigger = eval(on, ctx)?;
@@ -290,28 +415,38 @@ pub fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
                         })
                         .map(|(_, &d)| d)
                         .collect();
-                    p.rebalance_dates(&dates)
+                    Ok(p.rebalance_dates(&dates))
                 }
             }
         }
+        _ => unreachable!("eval_portfolio: not a portfolio op"),
+    }
+}
+
+fn eval_industry(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
+    use Expr::*;
+    match expr {
         Neutralize { of, by, add_const } => {
             let factor = eval(of, ctx)?;
             let neutralizers = by
                 .iter()
                 .map(|b| eval(b, ctx))
                 .collect::<Result<Vec<_>, _>>()?;
-            factor.neutralize(&neutralizers, *add_const)
+            Ok(factor.neutralize(&neutralizers, *add_const))
         }
         NeutralizeIndustry { of, add_const } => {
-            eval(of, ctx)?.neutralize_industry(&ctx.industry, *add_const)
+            Ok(eval(of, ctx)?.neutralize_industry(&ctx.industry, *add_const))
         }
         IndustryRank { of, categories } => {
-            eval(of, ctx)?.industry_rank(&ctx.industry, categories.as_deref())
+            Ok(eval(of, ctx)?.industry_rank(&ctx.industry, categories.as_deref()))
         }
-        CapIndustry { of, max_weight } => eval(of, ctx)?.cap_industry(&ctx.industry, *max_weight),
-        GroupbyCategory { of, agg } => eval(of, ctx)?.groupby_category(&ctx.industry, agg)?,
-        InSector { of, name } => eval(of, ctx)?.in_sector(&ctx.industry, name),
-    })
+        CapIndustry { of, max_weight } => {
+            Ok(eval(of, ctx)?.cap_industry(&ctx.industry, *max_weight))
+        }
+        GroupbyCategory { of, agg } => eval(of, ctx)?.groupby_category(&ctx.industry, agg),
+        InSector { of, name } => Ok(eval(of, ctx)?.in_sector(&ctx.industry, name)),
+        _ => unreachable!("eval_industry: not an industry op"),
+    }
 }
 
 use crate::backtest::BacktestConfig;
