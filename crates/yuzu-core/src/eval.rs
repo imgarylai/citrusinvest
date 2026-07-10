@@ -307,6 +307,7 @@ pub fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
             eval(of, ctx)?.industry_rank(&ctx.industry, categories.as_deref())
         }
         GroupbyCategory { of, agg } => eval(of, ctx)?.groupby_category(&ctx.industry, agg)?,
+        InSector { of, name } => eval(of, ctx)?.in_sector(&ctx.industry, name),
     })
 }
 
@@ -535,6 +536,42 @@ mod tests {
         assert_eq!(q.ncols(), 1);
         // row0: A=1,B=4 → median 2.5 (linear interp)
         assert!((q.data[[0, 0]] - 2.5).abs() < 1e-12);
+    }
+
+    #[test]
+    fn in_sector_via_spec() {
+        let close = Panel::new(
+            vec![20240102],
+            vec!["A".into(), "B".into()],
+            array![[10.0, 20.0]],
+        )
+        .unwrap();
+        let mut industry = HashMap::new();
+        industry.insert("A".into(), "Technology".into());
+        industry.insert("B".into(), "Energy".into());
+        let c = EvalContext {
+            panels: HashMap::from([("close".to_string(), close)]),
+            industry,
+        };
+        let got = run_strategy(
+            r#"{"op":"InSector","of":{"op":"Data","name":"close"},"name":"Technology"}"#,
+            &c,
+        )
+        .unwrap();
+        assert_eq!(got.data[[0, 0]], 1.0);
+        assert_eq!(got.data[[0, 1]], 0.0);
+
+        let masked = run_strategy(
+            r#"{
+              "op":"Mask",
+              "of":{"op":"Data","name":"close"},
+              "by":{"op":"InSector","of":{"op":"Data","name":"close"},"name":"Technology"}
+            }"#,
+            &c,
+        )
+        .unwrap();
+        assert_eq!(masked.data[[0, 0]], 10.0);
+        assert!(masked.data[[0, 1]].is_nan());
     }
 
     #[test]

@@ -450,6 +450,14 @@ static ROWS: &[Row] = &[
         },
         desc: "Aggregate `of` within each industry using `agg` (e.g. mean).",
     },
+    Row {
+        names: &["in_sector"],
+        sig: OpSig {
+            tag: "InSector",
+            fields: &[Expr("of"), Str("name")],
+        },
+        desc: "Boolean mask (1/0) where the symbol's industry equals `name` (exact, case-sensitive); shape follows `of`.",
+    },
 ];
 
 // ---------------------------------------------------------------------------
@@ -641,6 +649,7 @@ pub static ALL_OP_TAGS: &[&str] = &[
     "NeutralizeIndustry",
     "IndustryRank",
     "GroupbyCategory",
+    "InSector",
 ];
 
 #[cfg(test)]

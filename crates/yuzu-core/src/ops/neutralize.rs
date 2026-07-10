@@ -4,7 +4,7 @@
 
 use crate::align::align;
 use crate::ops::linalg::solve_ols;
-use crate::panel::Panel;
+use crate::panel::{bool_to_f64, Panel};
 use ndarray::Array2;
 use std::collections::HashMap;
 
@@ -266,6 +266,31 @@ impl Panel {
         }
         Panel::new(self.dates.clone(), cats, data)
     }
+
+    /// Boolean membership mask for a named sector: shape matches `self`
+    /// (dates × symbols). Cell is `1.0` when `industry[symbol]` **exactly**
+    /// equals `name`, else `0.0`. Symbols missing from the map are `0.0` (false)
+    /// so `mask(signal, in_sector(...))` drops them rather than propagating NaN.
+    /// Sector matching is case-sensitive.
+    pub fn in_sector(&self, industry: &HashMap<String, String>, name: &str) -> Panel {
+        let (nrows, ncols) = self.data.dim();
+        let mut data = Array2::from_elem((nrows, ncols), 0.0);
+        for c in 0..ncols {
+            let hit = industry
+                .get(&self.symbols[c])
+                .map(|s| s.as_str() == name)
+                .unwrap_or(false);
+            let v = bool_to_f64(hit);
+            for r in 0..nrows {
+                data[[r, c]] = v;
+            }
+        }
+        Panel {
+            dates: self.dates.clone(),
+            symbols: self.symbols.clone(),
+            data,
+        }
+    }
 }
 
 fn aggregate(agg: &str, vals: &[f64]) -> Result<f64, crate::error::EngineError> {
@@ -287,4 +312,33 @@ fn aggregate(agg: &str, vals: &[f64]) -> Result<f64, crate::error::EngineError> 
             )));
         }
     })
+}
+
+#[cfg(test)]
+mod in_sector_tests {
+    use super::*;
+    use ndarray::array;
+
+    #[test]
+    fn exact_match_false_for_missing_and_case() {
+        let p = Panel::new(
+            vec![20240102, 20240103],
+            vec!["AAPL".into(), "XOM".into(), "ZZZ".into()],
+            array![[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]],
+        )
+        .unwrap();
+        let mut industry = HashMap::new();
+        industry.insert("AAPL".into(), "Technology".into());
+        industry.insert("XOM".into(), "Energy".into());
+        // ZZZ missing from map
+
+        let m = p.in_sector(&industry, "Technology");
+        assert_eq!(m.data[[0, 0]], 1.0);
+        assert_eq!(m.data[[1, 0]], 1.0); // constant over dates
+        assert_eq!(m.data[[0, 1]], 0.0);
+        assert_eq!(m.data[[0, 2]], 0.0); // missing → false
+                                         // case-sensitive
+        let m2 = p.in_sector(&industry, "technology");
+        assert_eq!(m2.data[[0, 0]], 0.0);
+    }
 }

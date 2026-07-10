@@ -50,7 +50,8 @@ trail_stop?, trail_stop_activation?)` (stateful; `rank` is an expression, the st
 
 **Neutralization / industry**: `neutralize(of, by=[...], add_const?=true)` (`by` is a list) ·
 `neutralize_industry(of, add_const?=true)` · `industry_rank(of, categories?=["..."])` ·
-`groupby_category(of, agg)` (`agg` e.g. `"mean"`).
+`groupby_category(of, agg)` (`agg` e.g. `"mean"`) · `in_sector(of, name)` (exact sector string
+match → 0/1 mask; pair with `mask`).
 
 **Scalar**: `ceil(of)`.
 

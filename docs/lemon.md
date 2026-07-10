@@ -304,6 +304,7 @@ These take price/volume series explicitly (so you decide which series feed them)
 | --------------------- | -------------------------------------- | ------------------------------------------------------------------------- |
 | `neutralize`          | `of`, `by` (list), `add_const?`=`true` | Cross-sectionally regress `of` against the `by` factors and take residuals; `add_const=true` adds an intercept. `by` is a list: `by=[pe, market_cap]`. |
 | `neutralize_industry` | `of`, `add_const?`=`true`              | Neutralize `of` within each industry/sector.                               |
+| `in_sector`           | `of`, `name` (string)                  | Boolean mask: `1` where the symbol's industry **exactly** equals `name` (case-sensitive); shape follows `of`. Symbols missing from the industry map are `0`. Use with `mask`. |
 
 ### Scalar / element-wise unary
 
@@ -326,9 +327,9 @@ These are not written as calls but are still nodes in the tree:
 | `close`, `pe`, …     | `Data`                             | A raw input series by name (bare identifier).  |
 | `42`, `0.5`, `5e8`   | `Const`                            | A constant scalar, broadcast across the panel. A bare number used as an operand is auto-promoted to a `Const`. |
 
-That is the complete surface: **58 op tags** total in the engine — the leaves
+That is the complete surface: **59 op tags** total in the engine — the leaves
 `Data` and `Const`, the 10 operator ops above, the prefix ops `Neg` and `not`,
-and the 44 function-style calls in the tables.
+and the 45 function-style calls in the tables.
 
 ---
 
