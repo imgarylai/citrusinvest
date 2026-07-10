@@ -85,6 +85,28 @@ pub fn hover_to_json(src: &str, line: usize, col: usize) -> String {
     }
 }
 
+/// Syntax-highlight tokens for `src`, as a JSON array of
+/// `{"line","col","endLine","endCol","type"}` — 1-based positions, `endCol`
+/// exclusive, `type` one of comment/number/string/keyword/function/parameter/
+/// series/operator/punctuation. Drives the in-browser editor's highlighting from
+/// the same lexer the parser uses, so colours never drift from the language.
+/// NEVER throws; a lex error mid-edit still returns the comment spans.
+pub fn tokens_to_json(src: &str) -> String {
+    let items: Vec<Value> = services::tokens(src)
+        .into_iter()
+        .map(|t| {
+            json!({
+                "line": t.line,
+                "col": t.col,
+                "endLine": t.end_line,
+                "endCol": t.end_col,
+                "type": t.token_type.as_str(),
+            })
+        })
+        .collect();
+    Value::Array(items).to_string()
+}
+
 /// Completion candidates for the cursor at 1-based `(line, col)`, as a JSON
 /// array of `{"label","kind","detail","documentation","insertText"}`.
 pub fn completions_to_json(src: &str, line: usize, col: usize) -> String {
@@ -139,9 +161,33 @@ pub fn completions(src: &str, line: usize, col: usize) -> String {
     completions_to_json(src, line, col)
 }
 
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+pub fn tokens(src: &str) -> String {
+    tokens_to_json(src)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tokens_classify_and_carry_ranges() {
+        let out: Value = serde_json::from_str(&tokens_to_json("is_largest(close, 2) # go")).unwrap();
+        let arr = out.as_array().unwrap();
+        // the call name is a function token starting at col 1
+        let f = arr
+            .iter()
+            .find(|t| t["type"] == "function")
+            .expect("a function token");
+        assert_eq!(f["line"], 1);
+        assert_eq!(f["col"], 1);
+        assert_eq!(f["endCol"], 11);
+        // series, number, and the trailing comment are all present
+        assert!(arr.iter().any(|t| t["type"] == "series"));
+        assert!(arr.iter().any(|t| t["type"] == "number"));
+        assert!(arr.iter().any(|t| t["type"] == "comment"));
+    }
 
     #[test]
     fn parse_success_is_tagged_ok() {

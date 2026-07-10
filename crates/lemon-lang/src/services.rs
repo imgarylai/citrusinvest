@@ -511,6 +511,175 @@ fn token_end(t: &Token) -> (usize, usize) {
     (t.line, t.col + len)
 }
 
+// ---------------------------------------------------------------------------
+// Semantic tokens (syntax highlighting)
+// ---------------------------------------------------------------------------
+
+/// A syntax-highlight classification for a run of source. This is the single
+/// source of truth for lemon highlighting: every editor surface (the in-browser
+/// CodeMirror playground, `citrus-fund`, an LSP semantic-tokens provider) colours
+/// from [`tokens`], so highlighting can never drift from the lexer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TokenType {
+    Comment,
+    Number,
+    Str,
+    Keyword,
+    Function,
+    Parameter,
+    Series,
+    Operator,
+    Punctuation,
+}
+
+impl TokenType {
+    /// Lowercase tag used in the JSON boundary and as an editor theme key.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TokenType::Comment => "comment",
+            TokenType::Number => "number",
+            TokenType::Str => "string",
+            TokenType::Keyword => "keyword",
+            TokenType::Function => "function",
+            TokenType::Parameter => "parameter",
+            TokenType::Series => "series",
+            TokenType::Operator => "operator",
+            TokenType::Punctuation => "punctuation",
+        }
+    }
+}
+
+/// A classified source span, `[ (line, col) .. (end_line, end_col) )`, 1-based
+/// with `end_col` exclusive — same convention as [`Diagnostic`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SemanticToken {
+    pub line: usize,
+    pub col: usize,
+    pub end_line: usize,
+    pub end_col: usize,
+    pub token_type: TokenType,
+}
+
+/// Classify every token in `src` for syntax highlighting.
+///
+/// Built on the parser's own [`lex`], so token boundaries and kinds match the
+/// language exactly. Identifiers are classified structurally — `name(` is a
+/// function call, `name=` a keyword argument, `and`/`or`/`not`/`true`/`false`
+/// are keywords, and anything else is a series reference — so no op list is
+/// hard-coded and nothing drifts when ops are added. The only rules re-derived
+/// here are the ones the lexer does not preserve: numeric span *width* (the
+/// parsed `f64` loses the original spelling like `1_000`/`5e8`) and line
+/// comments (which the lexer discards). Returns tokens in source order; on a lex
+/// error (e.g. an unterminated string mid-edit) returns just the comment spans.
+pub fn tokens(src: &str) -> Vec<SemanticToken> {
+    let lines: Vec<Vec<char>> = src.split('\n').map(|l| l.chars().collect()).collect();
+    let mut out = comment_spans(&lines);
+
+    if let Ok(toks) = lex(src) {
+        for (i, t) in toks.iter().enumerate() {
+            let token_type = match &t.kind {
+                TokenKind::Eof => continue,
+                TokenKind::Num(_) => TokenType::Number,
+                TokenKind::Str(_) => TokenType::Str,
+                TokenKind::Let => TokenType::Keyword,
+                TokenKind::Op(_) | TokenKind::Eq => TokenType::Operator,
+                TokenKind::LParen
+                | TokenKind::RParen
+                | TokenKind::LBracket
+                | TokenKind::RBracket
+                | TokenKind::Comma => TokenType::Punctuation,
+                TokenKind::Ident(s) => classify_ident(s, toks.get(i + 1)),
+            };
+            // Reuse `token_end` for every kind whose width the lexer preserves;
+            // numbers are the one exception, measured back off the source.
+            let (end_line, end_col) = match &t.kind {
+                TokenKind::Num(_) => (t.line, t.col + number_len(&lines, t.line, t.col)),
+                _ => token_end(t),
+            };
+            out.push(SemanticToken {
+                line: t.line,
+                col: t.col,
+                end_line,
+                end_col,
+                token_type,
+            });
+        }
+    }
+
+    out.sort_by_key(|t| (t.line, t.col));
+    out
+}
+
+/// Structural classification of a bareword: reserved words first, then by what
+/// follows — `name(` → call, `name=` → keyword argument, otherwise a series.
+fn classify_ident(s: &str, next: Option<&Token>) -> TokenType {
+    if matches!(s, "and" | "or" | "not" | "true" | "false") {
+        return TokenType::Keyword;
+    }
+    match next.map(|t| &t.kind) {
+        Some(TokenKind::LParen) => TokenType::Function,
+        Some(TokenKind::Eq) => TokenType::Parameter,
+        _ => TokenType::Series,
+    }
+}
+
+/// Character width of the numeric literal starting at 1-based `(line, col)`,
+/// mirroring the digit / `_` / `.` / exponent run the lexer accepts.
+fn number_len(lines: &[Vec<char>], line: usize, col: usize) -> usize {
+    let Some(row) = lines.get(line - 1) else {
+        return 1;
+    };
+    let start = col - 1;
+    let mut j = start;
+    while j < row.len() {
+        let d = row[j];
+        if d.is_ascii_digit() || d == '_' || d == '.' {
+            j += 1;
+        } else if (d == 'e' || d == 'E')
+            && j + 1 < row.len()
+            && (row[j + 1].is_ascii_digit()
+                || ((row[j + 1] == '+' || row[j + 1] == '-')
+                    && j + 2 < row.len()
+                    && row[j + 2].is_ascii_digit()))
+        {
+            j += 2; // the `e` and the sign or first exponent digit
+        } else {
+            break;
+        }
+    }
+    (j - start).max(1)
+}
+
+/// Line-comment spans (`# … EOL`) that are not inside a string literal, mirroring
+/// the lexer: `#` outside a string starts a comment, and `"` toggles string
+/// state (lemon strings have no escapes). `in_string` intentionally persists
+/// across lines to match the lexer's newline-tolerant string scan.
+fn comment_spans(lines: &[Vec<char>]) -> Vec<SemanticToken> {
+    let mut out = Vec::new();
+    let mut in_string = false;
+    for (li, row) in lines.iter().enumerate() {
+        let mut c = 0;
+        while c < row.len() {
+            match row[c] {
+                '"' => in_string = !in_string,
+                '#' if !in_string => {
+                    out.push(SemanticToken {
+                        line: li + 1,
+                        col: c + 1,
+                        end_line: li + 1,
+                        end_col: row.len() + 1,
+                        token_type: TokenType::Comment,
+                    });
+                    break; // the rest of the line is the comment
+                }
+                _ => {}
+            }
+            c += 1;
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -768,5 +937,101 @@ mod tests {
         assert_eq!(CompletionKind::Variable.as_str(), "variable");
         assert_eq!(CompletionKind::Series.as_str(), "series");
         assert_eq!(CompletionKind::Keyword.as_str(), "keyword");
+    }
+
+    // --- semantic tokens (highlighting) -------------------------------------
+
+    fn typed(src: &str) -> Vec<(&'static str, usize, usize, usize)> {
+        tokens(src)
+            .into_iter()
+            .map(|t| (t.token_type.as_str(), t.line, t.col, t.end_col))
+            .collect()
+    }
+
+    #[test]
+    fn classifies_call_series_number_and_punctuation() {
+        // is_largest( -> function; sma( -> function; close -> series; 2/3 -> number
+        assert_eq!(
+            typed("is_largest(sma(close, 2), 3)"),
+            vec![
+                ("function", 1, 1, 11),   // is_largest
+                ("punctuation", 1, 11, 12), // (
+                ("function", 1, 12, 15),  // sma
+                ("punctuation", 1, 15, 16), // (
+                ("series", 1, 16, 21),    // close
+                ("punctuation", 1, 21, 22), // ,
+                ("number", 1, 23, 24),    // 2
+                ("punctuation", 1, 24, 25), // )
+                ("punctuation", 1, 25, 26), // ,
+                ("number", 1, 27, 28),    // 3
+                ("punctuation", 1, 28, 29), // )
+            ]
+        );
+    }
+
+    #[test]
+    fn keyword_args_logic_and_operators() {
+        // ascending= -> parameter; true -> keyword; and/or -> keyword; > -> operator
+        let out = typed("rank(close, ascending=true) and close > sma(close, 2)");
+        assert!(out.contains(&("parameter", 1, 13, 22))); // ascending
+        assert!(out.contains(&("operator", 1, 22, 23))); // =
+        assert!(out.contains(&("keyword", 1, 23, 27))); // true
+        assert!(out.contains(&("keyword", 1, 29, 32))); // and
+        assert!(out.contains(&("operator", 1, 39, 40))); // >
+    }
+
+    #[test]
+    fn not_is_keyword_even_before_paren() {
+        // `not` must stay a keyword, not be misread as a call by the `(` lookahead.
+        let out = typed("not (close)");
+        assert_eq!(out[0], ("keyword", 1, 1, 4));
+    }
+
+    #[test]
+    fn numbers_keep_their_full_width() {
+        // Underscores and exponents are lost in the parsed f64; width is measured
+        // back off the source so the whole literal is covered.
+        assert_eq!(
+            typed("x >= 1_000_000"),
+            vec![
+                ("series", 1, 1, 2),   // x
+                ("operator", 1, 3, 5), // >=
+                ("number", 1, 6, 15),  // 1_000_000 (9 chars)
+            ]
+        );
+        assert!(typed("5e8").contains(&("number", 1, 1, 4)));
+    }
+
+    #[test]
+    fn comments_are_spans_and_ignore_hashes_in_strings() {
+        // A trailing comment is highlighted; a `#` inside a string is not.
+        let out = typed("close # buy\n");
+        assert!(out.contains(&("comment", 1, 7, 12)));
+        let s = typed("in_sector(close, \"A#B\")");
+        assert!(s.iter().all(|t| t.0 != "comment"));
+    }
+
+    #[test]
+    fn lex_error_still_yields_comment_spans() {
+        // Unterminated string is a lex error; comments before it survive.
+        let out = typed("# note\nsma(close, \"oops");
+        assert_eq!(out.first(), Some(&("comment", 1, 1, 7)));
+    }
+
+    #[test]
+    fn token_type_tags_round_trip() {
+        for (ty, tag) in [
+            (TokenType::Comment, "comment"),
+            (TokenType::Number, "number"),
+            (TokenType::Str, "string"),
+            (TokenType::Keyword, "keyword"),
+            (TokenType::Function, "function"),
+            (TokenType::Parameter, "parameter"),
+            (TokenType::Series, "series"),
+            (TokenType::Operator, "operator"),
+            (TokenType::Punctuation, "punctuation"),
+        ] {
+            assert_eq!(ty.as_str(), tag);
+        }
     }
 }

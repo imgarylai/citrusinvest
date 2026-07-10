@@ -1,59 +1,62 @@
-// A small CodeMirror 6 editor with syntax highlighting for the lemon DSL.
-//
-// The tokenizer is intentionally structural rather than a hard-coded op list, so
-// it never drifts from the language: an identifier before `(` is a function
-// call, an identifier before `=` is a keyword argument, `and`/`or`/`not` are
-// logic keywords, everything else bareword is a series reference. That colours
-// `is_largest(sma(close, 2), 3)` correctly without knowing those op names.
+// A small CodeMirror 6 editor for the lemon DSL whose syntax highlighting is
+// driven by the ENGINE, not a hand-written grammar. The Rust lexer (via
+// `lemon-wasm.tokens()`) is the single source of truth for tokenization; this
+// editor just paints the ranges it returns. That means highlighting can never
+// drift from the language, and the same `tokens()` output can back other
+// surfaces (citrus-fund, an LSP semantic-tokens provider) unchanged.
 
-import { EditorState } from '@codemirror/state';
-import { EditorView, keymap, lineNumbers, placeholder } from '@codemirror/view';
-import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+import { EditorState, RangeSetBuilder, StateEffect } from '@codemirror/state';
 import {
-  HighlightStyle,
-  StreamLanguage,
-  syntaxHighlighting,
-} from '@codemirror/language';
-import { tags as t } from '@lezer/highlight';
+  Decoration,
+  EditorView,
+  ViewPlugin,
+  keymap,
+  lineNumbers,
+  placeholder,
+} from '@codemirror/view';
+import type { DecorationSet, ViewUpdate } from '@codemirror/view';
+import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 
-const lemonLanguage = StreamLanguage.define<Record<string, never>>({
-  startState: () => ({}),
-  token(stream) {
-    if (stream.eatSpace()) return null;
-    if (stream.match(/#.*/)) return 'comment';
-    if (stream.match(/[0-9]+(\.[0-9]+)?/)) return 'number';
-    if (stream.match(/\b(?:and|or|not)\b/)) return 'logic';
-    if (stream.match(/[A-Za-z_][A-Za-z0-9_]*/)) {
-      const rest = stream.string.slice(stream.pos);
-      if (/^\s*\(/.test(rest)) return 'fn'; // call: name(
-      if (/^\s*=/.test(rest)) return 'kwarg'; // keyword arg: name=
-      return 'series'; // bareword series (close, pe, …)
-    }
-    if (stream.match(/>=|<=|[><+\-*/=]/)) return 'op';
-    stream.next();
-    return null;
-  },
-  tokenTable: {
-    comment: t.lineComment,
-    number: t.number,
-    logic: t.keyword,
-    fn: t.function(t.variableName),
-    kwarg: t.propertyName,
-    series: t.variableName,
-    op: t.operator,
-  },
+/** One classified span from `lemon-wasm.tokens()` (1-based, `endCol` exclusive). */
+export interface HlToken {
+  line: number;
+  col: number;
+  endLine: number;
+  endCol: number;
+  type: string;
+}
+
+/** Turns lemon source into classified tokens. Supplied once the WASM has loaded. */
+export type Tokenizer = (src: string) => HlToken[];
+
+// Effect used to force the highlighter to recompute when the tokenizer arrives
+// (the WASM loads after the editor mounts).
+const setHl = StateEffect.define<null>();
+
+const MARK: Record<string, Decoration> = Object.fromEntries(
+  [
+    'comment',
+    'number',
+    'string',
+    'keyword',
+    'function',
+    'parameter',
+    'series',
+    'operator',
+    'punctuation',
+  ].map((t) => [t, Decoration.mark({ class: `lm-${t}` })]),
+);
+
+const highlightTheme = EditorView.theme({
+  '.lm-comment': { color: '#7c8494', fontStyle: 'italic' },
+  '.lm-number': { color: '#d19a66' },
+  '.lm-string': { color: '#c3e88d' },
+  '.lm-keyword': { color: '#c678dd' },
+  '.lm-function': { color: '#61afef' },
+  '.lm-parameter': { color: '#e5c07b' },
+  '.lm-series': { color: '#98c379' },
+  '.lm-operator': { color: '#56b6c2' },
 });
-
-// Colours read well on the dark editor surface used by the playground.
-const lemonHighlight = HighlightStyle.define([
-  { tag: t.lineComment, color: '#7c8494', fontStyle: 'italic' },
-  { tag: t.number, color: '#d19a66' },
-  { tag: t.keyword, color: '#c678dd' },
-  { tag: t.function(t.variableName), color: '#61afef' },
-  { tag: t.propertyName, color: '#e5c07b' },
-  { tag: t.variableName, color: '#98c379' },
-  { tag: t.operator, color: '#56b6c2' },
-]);
 
 const editorTheme = EditorView.theme(
   {
@@ -74,7 +77,6 @@ const editorTheme = EditorView.theme(
       color: 'var(--sl-color-gray-4)',
       border: 'none',
     },
-    '.cm-scroller': { borderRadius: '0.5rem' },
   },
   { dark: true },
 );
@@ -83,6 +85,8 @@ export interface LemonEditor {
   getValue(): string;
   setValue(text: string): void;
   focus(): void;
+  /** Wire up engine-driven highlighting once `lemon-wasm.tokens` is available. */
+  setTokenizer(fn: Tokenizer): void;
 }
 
 export function createLemonEditor(
@@ -90,6 +94,47 @@ export function createLemonEditor(
   doc: string,
   onRun: () => void,
 ): LemonEditor {
+  // Mutable holder shared with the highlight plugin; null until the WASM loads.
+  let tokenize: Tokenizer | null = null;
+
+  const highlighter = ViewPlugin.fromClass(
+    class {
+      decorations: DecorationSet;
+      constructor(view: EditorView) {
+        this.decorations = this.build(view);
+      }
+      update(u: ViewUpdate) {
+        const forced = u.transactions.some((tr) =>
+          tr.effects.some((e) => e.is(setHl)),
+        );
+        if (u.docChanged || u.viewportChanged || forced) {
+          this.decorations = this.build(u.view);
+        }
+      }
+      build(view: EditorView): DecorationSet {
+        const builder = new RangeSetBuilder<Decoration>();
+        if (!tokenize) return builder.finish();
+        const src = view.state.doc.toString();
+        let toks: HlToken[];
+        try {
+          toks = tokenize(src);
+        } catch {
+          return builder.finish();
+        }
+        const docLen = view.state.doc.length;
+        for (const t of toks) {
+          const mark = MARK[t.type];
+          if (!mark) continue;
+          const from = view.state.doc.line(t.line).from + (t.col - 1);
+          const to = view.state.doc.line(t.endLine).from + (t.endCol - 1);
+          if (from >= 0 && to <= docLen && from < to) builder.add(from, to, mark);
+        }
+        return builder.finish();
+      }
+    },
+    { decorations: (v) => v.decorations },
+  );
+
   const view = new EditorView({
     parent,
     state: EditorState.create({
@@ -99,8 +144,8 @@ export function createLemonEditor(
         history(),
         placeholder('e.g. is_largest(sma(close, 2), 3)'),
         EditorView.lineWrapping,
-        lemonLanguage,
-        syntaxHighlighting(lemonHighlight),
+        highlighter,
+        highlightTheme,
         editorTheme,
         keymap.of([
           {
@@ -124,5 +169,9 @@ export function createLemonEditor(
         changes: { from: 0, to: view.state.doc.length, insert: text },
       }),
     focus: () => view.focus(),
+    setTokenizer: (fn: Tokenizer) => {
+      tokenize = fn;
+      view.dispatch({ effects: setHl.of(null) }); // repaint with real tokens
+    },
   };
 }
