@@ -62,7 +62,7 @@ jobs:
           workspaces: crates/yuzu-py
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          python-version: "3.14"
       - name: Lint (yuzu-py)
         run: |
           cargo fmt --manifest-path crates/yuzu-py/Cargo.toml -- --check

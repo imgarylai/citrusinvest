@@ -21,7 +21,7 @@ name = "yuzu"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.27", features = ["extension-module", "abi3-py39"] }
+pyo3 = { version = "0.29", features = ["extension-module", "abi3-py39"] }
 serde_json = "1.0.150"
 ndarray = "0.17.2"
 yuzu-core = { path = "../yuzu-core" }
