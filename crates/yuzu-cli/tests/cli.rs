@@ -56,6 +56,7 @@ fn sweeps_variants_and_ranks_them() {
         20240102,
         20240104,
         &Default::default(),
+        "close",
         SortKey::Sharpe,
     );
 
@@ -75,7 +76,7 @@ fn lists_symbols_and_runs_a_single_backtest() {
 
     // is_largest(close, 1), rebalanced — always holds one name; just assert it runs + shapes.
     let spec = r#"{"op":"IsLargest","of":{"op":"Data","name":"close"},"n":1}"#;
-    let report = run_single(&dir, spec, 20240102, 20240104, &Default::default()).unwrap();
+    let report = run_single(&dir, spec, 20240102, 20240104, &Default::default(), "close").unwrap();
     assert_eq!(report.equity.len(), 3);
     assert!(report.metrics.total_return.is_finite());
     assert!(report.live.is_none()); // no live block by default
@@ -85,11 +86,51 @@ fn lists_symbols_and_runs_a_single_backtest() {
         live_performance_start: Some(20240103),
         ..Default::default()
     };
-    let report = run_single(&dir, spec, 20240102, 20240104, &cfg).unwrap();
+    let report = run_single(&dir, spec, 20240102, 20240104, &cfg, "close").unwrap();
     let seg = report.live.as_ref().unwrap();
     assert_eq!(seg.start, 20240103);
     assert_eq!(seg.days, 2);
     assert!(seg.total_return.is_finite());
+}
+
+#[test]
+fn price_key_selects_the_execution_and_return_series() {
+    // One symbol whose OPEN and CLOSE tell different stories: open rises
+    // 10→12→14 (+40%), close falls 10→9→8 (−20%). A buy-and-hold's total
+    // return must come off whichever series --price-key names.
+    let dir = std::env::temp_dir().join("yuzu_cli_pricekey");
+    let _ = fs::remove_dir_all(&dir);
+    let opens = [10.0_f64, 12.0, 14.0];
+    let closes = [10.0_f64, 9.0, 8.0];
+    let rows: Vec<OhlcvRow> = (0..3)
+        .map(|i| OhlcvRow {
+            day: 20240102 + i as i32,
+            adj_open: opens[i],
+            adj_high: opens[i].max(closes[i]),
+            adj_low: opens[i].min(closes[i]),
+            adj_close: closes[i],
+            volume: 0.0,
+        })
+        .collect();
+    let p = dir.join("prices");
+    fs::create_dir_all(&p).unwrap();
+    fs::write(p.join("ONE.csv.gz"), write_series(&rows).unwrap()).unwrap();
+
+    // Hold the single name every day; signal references close but fills follow
+    // the chosen price series.
+    let spec = r#"{"op":"Data","name":"close"}"#;
+    let on_close =
+        run_single(&dir, spec, 20240102, 20240104, &Default::default(), "close").unwrap();
+    assert!((on_close.metrics.total_return - (-0.2)).abs() < 1e-9); // 8/10 - 1
+
+    let on_open = run_single(&dir, spec, 20240102, 20240104, &Default::default(), "open").unwrap();
+    assert!((on_open.metrics.total_return - 0.4).abs() < 1e-9); // 14/10 - 1
+
+    // An unknown price series fails fast with a clear message.
+    match run_single(&dir, spec, 20240102, 20240104, &Default::default(), "bogus") {
+        Err(e) => assert!(e.contains("price-key must be one of"), "{e}"),
+        Ok(_) => panic!("expected an error for an unknown price-key"),
+    }
 }
 
 #[test]
@@ -295,7 +336,7 @@ fn run_single_loads_volume_panel_for_the_liquidity_cap() {
         ..Default::default()
     };
     let spec = r#"{"op":"IsLargest","of":{"op":"Data","name":"close"},"n":1}"#;
-    let report = run_single(&dir, spec, 20240102, 20240104, &cfg).unwrap();
+    let report = run_single(&dir, spec, 20240102, 20240104, &cfg, "close").unwrap();
     assert_eq!(report.equity.len(), 3);
 }
 
@@ -309,7 +350,7 @@ fn run_single_loads_a_benchmark_symbol_panel() {
         ..Default::default()
     };
     let spec = r#"{"op":"IsLargest","of":{"op":"Data","name":"close"},"n":1}"#;
-    let report = run_single(&dir, spec, 20240102, 20240104, &cfg).unwrap();
+    let report = run_single(&dir, spec, 20240102, 20240104, &cfg, "close").unwrap();
     assert!(report.benchmark.is_some());
 }
 
@@ -338,6 +379,7 @@ fn sweep_ranks_by_every_sort_key() {
             20240102,
             20240104,
             &Default::default(),
+            "close",
             key,
         );
         assert_eq!(board.len(), 2);
@@ -371,6 +413,7 @@ fn sweep_marks_every_variant_failed_when_the_panel_cannot_load() {
         20240102,
         20240104,
         &Default::default(),
+        "close",
         SortKey::Sharpe,
     );
     assert_eq!(board.len(), 2);

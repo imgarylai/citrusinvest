@@ -284,6 +284,23 @@ pub fn run_backtest(
 Evaluates the strategy spec → position matrix, then runs the NAV loop against
 `ctx[price_key]`, and wraps the result in a serializable `Report`. All in one call.
 
+**Which series drives fills and returns — `price_key`.** The NAV loop uses a
+**single** price panel for both daily returns and trade marks, selected by
+`price_key` (the argument above — **not** a `BacktestConfig` field). It defaults
+to `"close"` (close-to-close), so the default backtest and its goldens are
+unchanged. Passing `"open"` prices the whole run off the open panel instead.
+
+- **Server:** `BacktestRequest.price_key` (defaults to `"close"`); the panel is
+  force-loaded even if the spec never references it.
+- **CLI:** `yuzu-cli run|sweep|grid --price-key <open|high|low|close>` (default
+  `close`); the close panel is always loaded (strategies usually reference
+  `close`), plus the chosen execution panel when it differs.
+- **Next-open execution.** There's one price series per run, so to *signal on
+  close but fill on the next open*, lag the close-based signal one day and price
+  off the open: `shift(signal, 1)` with `price_key = "open"`. (Signal and fill
+  price differing within a *single* run would need a separate mark-vs-fill API —
+  not part of this model.)
+
 ---
 
 ### Daily-equity NAV model

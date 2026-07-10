@@ -38,7 +38,24 @@ pub fn list_symbols(root: &Path) -> std::io::Result<Vec<String>> {
     Ok(syms.into_iter().collect())
 }
 
-/// Load the close panel for every symbol under `root` into an `EvalContext`.
+/// OHLCV `Field` backing a price-series name usable as an execution/return
+/// series (`run_backtest`'s `price_key`). Only OHLC prices qualify — `volume`
+/// isn't a price you can fill at.
+pub(crate) fn field_for_price_key(key: &str) -> Result<Field, String> {
+    match key {
+        "close" => Ok(Field::AdjClose),
+        "open" => Ok(Field::AdjOpen),
+        "high" => Ok(Field::AdjHigh),
+        "low" => Ok(Field::AdjLow),
+        other => Err(format!(
+            "price-key must be one of open/high/low/close (got '{other}')"
+        )),
+    }
+}
+
+/// Load the close panel for every symbol under `root` into an `EvalContext`,
+/// plus the execution/return panel named by `price_key` when it isn't `close`
+/// (so e.g. a close-signal strategy can fill at the open — `--price-key open`).
 /// (Scope a run to a subset by syncing only those files into the data dir.)
 /// Adds the volume panel when the config's liquidity cap is active, and a
 /// "benchmark" panel (that symbol's closes) when `cfg.benchmark_key` names a
@@ -48,6 +65,7 @@ pub(crate) fn load_ctx(
     from: i32,
     to: i32,
     cfg: &BacktestConfig,
+    price_key: &str,
 ) -> Result<EvalContext, String> {
     let syms = list_symbols(root).map_err(|e| e.to_string())?;
     let src = LocalSource::new(root);
@@ -55,6 +73,14 @@ pub(crate) fn load_ctx(
     let close = load_panel(&src, &syms, Field::AdjClose, from, to, PRICES_DIR)
         .map_err(|e| e.to_string())?;
     panels.insert("close".to_string(), close);
+    // Load the execution/return price panel too when it isn't the close we
+    // already have (validating the key up front for a clear error).
+    let price_field = field_for_price_key(price_key)?;
+    if price_key != "close" {
+        let px = load_panel(&src, &syms, price_field, from, to, PRICES_DIR)
+            .map_err(|e| e.to_string())?;
+        panels.insert(price_key.to_string(), px);
+    }
     if (cfg.max_participation > 0.0 || cfg.impact_coef > 0.0) && cfg.initial_capital > 0.0 {
         let volume = load_panel(&src, &syms, Field::Volume, from, to, PRICES_DIR)
             .map_err(|e| e.to_string())?;
@@ -129,9 +155,10 @@ pub fn run_sweep(
     from: i32,
     to: i32,
     cfg: &BacktestConfig,
+    price_key: &str,
     sort_by: SortKey,
 ) -> Vec<SweepEntry> {
-    let ctx = match load_ctx(root, from, to, cfg) {
+    let ctx = match load_ctx(root, from, to, cfg, price_key) {
         Ok(v) => v,
         Err(e) => return variants.iter().map(|(n, _)| failed(n, e.clone())).collect(),
     };
@@ -139,7 +166,7 @@ pub fn run_sweep(
     let mut board: Vec<SweepEntry> = variants
         .par_iter()
         .map(
-            |(name, spec)| match run_backtest(spec, &ctx, "close", cfg) {
+            |(name, spec)| match run_backtest(spec, &ctx, price_key, cfg) {
                 Ok(r) => SweepEntry {
                     name: name.clone(),
                     ok: true,
@@ -183,9 +210,10 @@ pub fn run_single(
     from: i32,
     to: i32,
     cfg: &BacktestConfig,
+    price_key: &str,
 ) -> Result<Report, String> {
-    let ctx = load_ctx(root, from, to, cfg)?;
-    run_backtest(spec_json, &ctx, "close", cfg).map_err(|e| e.to_string())
+    let ctx = load_ctx(root, from, to, cfg, price_key)?;
+    run_backtest(spec_json, &ctx, price_key, cfg).map_err(|e| e.to_string())
 }
 
 // ---- parameter grid ---------------------------------------------------------
@@ -414,7 +442,7 @@ pub fn run_walkforward(
             .max()
             .unwrap_or(0),
     };
-    let ctx = load_ctx(root, from, to, cfg)?;
+    let ctx = load_ctx(root, from, to, cfg, "close")?;
     let dates = ctx
         .panels
         .get("close")
@@ -561,7 +589,7 @@ pub fn run_lookahead(
     if shift_days == 0 {
         return Err("shift_days must be > 0".into());
     }
-    let ctx = load_ctx(root, from, to, cfg)?;
+    let ctx = load_ctx(root, from, to, cfg, "close")?;
     let positions = yuzu_core::run_strategy(spec_json, &ctx).map_err(|e| e.to_string())?;
     let prices = ctx.panels.get("close").ok_or("no close panel")?;
     let volume = ctx.panels.get("volume");
@@ -634,7 +662,7 @@ pub fn run_lookahead_profile(
     shifts.sort_unstable();
     shifts.dedup();
 
-    let ctx = load_ctx(root, from, to, cfg)?;
+    let ctx = load_ctx(root, from, to, cfg, "close")?;
     let positions = yuzu_core::run_strategy(spec_json, &ctx).map_err(|e| e.to_string())?;
     let prices = ctx.panels.get("close").ok_or("no close panel")?;
     let volume = ctx.panels.get("volume");
