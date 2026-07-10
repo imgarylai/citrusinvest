@@ -2,11 +2,10 @@
 import { defineConfig } from 'astro/config';
 import starlight from '@astrojs/starlight';
 import wasm from 'vite-plugin-wasm';
-import topLevelAwait from 'vite-plugin-top-level-await';
 
-// The wasm playground is client-only, so restrict these transforms to the
-// client build. Letting the top-level-await transform touch Astro's SSR page
-// build breaks its module graph (the static route generator can't find pages).
+// The wasm playground is client-only, so restrict the wasm plugin to the
+// client build. Applying it to Astro's SSR page build can break the module
+// graph (the static route generator can't find pages).
 const clientOnly = (plugin) => ({
   ...plugin,
   apply: (/** @type {unknown} */ _config, /** @type {{ isSsrBuild?: boolean }} */ env) =>
@@ -22,19 +21,24 @@ export default defineConfig({
   base: '/',
   trailingSlash: 'ignore',
   // The playground imports the @citrusquant/*-wasm packages (wasm-pack bundler
-  // target); these plugins let Vite bundle the wasm and its top-level-await
-  // instantiation into the client build.
+  // target); vite-plugin-wasm lets Vite load the .wasm modules in the client
+  // build. Top-level-await transforms are no longer required for the published
+  // wasm-pack output (import + __wbindgen_start).
   vite: {
-    plugins: [clientOnly(wasm()), clientOnly(topLevelAwait())],
+    plugins: [clientOnly(wasm())],
   },
   integrations: [
     starlight({
       title: 'citrusquant',
       description:
         'Learn the yuzu backtest engine and the lemon strategy DSL — with an in-browser backtest playground.',
-      social: {
-        github: 'https://github.com/citrusquant/citrusquant',
-      },
+      social: [
+        {
+          icon: 'github',
+          label: 'GitHub',
+          href: 'https://github.com/citrusquant/citrusquant',
+        },
+      ],
       editLink: {
         baseUrl:
           'https://github.com/citrusquant/citrusquant/edit/main/site/',
