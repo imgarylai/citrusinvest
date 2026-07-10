@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/imgarylai/citrusinvest/compare/yuzu-data-v0.2.0...yuzu-data-v0.3.0) - 2026-07-10
+
+### Added
+
+- *(yuzu-py)* Python bindings via PyO3 (closes #25)
+
+### Other
+
+- Starter-tier data gaps vs citrusinvest features
+- add input data layout for bring-your-own panels
+
 ## [0.2.0](https://github.com/imgarylai/citrusinvest/compare/yuzu-data-v0.1.1...yuzu-data-v0.2.0) - 2026-07-08
 
 ### Added
