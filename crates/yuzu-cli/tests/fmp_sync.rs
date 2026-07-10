@@ -6,8 +6,8 @@ use std::cell::RefCell;
 use std::time::Duration;
 
 use yuzu_cli::fmp::{
-    build_symbol_list, list_all_symbols, parse_symbols_list, sync, HttpClient, HttpError,
-    SymbolFilter, SyncConfig, WriteMode,
+    build_symbol_list, parse_symbols_list, sync, HttpClient, HttpError, SymbolFilter, SyncConfig,
+    WriteMode, US_EXCHANGES,
 };
 use yuzu_cli::run_single;
 use yuzu_data::csv_io::parse_series;
@@ -441,14 +441,24 @@ fn profile_error_fails_open_and_still_syncs_prices() {
 }
 
 #[test]
-fn list_all_symbols_pulls_the_full_universe() {
-    let http = MockHttp::new().ok(
-        "stock-list",
-        r#"[{"symbol":"MSFT","companyName":"Microsoft"},{"symbol":"AAPL","companyName":"Apple"},{"symbol":"","companyName":"blank"}]"#,
-    );
-    let syms = list_all_symbols(&http, "KEY", &cfg()).unwrap();
-    // Sorted, de-duplicated, blanks dropped.
-    assert_eq!(syms, vec!["AAPL".to_string(), "MSFT".to_string()]);
+fn build_symbol_list_defaults_to_us_exchanges_and_supports_all() {
+    // The US-majors default is pushed to the screener as an exchange param…
+    let http = MockHttp::new().ok("company-screener", r#"[{"symbol":"AAA","isEtf":false}]"#);
+    let filter = SymbolFilter {
+        exchange: Some(US_EXCHANGES.to_string()),
+        ..Default::default()
+    };
+    build_symbol_list(&http, "KEY", &cfg(), &filter).unwrap();
+    assert_eq!(http.hit_count("exchange=NASDAQ,NYSE,AMEX"), 1);
+
+    // …while `all` (and empty) is the escape hatch: no exchange filter at all.
+    let http2 = MockHttp::new().ok("company-screener", r#"[{"symbol":"AAA","isEtf":false}]"#);
+    let filter2 = SymbolFilter {
+        exchange: Some("all".to_string()),
+        ..Default::default()
+    };
+    build_symbol_list(&http2, "KEY", &cfg(), &filter2).unwrap();
+    assert_eq!(http2.hit_count("exchange="), 0);
 }
 
 #[test]

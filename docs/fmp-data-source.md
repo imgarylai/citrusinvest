@@ -190,7 +190,7 @@ the key stays on your machine and no FMP data is redistributed. FMP lives only i
 yuzu-cli fmp-sync --api-key "$FMP_API_KEY" --out ./mydata \
   --symbols AAPL,MSFT,GOOGL --from 20200101 --to 20251231 \
   [--include-fundamentals] [--include-industry] \
-  [--include-etf] [--min-market-cap 1e9] [--all-symbols] \
+  [--include-etf] [--min-market-cap 1b] [--all-symbols] [--exchange NASDAQ,NYSE,AMEX] \
   [--rate-limit 300] [--max-retries 4] [--append | --resume]
 ```
 
@@ -199,7 +199,7 @@ yuzu-cli fmp-sync --api-key "$FMP_API_KEY" --out ./mydata \
 | `prices/{SYM}.csv.gz` (adjusted OHLCV) | always | `historical-price-eod/dividend-adjusted` |
 | `fundamentals/{SYM}.csv.gz` (dense forward-filled factors + `report_event`) | `--include-fundamentals` | `ratios` + `key-metrics` + `financial-growth` (annual) |
 | `tracked/universe.csv.gz` (`symbol,sector,market_cap`) | `--include-industry` | `profile` |
-| — (universe discovery / ETF & market-cap screen) | `--all-symbols`, `--min-market-cap`, default stock-only | `stock-list`, `profile` |
+| — (universe discovery / exchange, ETF & market-cap screen) | `--all-symbols`, `--exchange`, `--min-market-cap` | `company-screener`, `profile` |
 | symbol list file (`yuzu-cli fmp-symbols`) | `fmp-symbols --out …` | `company-screener` |
 
 ### Establishing the symbol list first
@@ -210,7 +210,7 @@ For a whole-market backtest, build the sync universe as a reviewable artifact
 ```bash
 # 1. build a screened symbol list (FMP company screener)
 yuzu-cli fmp-symbols --api-key "$FMP_API_KEY" --out ./universe.txt \
-  --min-market-cap 1e9 --exchange NASDAQ,NYSE   # stocks only by default
+  --min-market-cap 1b   # US stocks (NASDAQ,NYSE,AMEX) by default; --exchange to change
 
 # 2. review/edit ./universe.txt, then sync prices for exactly that list
 yuzu-cli fmp-sync --api-key "$FMP_API_KEY" --out ./mydata \
@@ -225,9 +225,13 @@ diffed, and re-synced.
 Universe & screening (from #52 review):
 
 - **Symbols** — `--symbols AAPL,MSFT,…` (explicit list), `--symbols-file <path>`
-  (a prebuilt list, e.g. from `fmp-symbols`), or `--all-symbols` to sync FMP's
-  whole tradable universe (`stock-list`). Exactly one source per run. The full
+  (a prebuilt list, e.g. from `fmp-symbols`), or `--all-symbols` to sync the
+  screened universe (FMP `company-screener`). Exactly one source per run. The
   universe is large — pair it with `--min-market-cap` / `--rate-limit` / `--resume`.
+- **Exchanges** — the universe defaults to the three **US** majors
+  (`NASDAQ,NYSE,AMEX` — AMEX is now NYSE American). Override with `--exchange`
+  (comma-separated FMP codes) on `fmp-symbols` / `fmp-sync --all-symbols`; pass
+  `--exchange all` for every exchange.
 - **Stocks only** — ETFs and mutual/closed-end funds are **skipped by default**
   (classified from the `profile` endpoint's `isEtf` / `isFund`); pass
   `--include-etf` to keep them.

@@ -206,11 +206,16 @@ enum Cmd {
         /// Mutually exclusive with --symbols / --all-symbols.
         #[arg(long)]
         symbols_file: Option<PathBuf>,
-        /// Sync every symbol FMP lists (its full stock universe) instead of an
-        /// explicit --symbols list. Large — combine with --min-market-cap /
+        /// Sync the whole screened universe (FMP screener) instead of an
+        /// explicit list — the exchanges in --exchange (default US: NASDAQ,NYSE,
+        /// AMEX), honoring --min-market-cap / --include-etf. Large; combine with
         /// --rate-limit / --resume. Mutually exclusive with --symbols.
         #[arg(long)]
         all_symbols: bool,
+        /// Exchanges for --all-symbols (comma-separated FMP codes). Default the
+        /// three US majors; pass `all` for every exchange.
+        #[arg(long, default_value = yuzu_cli::fmp::US_EXCHANGES)]
+        exchange: String,
         #[arg(long, default_value_t = 20000101)]
         from: i32,
         #[arg(long, default_value_t = 20991231)]
@@ -268,10 +273,11 @@ enum Cmd {
         /// Accepts unit suffixes: 1b, 500m, 10k, 2.5t (or a plain number / 1e9).
         #[arg(long, default_value = "0", value_parser = yuzu_cli::fmp::parse_market_cap)]
         min_market_cap: f64,
-        /// Restrict to one or more exchanges (comma-separated FMP codes,
-        /// e.g. NASDAQ,NYSE). Default: all exchanges.
-        #[arg(long)]
-        exchange: Option<String>,
+        /// Restrict to one or more exchanges (comma-separated FMP codes).
+        /// Default the three US majors (NASDAQ,NYSE,AMEX); pass `all` for every
+        /// exchange.
+        #[arg(long, default_value = yuzu_cli::fmp::US_EXCHANGES)]
+        exchange: String,
         /// Include ETFs and funds (default: stocks only).
         #[arg(long)]
         include_etf: bool,
@@ -430,6 +436,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             symbols,
             symbols_file,
             all_symbols,
+            exchange,
             from,
             to,
             include_fundamentals,
@@ -485,8 +492,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
             let client = yuzu_cli::fmp::UreqClient::new();
             let symbols = if all_symbols {
-                eprintln!("fetching full FMP symbol universe…");
-                let all = yuzu_cli::fmp::list_all_symbols(&client, &api_key, &cfg)?;
+                let filter = yuzu_cli::fmp::SymbolFilter {
+                    min_market_cap,
+                    exchange: Some(exchange),
+                    include_etf,
+                    limit: None,
+                };
+                eprintln!("building symbol universe from FMP screener…");
+                let all = yuzu_cli::fmp::build_symbol_list(&client, &api_key, &cfg, &filter)?;
                 eprintln!("universe: {} symbols", all.len());
                 all
             } else if let Some(path) = symbols_file {
@@ -541,7 +554,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
             let filter = yuzu_cli::fmp::SymbolFilter {
                 min_market_cap,
-                exchange,
+                exchange: Some(exchange),
                 include_etf,
                 limit,
             };

@@ -512,33 +512,9 @@ fn densify_fundamentals(snapshots: &[(i32, Vec<f64>)], price_days: &[i32]) -> Ve
 
 // ---- universe discovery -----------------------------------------------------
 
-/// Fetch the full tradable-symbol universe from FMP (`/stable/stock-list`) and
-/// return every ticker, sorted and de-duplicated. This is the "sync all symbols"
-/// universe; the per-symbol ETF/fund and market-cap screens in [`sync`] still
-/// apply. The list can be very large (thousands of names) — pair it with
-/// `min_market_cap`, `rate_limit_per_min`, and `WriteMode::Resume`.
-pub fn list_all_symbols<H: HttpClient>(
-    http: &H,
-    api_key: &str,
-    cfg: &SyncConfig,
-) -> Result<Vec<String>, String> {
-    let fetcher = Fetcher::new(http, cfg);
-    let rows = fetcher.get_rows(&format!("{FMP_BASE}/stable/stock-list?apikey={api_key}"))?;
-    let mut syms: Vec<String> = rows
-        .iter()
-        .filter_map(|r| {
-            r.as_object()?
-                .get("symbol")?
-                .as_str()
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-                .map(str::to_string)
-        })
-        .collect();
-    syms.sort();
-    syms.dedup();
-    Ok(syms)
-}
+/// The default exchange filter — the three US major exchanges. (AMEX is now
+/// NYSE American, but FMP still labels it `AMEX`.)
+pub const US_EXCHANGES: &str = "NASDAQ,NYSE,AMEX";
 
 /// Filters for [`build_symbol_list`] — a screened market universe.
 #[derive(Default)]
@@ -546,7 +522,7 @@ pub struct SymbolFilter {
     /// Only symbols at/above this company market cap (`0.0` = no floor).
     pub min_market_cap: f64,
     /// Restrict to one or more exchanges (comma-separated FMP codes, e.g.
-    /// `NASDAQ,NYSE`). `None` = all exchanges.
+    /// [`US_EXCHANGES`]). `None`, an empty string, or `"all"` = every exchange.
     pub exchange: Option<String>,
     /// Keep ETFs / funds (default: stocks only).
     pub include_etf: bool,
@@ -577,7 +553,11 @@ pub fn build_symbol_list<H: HttpClient>(
         url.push_str("&isEtf=false&isFund=false");
     }
     if let Some(ex) = &filter.exchange {
-        url.push_str(&format!("&exchange={ex}"));
+        let ex = ex.trim();
+        // Empty / "all" is the escape hatch for every exchange (no filter).
+        if !ex.is_empty() && !ex.eq_ignore_ascii_case("all") {
+            url.push_str(&format!("&exchange={ex}"));
+        }
     }
     if let Some(n) = filter.limit {
         url.push_str(&format!("&limit={n}"));
