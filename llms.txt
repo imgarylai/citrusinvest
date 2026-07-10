@@ -14,6 +14,7 @@
 - [Input data layout](docs/data-layout.md): bring-your-own prices/fundamentals/panels tree, series names, PIT notes.
 - [FMP Starter gaps vs features](docs/fmp-data-source.md): which ops/backtests need which panels when data is short/coarse.
 - [Research (factor / event)](docs/research.md): rank-IC/quantile factor reports and event studies — JSON, not lemon ops.
+- [Strategy envelope](docs/strategy-envelope.md): the shareable, versioned strategy document + `lemon check` validation + reproducibility.
 - [Contributing & release flow](CONTRIBUTING.md).
 
 ## API (docs.rs)

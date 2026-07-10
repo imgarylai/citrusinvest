@@ -4,8 +4,9 @@
 //! `std::env::args`.
 //!
 //! ```text
-//! lemon fmt  [-w] [file...]                         (no file = read stdin)
-//! lemon lint [--series a,b,c] [--series-file p] [file...]
+//! lemon fmt   [-w] [file...]                        (no file = read stdin)
+//! lemon lint  [--series a,b,c] [--series-file p] [file...]
+//! lemon check [file...]                             (validate strategy envelopes)
 //! ```
 
 use std::io::Read;
@@ -177,14 +178,63 @@ fn run_lint(args: Vec<String>) -> ExitCode {
     }
 }
 
+/// Validate one strategy-envelope document; returns rendered errors (empty = ok).
+fn check_source(path: &str, src: &str) -> Result<(), Vec<String>> {
+    lemon::envelope::check(src)
+        .map(|_| ())
+        .map_err(|errs| errs.into_iter().map(|e| format!("{path}: {e}")).collect())
+}
+
+fn run_check(args: Vec<String>) -> ExitCode {
+    let files: Vec<String> = args;
+
+    let mut sources: Vec<(String, String)> = Vec::new();
+    if files.is_empty() {
+        let Some(src) = read_stdin() else {
+            eprintln!("lemon: failed to read stdin");
+            return ExitCode::FAILURE;
+        };
+        sources.push(("<stdin>".into(), src));
+    } else {
+        for path in files {
+            match std::fs::read_to_string(&path) {
+                Ok(src) => sources.push((path, src)),
+                Err(e) => {
+                    eprintln!("lemon: {path}: {e}");
+                    return ExitCode::FAILURE;
+                }
+            }
+        }
+    }
+
+    let mut failed = false;
+    for (path, src) in &sources {
+        match check_source(path, src) {
+            Ok(()) => println!("{path}: ok"),
+            Err(errs) => {
+                for e in &errs {
+                    eprintln!("{e}");
+                }
+                failed = true;
+            }
+        }
+    }
+    if failed {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    }
+}
+
 fn main() -> ExitCode {
     let mut args = std::env::args().skip(1);
     match args.next().as_deref() {
         Some("fmt") => run_fmt(args.collect()),
         Some("lint") => run_lint(args.collect()),
+        Some("check") => run_check(args.collect()),
         _ => {
             eprintln!(
-                "usage: lemon fmt [-w] [file...]\n       lemon lint [--series a,b,c] [--series-file path] [file...]\n       (no file = read stdin)"
+                "usage: lemon fmt [-w] [file...]\n       lemon lint [--series a,b,c] [--series-file path] [file...]\n       lemon check [file...]\n       (no file = read stdin)"
             );
             ExitCode::FAILURE
         }
@@ -193,7 +243,17 @@ fn main() -> ExitCode {
 
 #[cfg(test)]
 mod tests {
-    use super::{format_source, lint_source};
+    use super::{check_source, format_source, lint_source};
+
+    #[test]
+    fn checks_valid_and_reports_invalid_envelopes() {
+        let ok = r#"{ "format": 1, "name": "M", "source": "close > sma(close, 2)" }"#;
+        assert!(check_source("s.json", ok).is_ok());
+        // A bad envelope surfaces path-labelled errors.
+        let bad = r#"{ "format": 1, "name": "M" }"#;
+        let errs = check_source("s.json", bad).unwrap_err();
+        assert!(errs[0].starts_with("s.json:"), "{}", errs[0]);
+    }
 
     #[test]
     fn formats_valid_and_reports_errors() {
