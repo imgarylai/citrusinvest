@@ -305,6 +305,7 @@ These take price/volume series explicitly (so you decide which series feed them)
 | `mask`        | `of`, `by`                                   | Keep `of` only where `by` is true; drop (NaN) elsewhere.                |
 | `normalize_row` | `of`                                       | Scale each row so gross weight (Σ\|w\|) is 1 — explicit portfolio weights. NaN preserved; zero rows unchanged. |
 | `industry_rank`| `of`, `categories?`                         | Rank `of` within each industry; optionally restrict to `categories` (list of strings). |
+| `cap_industry` | `of`, `max_weight?`=`0.3`                   | Cap each industry's gross weight (Σ\|w\|) in the weight panel `of` at `max_weight`, scaling that industry's names down proportionally (sign-preserving); residual left as cash. |
 | `groupby_category`| `of`, `agg`                             | Aggregate `of` within each industry using `agg` (e.g. `"mean"`); `agg` is a required string. |
 
 ### Streaks, edges & stateful rotation

@@ -1243,6 +1243,26 @@
         "required": true
       },
       {
+        "default": 0.3,
+        "kind": "number",
+        "name": "max_weight",
+        "required": false
+      }
+    ],
+    "description": "Cap each industry's gross weight (sum of |w|) in the weight panel `of` at `max_weight` (default 0.3), scaling that industry's names down proportionally; residual left as cash.",
+    "form": "function",
+    "name": "cap_industry",
+    "tag": "CapIndustry"
+  },
+  {
+    "aliases": [],
+    "args": [
+      {
+        "kind": "expr",
+        "name": "of",
+        "required": true
+      },
+      {
         "kind": "string",
         "name": "agg",
         "required": true

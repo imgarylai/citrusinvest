@@ -649,5 +649,10 @@ These items are explicit scope cuts, not gaps:
 
 Per-trade **MAE / MFE** (maximum adverse / favorable excursion) and factor
 **neutralization** (`neutralize` / `neutralize_industry` / `industry_rank` /
-`groupby_category`) are now implemented and golden-tested — see the `mae`/`mfe`
-trade fields above and `ops/neutralize.rs`.
+`cap_industry` / `groupby_category`) are now implemented and golden-tested — see
+the `mae`/`mfe` trade fields above and `ops/neutralize.rs`. `cap_industry(w,
+max_weight=0.3)` bounds each industry's **gross** weight (Σ|w|) per row, scaling
+the over-cap industry's names down proportionally (sign-preserving) and leaving
+the freed weight as cash — the NAV loop's row-normalize takes the book from
+there. Symbols with no industry share the single "其他" bucket, so an empty
+industry map caps total gross exposure; `max_weight <= 0` is a no-op.

@@ -28,6 +28,10 @@ fn default_bollinger_k() -> f64 {
     2.0
 }
 
+fn default_cap_max_weight() -> f64 {
+    0.3
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(tag = "op")]
 pub enum Expr {
@@ -301,6 +305,13 @@ pub enum Expr {
         of: Box<Expr>,
         #[serde(default)]
         categories: Option<Vec<String>>,
+    },
+    /// Cap each industry's gross weight in the weight panel `of` at `max_weight`
+    /// (scale that industry's names down proportionally; `max_weight` defaults to 0.3).
+    CapIndustry {
+        of: Box<Expr>,
+        #[serde(default = "default_cap_max_weight")]
+        max_weight: f64,
     },
     /// Aggregate `of` within each industry using `agg` (e.g. mean).
     GroupbyCategory { of: Box<Expr>, agg: String },
