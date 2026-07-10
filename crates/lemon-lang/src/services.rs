@@ -954,16 +954,16 @@ mod tests {
         assert_eq!(
             typed("is_largest(sma(close, 2), 3)"),
             vec![
-                ("function", 1, 1, 11),   // is_largest
+                ("function", 1, 1, 11),     // is_largest
                 ("punctuation", 1, 11, 12), // (
-                ("function", 1, 12, 15),  // sma
+                ("function", 1, 12, 15),    // sma
                 ("punctuation", 1, 15, 16), // (
-                ("series", 1, 16, 21),    // close
+                ("series", 1, 16, 21),      // close
                 ("punctuation", 1, 21, 22), // ,
-                ("number", 1, 23, 24),    // 2
+                ("number", 1, 23, 24),      // 2
                 ("punctuation", 1, 24, 25), // )
                 ("punctuation", 1, 25, 26), // ,
-                ("number", 1, 27, 28),    // 3
+                ("number", 1, 27, 28),      // 3
                 ("punctuation", 1, 28, 29), // )
             ]
         );

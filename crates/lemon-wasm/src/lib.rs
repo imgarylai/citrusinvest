@@ -173,7 +173,8 @@ mod tests {
 
     #[test]
     fn tokens_classify_and_carry_ranges() {
-        let out: Value = serde_json::from_str(&tokens_to_json("is_largest(close, 2) # go")).unwrap();
+        let out: Value =
+            serde_json::from_str(&tokens_to_json("is_largest(close, 2) # go")).unwrap();
         let arr = out.as_array().unwrap();
         // the call name is a function token starting at col 1
         let f = arr
