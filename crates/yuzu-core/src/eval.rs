@@ -358,6 +358,9 @@ pub fn run_backtest(
             BOOTSTRAP_SEED,
         );
     }
+    if let Some(live_start) = cfg.live_performance_start {
+        report.live = crate::report::live_segment(&report.dates, &report.equity, live_start);
+    }
     Ok(report)
 }
 
@@ -426,6 +429,20 @@ mod tests {
         assert!(b.sharpe.p05 <= b.sharpe.p95);
         let json = serde_json::to_string(&r).unwrap();
         assert!(json.contains("\"bootstrap\""));
+
+        // live_performance_start attaches a post-live segment block.
+        let live = BacktestConfig {
+            live_performance_start: Some(20240103),
+            ..Default::default()
+        };
+        let r = run_backtest(spec, &ctx, "close", &live).unwrap();
+        let seg = r.live.as_ref().unwrap();
+        assert_eq!(seg.start, 20240103);
+        assert_eq!(seg.days, 2);
+        assert!(serde_json::to_string(&r).unwrap().contains("\"live\""));
+        // Unset -> no live block.
+        let none = run_backtest(spec, &ctx, "close", &BacktestConfig::default()).unwrap();
+        assert!(none.live.is_none());
     }
 
     #[test]

@@ -380,7 +380,8 @@ price-relative and carry the flat components only.
 `impact_coef = 0.0` (square-root impact off),
 `delist_after = 0` (delisting handling off), `delist_haircut = 0.0`,
 `benchmark_key = None`, `bootstrap_samples = 0` (bootstrap off) /
-`bootstrap_block = 0` (auto `⌊√n⌋`).
+`bootstrap_block = 0` (auto `⌊√n⌋`),
+`live_performance_start = None` (no post-go-live segment block).
 
 ---
 
@@ -437,6 +438,19 @@ bootstrap over the daily returns (block length `bootstrap_block`, `0` = auto
 equity curves and reports p05/p50/p95 for Sharpe, CAGR, and max drawdown under
 `report.bootstrap`.
 
+**Live segment** (only when `live_performance_start` is set): equity-curve
+metrics for the slice starting at the first backtest date **on or after** that
+`YYYYMMDD`, reported under `report.live`. It carries only equity-derived
+figures (`total_return`, `cagr`, `ann_volatility`, `sharpe`, `sortino`,
+`max_drawdown`, `calmar`) plus the resolved `start` date and `days` count.
+Every figure normalizes by the segment's own first equity point, so the block
+is identical whether or not the segment is rebased to 1.0 (it is, in effect) —
+it describes the post-go-live stretch in isolation, independent of the
+pre-live NAV. Trade-level stats are intentionally omitted, since a trade can
+straddle the live date. The full-sample equity curve and metrics are
+unaffected; this is a report-only view. A live date past the last backtest row
+omits the block.
+
 Global conventions: annualization factor **252**, risk-free rate **0**,
 `std` uses **ddof = 1**.
 `year_frac = (end − start).total_seconds() / 31_557_600` (Julian year).
@@ -470,6 +484,12 @@ renders charts and tables.
     "sharpe":       { "p05": 0.4, "p50": 1.1, "p95": 1.9 },
     "cagr":         { "p05": -0.02, "p50": 0.12, "p95": 0.31 },
     "max_drawdown": { "p05": -0.28, "p50": -0.14, "p95": -0.07 }
+  },
+  "live": {                                  // only when live_performance_start is set
+    "start": 20240601,                       // first backtest date on/after the requested day
+    "days": 148,                             // equity points in the segment
+    "total_return": 0.09, "cagr": 0.19, "ann_volatility": 0.13,
+    "sharpe": 1.31, "sortino": 1.92, "max_drawdown": -0.06, "calmar": 3.17
   },
   "trades": [
     {

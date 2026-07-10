@@ -82,6 +82,10 @@ pub struct BacktestRequest {
     pub bootstrap_samples: usize,
     #[serde(default)]
     pub bootstrap_block: usize,
+    /// Date (YYYYMMDD) the strategy went live. When set, the report gains a
+    /// `live` block with metrics on the post-live equity segment.
+    #[serde(default)]
+    pub live_performance_start: Option<i32>,
 }
 
 fn default_price_key() -> String {
@@ -252,6 +256,7 @@ pub fn handle_backtest<S: ObjectSource + Sync>(
         benchmark_key,
         bootstrap_samples: req.bootstrap_samples,
         bootstrap_block: req.bootstrap_block,
+        live_performance_start: req.live_performance_start,
         ..Default::default()
     };
     run_backtest(&req.spec.to_string(), &ctx, &req.price_key, &cfg).map_err(|e| e.to_string())

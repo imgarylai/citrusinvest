@@ -226,6 +226,7 @@ fn config_from_py(config: Option<&Bound<'_, PyDict>>) -> PyResult<BacktestConfig
             "benchmark_key" => cfg.benchmark_key = value.extract()?,
             "bootstrap_samples" => cfg.bootstrap_samples = value.extract()?,
             "bootstrap_block" => cfg.bootstrap_block = value.extract()?,
+            "live_performance_start" => cfg.live_performance_start = value.extract()?,
             other => {
                 return Err(PyValueError::new_err(format!(
                     "unknown config key `{other}`"
