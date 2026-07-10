@@ -18,10 +18,11 @@
   ],
   "packageRules": [
     {
-      "description": "Automerge patch updates once CI is green",
-      "matchUpdateTypes": ["patch"],
+      "description": "Automerge non-major updates (minor + patch) once CI is green; majors stay manual",
+      "matchUpdateTypes": ["minor", "patch"],
       "automerge": true,
-      "automergeType": "pr"
+      "automergeType": "pr",
+      "platformAutomerge": true
     },
     {
       "description": "Apache Arrow + Parquet must share one major — dual arrow_array versions break Array trait resolution (see #92–#95 / #114)",
