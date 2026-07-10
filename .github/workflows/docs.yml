@@ -37,7 +37,7 @@ jobs:
           OUT="$PWD/site/public/wasm/yuzu"  bash scripts/build-yuzu-wasm.sh
 
       # --- Astro site ----------------------------------------------------
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
