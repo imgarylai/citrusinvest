@@ -6,6 +6,7 @@
 //! Read-only: writing stays gzip CSV. Column extraction is by name, so a Parquet
 //! file with extra columns or a different order still parses.
 
+use crate::date::date_to_i32;
 use crate::error::DataError;
 use arrow_array::{Array, Float64Array, StringArray};
 use arrow_cast::cast;
@@ -15,13 +16,6 @@ use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 
 fn err(e: impl std::fmt::Display) -> DataError {
     DataError::Parse(format!("parquet: {e}"))
-}
-
-/// Parse `YYYY-MM-DD` (dashes optional) into a packed `YYYYMMDD` i32.
-fn date_to_i32(s: &str) -> Result<i32, DataError> {
-    s.replace('-', "")
-        .parse()
-        .map_err(|_| DataError::Parse(format!("bad date '{s}'")))
 }
 
 /// A numeric column coerced to `f64`; nulls become `NaN`. The Arrow `cast` kernel

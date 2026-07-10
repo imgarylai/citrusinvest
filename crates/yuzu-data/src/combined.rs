@@ -5,6 +5,7 @@
 //! as `csv_io`/`fundamentals`.
 
 use crate::csv_io::{parse_series, Field};
+use crate::date::{date_to_i32, i32_to_date};
 use crate::error::DataError;
 use crate::format::CANDIDATE_EXTS;
 use crate::fundamentals::{parse_fundamentals, FUNDAMENTAL_FIELDS, REPORT_EVENT_FIELD};
@@ -18,17 +19,6 @@ use yuzu_core::panel::Panel;
 
 /// Default object-key directory for combined per-field panel files.
 pub const PANELS_DIR: &str = "panels";
-
-// ponytail: 2-line date<->i32 helpers also live (module-private) in csv_io and
-// fundamentals; duplicated here rather than promoting a shared pub helper.
-fn i32_to_date(d: i32) -> String {
-    format!("{:04}-{:02}-{:02}", d / 10000, d / 100 % 100, d % 100)
-}
-fn date_to_i32(s: &str) -> Result<i32, DataError> {
-    s.replace('-', "")
-        .parse()
-        .map_err(|_| DataError::Parse(format!("bad date '{s}'")))
-}
 
 /// Serialize a Panel to combined gzip CSV (`day,<sym…>`, empty cell for NaN).
 pub fn write_combined_panel(panel: &Panel) -> Result<Vec<u8>, DataError> {

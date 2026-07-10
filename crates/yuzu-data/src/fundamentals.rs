@@ -6,6 +6,7 @@
 //! `FUNDAMENTAL_FIELDS` is the column contract: it MUST match the TS exporter's
 //! `FACTOR_FIELDS` order AND the `Data { name }` snake_case names in specs.
 
+use crate::date::{date_to_i32, i32_to_date};
 use crate::error::DataError;
 use crate::source::ObjectSource;
 use flate2::write::GzEncoder;
@@ -89,16 +90,6 @@ pub struct FundamentalRow {
     pub day: i32,
     pub values: Vec<f64>,
     pub report_event: f64,
-}
-
-fn date_to_i32(s: &str) -> Result<i32, DataError> {
-    s.replace('-', "")
-        .parse()
-        .map_err(|_| DataError::Parse(format!("bad date '{s}'")))
-}
-
-fn i32_to_date(d: i32) -> String {
-    format!("{:04}-{:02}-{:02}", d / 10000, d / 100 % 100, d % 100)
 }
 
 /// Parse fundamentals for `field` (one of [`FUNDAMENTAL_FIELDS`] or

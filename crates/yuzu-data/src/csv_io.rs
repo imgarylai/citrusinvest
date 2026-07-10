@@ -2,6 +2,7 @@
 //! (`day,adj_open,adj_high,adj_low,adj_close,volume`, oldest-first); `parse_series`
 //! extracts one chosen [`Field`] column into `(day, value)` rows.
 
+use crate::date::{date_to_i32, i32_to_date};
 use crate::error::DataError;
 use flate2::write::GzEncoder;
 use flate2::Compression;
@@ -50,16 +51,6 @@ impl Field {
             Field::Volume => "volume",
         }
     }
-}
-
-fn date_to_i32(s: &str) -> Result<i32, DataError> {
-    s.replace('-', "")
-        .parse()
-        .map_err(|_| DataError::Parse(format!("bad date '{s}'")))
-}
-
-fn i32_to_date(d: i32) -> String {
-    format!("{:04}-{:02}-{:02}", d / 10000, d / 100 % 100, d % 100)
 }
 
 /// Parse the OHLCV data for `field` into `(YYYYMMDD, value)` rows. The buffer's
