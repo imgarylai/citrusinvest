@@ -1,0 +1,51 @@
+name: Publish WASM to npm
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: which package to publish
+        type: choice
+        options: [lemon-wasm, yuzu-wasm, both]
+        default: lemon-wasm
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          version: latest
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      # wasm-pack resolves --out-dir relative to the crate directory, so we cd
+      # into the crate and publish ./pkg from there (npm publish's path is
+      # relative to the step's working directory). This keeps the built package
+      # path unambiguous regardless of the wasm-pack version.
+      - name: Build & publish @citrusquant/lemon-wasm
+        if: ${{ inputs.package == 'lemon-wasm' || inputs.package == 'both' }}
+        working-directory: crates/lemon-wasm
+        run: |
+          wasm-pack build --release --target bundler --scope citrusquant --out-dir pkg
+          npm publish pkg --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Build & publish @citrusquant/yuzu-wasm
+        if: ${{ inputs.package == 'yuzu-wasm' || inputs.package == 'both' }}
+        working-directory: crates/yuzu-wasm
+        run: |
+          wasm-pack build --release --target bundler --scope citrusquant --out-dir pkg
+          npm publish pkg --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
