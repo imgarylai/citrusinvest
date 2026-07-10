@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1](https://github.com/citrusquant/citrusquant/compare/yuzu-data-v0.5.0...yuzu-data-v0.5.1) - 2026-07-10
+
+### Other
+
+- citrusinvest -> citrusquant (brand, URLs, org/repo, site domain)
+- release v0.5.0
+
 ## [0.5.0](https://github.com/imgarylai/citrusinvest/compare/yuzu-data-v0.4.0...yuzu-data-v0.5.0) - 2026-07-10
 
 ### Other
