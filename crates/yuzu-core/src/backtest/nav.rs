@@ -140,6 +140,10 @@ pub fn run(
 /// same names doesn't pay a full entry cost at every seam. Keyed by symbol, so
 /// it survives a differing column order / universe between segments; symbols
 /// absent from the map (or from this segment's panel) start flat.
+///
+/// Prefer [`run_nav`] + [`NavInputs`] for new call sites; this multi-arg form
+/// is kept for API compatibility.
+#[allow(clippy::too_many_arguments)]
 pub fn run_with_initial(
     positions: &Panel,
     prices: &Panel,
