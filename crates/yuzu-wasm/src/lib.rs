@@ -56,6 +56,50 @@ struct ConfigJson {
     bootstrap_block: usize,
     #[serde(default)]
     live_performance_start: Option<i32>,
+    #[serde(default)]
+    stops: StopConfigJson,
+}
+
+/// Execution-layer stop knobs. Optional levels (`null`/absent = off); `fill` is
+/// `"touched"` (default) or `"close"`. Touched fills need `open`/`high`/`low`
+/// panels in the request.
+#[derive(Deserialize, Default)]
+struct StopConfigJson {
+    #[serde(default)]
+    stop_loss: Option<f64>,
+    #[serde(default)]
+    take_profit: Option<f64>,
+    #[serde(default)]
+    trail_stop: Option<f64>,
+    #[serde(default)]
+    trail_stop_activation: f64,
+    #[serde(default)]
+    fill: StopFillJson,
+}
+
+#[derive(Deserialize, Default, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+enum StopFillJson {
+    #[default]
+    Touched,
+    Close,
+}
+
+impl From<StopConfigJson> for yuzu_core::backtest::StopConfig {
+    fn from(s: StopConfigJson) -> Self {
+        use yuzu_core::backtest::StopFill;
+        let fill = match s.fill {
+            StopFillJson::Touched => StopFill::Touched,
+            StopFillJson::Close => StopFill::Close,
+        };
+        yuzu_core::backtest::StopConfig::from_options(
+            s.stop_loss,
+            s.take_profit,
+            s.trail_stop,
+            s.trail_stop_activation,
+            fill,
+        )
+    }
 }
 
 #[derive(Deserialize)]
@@ -107,9 +151,7 @@ pub fn run_backtest_json(input_json: &str) -> Result<String, String> {
         bootstrap_samples: input.config.bootstrap_samples,
         bootstrap_block: input.config.bootstrap_block,
         live_performance_start: input.config.live_performance_start,
-        // Execution-layer stops are not yet exposed through the WASM request
-        // config (follow-up); default them off.
-        stops: yuzu_core::backtest::StopConfig::default(),
+        stops: input.config.stops.into(),
     };
     let report =
         run_backtest_core(&spec_str, &ctx, &input.price_key, &cfg).map_err(|e| e.to_string())?;
@@ -137,6 +179,29 @@ mod tests {
         assert_eq!(v["equity"].as_array().unwrap().len(), 3);
         let total = v["metrics"]["total_return"].as_f64().unwrap();
         assert!((total - 0.2).abs() < 1e-9, "total_return {total}");
+    }
+
+    #[test]
+    fn stops_flow_through_the_config() {
+        // Entry 100; day1 low 90 touches the 8% stop (level 92), open 98 above →
+        // touched fill at 92 → −8% (vs close-to-close −5%).
+        let input = r#"{
+            "spec": { "op": "Data", "name": "signal" },
+            "panels": {
+                "signal": { "dates": [20240102,20240103], "symbols": ["A"], "data": [[1.0],[1.0]] },
+                "close":  { "dates": [20240102,20240103], "symbols": ["A"], "data": [[100.0],[95.0]] },
+                "open":   { "dates": [20240102,20240103], "symbols": ["A"], "data": [[100.0],[98.0]] },
+                "high":   { "dates": [20240102,20240103], "symbols": ["A"], "data": [[100.0],[99.0]] },
+                "low":    { "dates": [20240102,20240103], "symbols": ["A"], "data": [[100.0],[90.0]] }
+            },
+            "price_key": "close",
+            "config": { "stops": { "stop_loss": 0.08 } }
+        }"#;
+        let out = run_backtest_json(input).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        let total = v["metrics"]["total_return"].as_f64().unwrap();
+        assert!((total - (-0.08)).abs() < 1e-9, "stop fill at 92: {total}");
+        assert!((v["trades"][0]["exit_price"].as_f64().unwrap() - 92.0).abs() < 1e-9);
     }
 
     #[test]

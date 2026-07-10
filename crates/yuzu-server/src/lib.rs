@@ -86,6 +86,28 @@ pub struct BacktestRequest {
     /// `live` block with metrics on the post-live equity segment.
     #[serde(default)]
     pub live_performance_start: Option<i32>,
+    /// Execution-layer stops (all optional; absent = off). Touched fills read the
+    /// force-loaded high/low plus `open` (loaded when any stop is set).
+    #[serde(default)]
+    pub stop_loss: Option<f64>,
+    #[serde(default)]
+    pub take_profit: Option<f64>,
+    #[serde(default)]
+    pub trail_stop: Option<f64>,
+    #[serde(default)]
+    pub trail_stop_activation: f64,
+    #[serde(default)]
+    pub stop_fill: StopFillReq,
+}
+
+/// Wire form of [`StopFill`](yuzu_core::backtest::StopFill): `"touched"` (default)
+/// or `"close"`.
+#[derive(Deserialize, Default, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum StopFillReq {
+    #[default]
+    Touched,
+    Close,
 }
 
 fn default_price_key() -> String {
@@ -164,6 +186,20 @@ pub fn handle_backtest<S: ObjectSource + Sync>(
                                          // and the engine degrades that trade's mae/mfe to None.
     names.insert("high".to_string());
     names.insert("low".to_string());
+    // Execution-layer stops need `open` too (gap fills); high/low are already loaded.
+    let stops = yuzu_core::backtest::StopConfig::from_options(
+        req.stop_loss,
+        req.take_profit,
+        req.trail_stop,
+        req.trail_stop_activation,
+        match req.stop_fill {
+            StopFillReq::Touched => yuzu_core::backtest::StopFill::Touched,
+            StopFillReq::Close => yuzu_core::backtest::StopFill::Close,
+        },
+    );
+    if stops.is_active() {
+        names.insert("open".to_string());
+    }
     // The liquidity cap and the impact model need dollar volume.
     if (req.max_participation > 0.0 || req.impact_coef > 0.0) && req.initial_capital > 0.0 {
         names.insert("volume".to_string());
@@ -257,6 +293,7 @@ pub fn handle_backtest<S: ObjectSource + Sync>(
         bootstrap_samples: req.bootstrap_samples,
         bootstrap_block: req.bootstrap_block,
         live_performance_start: req.live_performance_start,
+        stops,
         ..Default::default()
     };
     run_backtest(&req.spec.to_string(), &ctx, &req.price_key, &cfg).map_err(|e| e.to_string())
@@ -434,6 +471,64 @@ mod tests {
             (t.mae.unwrap() - (-0.1)).abs() < 1e-9,
             "mae from force-loaded low"
         );
+    }
+
+    #[test]
+    fn stop_loss_request_fills_at_the_touched_level() {
+        let dir = fixture("yuzu_server_stop_test");
+        // Entry close 100; day1 low 90 touches the 8% stop (level 92) with the
+        // open (98) above it → touched fill at 92 (not the close 95).
+        let prices = vec![
+            OhlcvRow {
+                day: 20240102,
+                adj_open: 100.0,
+                adj_high: 100.0,
+                adj_low: 100.0,
+                adj_close: 100.0,
+                volume: 1000.0,
+            },
+            OhlcvRow {
+                day: 20240103,
+                adj_open: 98.0,
+                adj_high: 99.0,
+                adj_low: 90.0,
+                adj_close: 95.0,
+                volume: 1000.0,
+            },
+        ];
+        let funds: Vec<FundamentalRow> = [20240102, 20240103]
+            .iter()
+            .map(|d| frow(*d, 8.0, 0.0))
+            .collect();
+        write_symbol(&dir, "AAA", &prices, &funds);
+
+        let source = LocalSource::new(&dir);
+        let spec = serde_json::json!({ "op": "Data", "name": "close" });
+        let base = BacktestRequest {
+            spec: spec.clone(),
+            symbols: vec!["AAA".into()],
+            from: 20240102,
+            to: 20240103,
+            price_key: "close".into(),
+            ..Default::default()
+        };
+        // No stop → close-to-close −5%.
+        let plain = handle_backtest(&source, &base, &DataDirs::default()).unwrap();
+        assert!((plain.metrics.total_return - (-0.05)).abs() < 1e-9);
+
+        // stop_loss 0.08 → exits at the touched 92 → −8%.
+        let stopped_req = BacktestRequest {
+            stop_loss: Some(0.08),
+            ..base
+        };
+        let stopped = handle_backtest(&source, &stopped_req, &DataDirs::default()).unwrap();
+        assert!(
+            (stopped.metrics.total_return - (-0.08)).abs() < 1e-9,
+            "stop fill at 92, got {}",
+            stopped.metrics.total_return
+        );
+        let t = stopped.trades.iter().find(|t| t.symbol == "AAA").unwrap();
+        assert!((t.exit_price.unwrap() - 92.0).abs() < 1e-9);
     }
 
     #[test]
