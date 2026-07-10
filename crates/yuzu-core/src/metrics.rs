@@ -703,6 +703,9 @@ mod tests {
             period,
             mae: None,
             mfe: None,
+            entry_price: 10.0,
+            exit_price: Some(11.0),
+            side: crate::backtest::TradeSide::Long,
         };
         let trades = vec![t(0.10, 3), t(-0.05, 2), t(0.20, 5)];
         assert!((win_rate(&trades) - 2.0 / 3.0).abs() < 1e-12);
@@ -722,6 +725,9 @@ mod tests {
             period: 1,
             mae: None,
             mfe: None,
+            entry_price: 10.0,
+            exit_price: Some(11.0),
+            side: crate::backtest::TradeSide::Long,
         };
         // chronological by exit_date: +0.10, -0.05, -0.20, +0.30, -0.10
         let trades = vec![
@@ -752,6 +758,9 @@ mod tests {
             period: 1,
             mae: None,
             mfe: None,
+            entry_price: 10.0,
+            exit_price: Some(11.0),
+            side: crate::backtest::TradeSide::Long,
         }];
         assert_eq!(num_trades(&[]), 0.0);
         assert!(avg_win(&[]).is_nan());
@@ -776,6 +785,9 @@ mod tests {
             period: 1,
             mae: None,
             mfe: None,
+            entry_price: 10.0,
+            exit_price: Some(11.0),
+            side: crate::backtest::TradeSide::Long,
         };
         let trades = vec![t(-0.1, 20240105), t(0.2, 20240103), t(-0.1, 20240104)];
         assert_eq!(max_consecutive_losses(&trades), 2.0);
