@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/imgarylai/citrusinvest/compare/lemon-lang-v0.2.0...lemon-lang-v0.3.0) - 2026-07-10
+
+### Added
+
+- *(ops)* Bollinger, MACD, Donchian + rolling_min surface
+- *(ops)* in_sector membership mask from industry map
+- *(ops)* cross-section winsorize, zscore, bucket, demean
+- *(lemon)* expose exit_when and quantile_row on the DSL surface
+- *(yuzu-py)* Python bindings via PyO3 (closes #25)
+
+### Other
+
+- Starter-tier data gaps vs citrusinvest features
+- rustfmt for exit_when / quantile_row
+- add input data layout for bring-your-own panels
+- *(lemon)* rename crates/lemon directory to crates/lemon-lang
+
 ## [0.2.0](https://github.com/imgarylai/citrusinvest/compare/lemon-lang-v0.1.1...lemon-lang-v0.2.0) - 2026-07-08
 
 ### Added
