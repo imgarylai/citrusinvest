@@ -50,19 +50,10 @@ pub fn year_frac(start: i32, end: i32) -> f64 {
     secs / 31_557_600.0
 }
 
-/// sample mean + std (ddof=1) over the non-NaN entries.
+/// Sample mean + std (`ddof = 1`) over finite entries.
+#[inline]
 fn mean_std(xs: &[f64]) -> (f64, f64) {
-    let v: Vec<f64> = xs.iter().copied().filter(|x| !x.is_nan()).collect();
-    let n = v.len() as f64;
-    if n == 0.0 {
-        return (f64::NAN, f64::NAN);
-    }
-    let mean = v.iter().sum::<f64>() / n;
-    if n < 2.0 {
-        return (mean, f64::NAN);
-    }
-    let var = v.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1.0);
-    (mean, var.sqrt())
+    crate::ops::stat::mean_std(xs, 1)
 }
 
 pub fn cagr(equity: &[f64], dates: &[i32]) -> f64 {

@@ -14,6 +14,7 @@
 //! first is just `factor.neutralize_industry(&industry, true)` before the call.
 
 use crate::align::align;
+use crate::ops::stat::{argsort_stable as argsort, average_ranks, mean_std as mean_std_ddof};
 use crate::panel::Panel;
 use serde::Serialize;
 
@@ -274,35 +275,7 @@ pub fn event_study(events: &Panel, returns: &Panel, pre: usize, post: usize) -> 
     }
 }
 
-// ---- small numeric helpers (local, to keep this module self-contained) ------
-
-/// Indices that sort `xs` ascending (stable on ties by original index).
-fn argsort(xs: &[f64]) -> Vec<usize> {
-    let mut idx: Vec<usize> = (0..xs.len()).collect();
-    idx.sort_by(|&a, &b| xs[a].partial_cmp(&xs[b]).unwrap().then(a.cmp(&b)));
-    idx
-}
-
-/// Average (fractional) ranks of `xs`, 1-based, ties share the mean rank.
-fn average_ranks(xs: &[f64]) -> Vec<f64> {
-    let order = argsort(xs);
-    let n = xs.len();
-    let mut ranks = vec![0.0_f64; n];
-    let mut i = 0;
-    while i < n {
-        let mut j = i + 1;
-        while j < n && xs[order[j]] == xs[order[i]] {
-            j += 1;
-        }
-        // ranks i..j (0-based) share the average of (i+1..=j) 1-based ranks.
-        let avg = ((i + 1 + j) as f64) / 2.0;
-        for &o in &order[i..j] {
-            ranks[o] = avg;
-        }
-        i = j;
-    }
-    ranks
-}
+// ---- small numeric helpers (shared kernels in ops::stat) --------------------
 
 /// Spearman rank correlation of two equal-length slices. Pearson correlation of
 /// their average ranks; 0.0 when either side is constant (zero variance).
@@ -330,19 +303,10 @@ fn pearson(a: &[f64], b: &[f64]) -> f64 {
     cov / (va.sqrt() * vb.sqrt())
 }
 
-/// Sample mean and std (ddof=1) over finite entries; std NaN with <2 points.
+/// Sample mean and std (`ddof = 1`) over finite entries.
+#[inline]
 fn mean_std(xs: &[f64]) -> (f64, f64) {
-    let v: Vec<f64> = xs.iter().copied().filter(|x| x.is_finite()).collect();
-    let n = v.len() as f64;
-    if n == 0.0 {
-        return (f64::NAN, f64::NAN);
-    }
-    let mean = v.iter().sum::<f64>() / n;
-    if v.len() < 2 {
-        return (mean, f64::NAN);
-    }
-    let var = v.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1.0);
-    (mean, var.sqrt())
+    mean_std_ddof(xs, 1)
 }
 
 #[cfg(test)]
