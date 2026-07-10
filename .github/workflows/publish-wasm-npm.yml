@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write # OIDC token exchange for npm Trusted Publishing
 
 jobs:
   publish:
@@ -28,18 +29,23 @@ jobs:
           node-version: 20
           registry-url: https://registry.npmjs.org
 
+      # Trusted Publishing (OIDC) needs npm >= 11.5.1; Node 20 ships npm 10.x.
+      - name: Upgrade npm for Trusted Publishing
+        run: npm install -g npm@latest
+
       # wasm-pack resolves --out-dir relative to the crate directory, so we cd
       # into the crate and publish ./pkg from there (npm publish's path is
       # relative to the step's working directory). This keeps the built package
       # path unambiguous regardless of the wasm-pack version.
+      #
+      # No NODE_AUTH_TOKEN: with a trusted publisher configured on npmjs.com,
+      # npm mints a short-lived OIDC token itself and attaches provenance.
       - name: Build & publish @citrusquant/lemon-wasm
         if: ${{ inputs.package == 'lemon-wasm' || inputs.package == 'both' }}
         working-directory: crates/lemon-wasm
         run: |
           wasm-pack build --release --target bundler --scope citrusquant --out-dir pkg
           npm publish pkg --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Build & publish @citrusquant/yuzu-wasm
         if: ${{ inputs.package == 'yuzu-wasm' || inputs.package == 'both' }}
@@ -47,5 +53,3 @@ jobs:
         run: |
           wasm-pack build --release --target bundler --scope citrusquant --out-dir pkg
           npm publish pkg --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
