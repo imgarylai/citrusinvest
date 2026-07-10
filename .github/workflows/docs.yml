@@ -5,9 +5,10 @@ on:
     branches: [main]
 
 # Build the Astro (Starlight) tutorial site and publish it to GitHub Pages.
-# The site embeds an in-browser backtest playground, so we first compile the two
-# WASM crates and drop them into the site's public/ tree. The Rust API reference
-# is not built here — it lives on docs.rs (see the site's API reference page).
+# The in-browser playground imports the published @citrusquant/*-wasm packages,
+# which Vite bundles at build time, so no Rust/wasm toolchain is needed here.
+# The Rust API reference is not built here — it lives on docs.rs (see the site's
+# API reference page).
 permissions:
   contents: read
   pages: write
@@ -23,20 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # --- WASM for the playground ---------------------------------------
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
-      - uses: jetli/wasm-pack-action@v0.4.0
-        with:
-          version: latest
-      - name: Build WASM into the site's public tree
-        run: |
-          OUT="$PWD/site/public/wasm/lemon" bash scripts/build-lemon-wasm.sh
-          OUT="$PWD/site/public/wasm/yuzu"  bash scripts/build-yuzu-wasm.sh
-
-      # --- Astro site ----------------------------------------------------
+      # --- Astro site (playground wasm comes from the npm packages) ------
       - uses: actions/setup-node@v6
         with:
           node-version: 24

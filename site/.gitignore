@@ -4,7 +4,3 @@ dist/
 
 # deps
 node_modules/
-
-# WASM playground artifacts — built by CI (scripts/build-*-wasm.sh) into here.
-# The committed data/sample.json is deterministic and kept.
-public/wasm/

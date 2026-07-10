@@ -4,11 +4,10 @@
 //       -> yuzu-wasm.run_backtest({spec, panels, industry, price_key, config})
 //       -> Report {dates, equity, metrics}  -> canvas equity curve + metric tiles
 //
-// The two WASM packages are NOT bundled by Vite. CI drops the wasm-pack `web`
-// output into `public/wasm/{lemon,yuzu}/`, and we import it at runtime from that
-// URL so the site build never needs a Rust/wasm toolchain. When the WASM is
-// absent (e.g. a plain `astro build` with no CI step), the UI says so instead of
-// throwing.
+// The two WASM packages are the published npm artifacts (@citrusquant/*-wasm,
+// wasm-pack `bundler` target), so Vite bundles them at build time — the same
+// single-source artifact citrus-fund consumes. No Rust/wasm toolchain is needed
+// to build the site (see vite-plugin-wasm in astro.config.mjs).
 
 import { createLemonEditor } from './lemon-editor.ts';
 
@@ -28,8 +27,10 @@ interface Report {
 const BASE: string = (import.meta as { env: { BASE_URL: string } }).env.BASE_URL;
 
 let sample: SampleData | null = null;
-// lemon/yuzu wasm modules. lemon is loaded eagerly (it drives editor
-// highlighting via tokens()); yuzu is loaded on the first Run.
+// lemon/yuzu wasm modules. Both are dynamically imported so Vite splits each
+// into its own chunk: lemon loads eagerly on mount (it drives editor
+// highlighting via tokens()); yuzu loads on the first Run. The bundler-target
+// packages instantiate their own wasm on import — no manual init() step.
 interface LemonMod {
   parse(src: string): string;
   tokens(src: string): string;
@@ -39,19 +40,13 @@ let yuzuMod: { run_backtest(input: string): string } | null = null;
 
 async function loadLemon(): Promise<LemonMod> {
   if (lemonMod) return lemonMod;
-  const url = new URL(`${BASE}wasm/lemon/lemon.js`, location.href).href;
-  const lemon = await import(/* @vite-ignore */ url);
-  await lemon.default();
-  lemonMod = lemon;
-  return lemon;
+  lemonMod = await import('@citrusquant/lemon-wasm');
+  return lemonMod;
 }
 
 async function loadYuzu(): Promise<void> {
   if (yuzuMod) return;
-  const url = new URL(`${BASE}wasm/yuzu/yuzu.js`, location.href).href;
-  const yuzu = await import(/* @vite-ignore */ url);
-  await yuzu.default();
-  yuzuMod = yuzu;
+  yuzuMod = await import('@citrusquant/yuzu-wasm');
 }
 
 async function loadWasm(): Promise<void> {
@@ -233,7 +228,7 @@ export function initPlayground(root: HTMLElement): void {
       if (/wasm|import|fetch|\.js/i.test(msg)) {
         setStatus(
           status,
-          'Engine WASM not found. Build it with scripts/build-*-wasm.sh into site/public/wasm/ (CI does this automatically).',
+          'Could not load the backtest engine (WASM). Try reloading the page.',
           'error',
         );
       } else {
