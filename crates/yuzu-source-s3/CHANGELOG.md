@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0](https://github.com/imgarylai/citrusinvest/compare/yuzu-source-s3-v0.4.0...yuzu-source-s3-v0.5.0) - 2026-07-10
+
+### Other
+
+- release v0.5.0
+
 ## [0.3.0](https://github.com/imgarylai/citrusinvest/compare/yuzu-source-s3-v0.2.0...yuzu-source-s3-v0.3.0) - 2026-07-10
 
 ### Added
