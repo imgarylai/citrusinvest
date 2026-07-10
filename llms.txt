@@ -13,6 +13,7 @@
 - [Engine architecture](docs/backtest-engine.md): panels, NAV model, metrics, the `Report` JSON contract.
 - [Input data layout](docs/data-layout.md): bring-your-own prices/fundamentals/panels tree, series names, PIT notes.
 - [FMP Starter gaps vs features](docs/fmp-data-source.md): which ops/backtests need which panels when data is short/coarse.
+- [Research (factor / event)](docs/research.md): rank-IC/quantile factor reports and event studies — JSON, not lemon ops.
 - [Contributing & release flow](CONTRIBUTING.md).
 
 ## API (docs.rs)

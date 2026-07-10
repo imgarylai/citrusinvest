@@ -304,6 +304,23 @@ fn walkforward_warmup_captures_returns_cold_start_misses() {
 }
 
 #[test]
+fn factor_and_event_report_over_the_tree() {
+    let dir = fixture("research"); // AAA rises 10→12, BBB dips then recovers
+                                   // Factor = close level; 1-day forward returns; 2 buckets.
+    let spec = r#"{"op":"Data","name":"close"}"#;
+    let fr = yuzu_cli::run_factor(&dir, spec, 20240102, 20240104, 1, 2, false).unwrap();
+    assert_eq!(fr.quantiles, 2);
+    assert_eq!(fr.quantile_returns.len(), 2);
+    assert!(fr.mean_ic.is_finite());
+
+    // Event = day close rose; average the return path around it.
+    let ev_spec = r#"{"op":"Rise","of":{"op":"Data","name":"close"},"n":1}"#;
+    let es = yuzu_cli::run_event(&dir, ev_spec, 20240102, 20240104, 1, 1).unwrap();
+    assert_eq!(es.lags, vec![-1, 0, 1]);
+    assert!(es.event_count >= 1); // AAA rises every day
+}
+
+#[test]
 fn list_symbols_is_empty_when_prices_dir_is_absent() {
     let dir = std::env::temp_dir().join("yuzu_cli_no_prices");
     let _ = fs::remove_dir_all(&dir);
