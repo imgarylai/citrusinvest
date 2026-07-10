@@ -304,6 +304,7 @@ These take price/volume series explicitly (so you decide which series feed them)
 | `demean`      | `of`                                         | Per-row subtract cross-sectional mean of non-NaN cells.                 |
 | `mask`        | `of`, `by`                                   | Keep `of` only where `by` is true; drop (NaN) elsewhere.                |
 | `normalize_row` | `of`                                       | Scale each row so gross weight (Σ\|w\|) is 1 — explicit portfolio weights. NaN preserved; zero rows unchanged. |
+| `vol_target`  | `of`, `prices`, `target?`=`0.1`, `n?`=`63`   | Scale each row of the weight panel `of` toward annualized portfolio-vol `target` over a trailing `n`-return window of `prices`; deleverage only (scale ≤ 1). Warmup / `n<2` / `target≤0` pass through. |
 | `industry_rank`| `of`, `categories?`                         | Rank `of` within each industry; optionally restrict to `categories` (list of strings). |
 | `cap_industry` | `of`, `max_weight?`=`0.3`                   | Cap each industry's gross weight (Σ\|w\|) in the weight panel `of` at `max_weight`, scaling that industry's names down proportionally (sign-preserving); residual left as cash. |
 | `groupby_category`| `of`, `agg`                             | Aggregate `of` within each industry using `agg` (e.g. `"mean"`); `agg` is a required string. |

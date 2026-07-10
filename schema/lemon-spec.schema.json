@@ -1198,6 +1198,34 @@
         },
         {
           "additionalProperties": false,
+          "description": "Scale each row of the weight panel `of` toward an annualized portfolio-volatility `target` (default 0.1) over a trailing `n`-return window (default 63) of `prices`; deleverage only (scale capped at 1, warmup passes through).",
+          "properties": {
+            "n": {
+              "type": "number"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "VolTarget"
+            },
+            "prices": {
+              "$ref": "#/$defs/Expr"
+            },
+            "target": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "op",
+            "of",
+            "prices"
+          ],
+          "title": "VolTarget",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
           "description": "Stateful rotation: enter on `entry`, exit on `exit`, hold up to `nstocks_limit` (prioritised by `rank`), with optional stop_loss/take_profit/trail_stop/trail_stop_activation.",
           "properties": {
             "entry": {
