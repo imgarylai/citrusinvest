@@ -88,6 +88,26 @@ pub fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
         Rise { of, n } => eval(of, ctx)?.rise(*n),
         Shift { of, n } => eval(of, ctx)?.shift(*n),
         RollingMax { of, n } => eval(of, ctx)?.rolling_max(*n),
+        RollingMin { of, n } => eval(of, ctx)?.rolling_min(*n),
+        BollingerMid { of, n } => eval(of, ctx)?.bollinger_mid(*n),
+        BollingerUpper { of, n, k } => eval(of, ctx)?.bollinger_upper(*n, *k),
+        BollingerLower { of, n, k } => eval(of, ctx)?.bollinger_lower(*n, *k),
+        Macd { of, fast, slow } => eval(of, ctx)?.macd(*fast, *slow),
+        MacdSignal {
+            of,
+            fast,
+            slow,
+            signal,
+        } => eval(of, ctx)?.macd_signal(*fast, *slow, *signal),
+        MacdHist {
+            of,
+            fast,
+            slow,
+            signal,
+        } => eval(of, ctx)?.macd_hist(*fast, *slow, *signal),
+        DonchianHigh { of, n } => eval(of, ctx)?.donchian_high(*n),
+        DonchianLow { of, n } => eval(of, ctx)?.donchian_low(*n),
+        DonchianMid { of, n } => eval(of, ctx)?.donchian_mid(*n),
         Atr {
             high,
             low,
@@ -630,6 +650,53 @@ mod tests {
             &c,
         );
         assert!(boll.is_ok());
+    }
+
+    #[test]
+    fn named_ta_indicators_evaluate() {
+        let c = ctx(); // close col A = [1,2,3]
+        let d = r#"{"op":"Data","name":"close"}"#;
+
+        // rolling_min mirrors rolling_max: n=2 over [1,2,3] -> row1=1, row2=2.
+        let rmin = run_strategy(&format!(r#"{{"op":"RollingMin","of":{d},"n":2}}"#), &c).unwrap();
+        assert!(rmin.data[[0, 0]].is_nan());
+        assert_eq!(rmin.data[[1, 0]], 1.0);
+        assert_eq!(rmin.data[[2, 0]], 2.0);
+
+        // Donchian: high=rolling_max, low=rolling_min, mid=(hi+lo)/2. Row2: (3+2)/2.
+        let dmid = run_strategy(&format!(r#"{{"op":"DonchianMid","of":{d},"n":2}}"#), &c).unwrap();
+        assert_eq!(dmid.data[[2, 0]], 2.5);
+
+        // Bollinger upper with defaulted k=2: average(2)=[1,1.5,2.5], std(2)=[_,0.5,0.5].
+        let up = run_strategy(&format!(r#"{{"op":"BollingerUpper","of":{d},"n":2}}"#), &c).unwrap();
+        assert!(up.data[[0, 0]].is_nan()); // std warm-up
+        assert!((up.data[[1, 0]] - 2.5).abs() < 1e-12);
+        assert!((up.data[[2, 0]] - 3.5).abs() < 1e-12);
+
+        // MACD(fast=1, slow=2): ema(1)=[1,2,3], ema(2)=[_,1.5,2.5] -> macd=[_,0.5,0.5].
+        let macd = run_strategy(
+            &format!(r#"{{"op":"Macd","of":{d},"fast":1,"slow":2}}"#),
+            &c,
+        )
+        .unwrap();
+        assert!((macd.data[[1, 0]] - 0.5).abs() < 1e-12);
+        assert!((macd.data[[2, 0]] - 0.5).abs() < 1e-12);
+
+        // Defaulted params (fast/slow/signal = 12/26/9) parse and run (all warm-up NaN here).
+        for op in [
+            "Macd",
+            "MacdSignal",
+            "MacdHist",
+            "BollingerLower",
+            "DonchianHigh",
+        ] {
+            let spec = if op.starts_with("Bollinger") || op.starts_with("Donchian") {
+                format!(r#"{{"op":"{op}","of":{d},"n":3}}"#)
+            } else {
+                format!(r#"{{"op":"{op}","of":{d}}}"#)
+            };
+            assert!(run_strategy(&spec, &c).is_ok(), "{op} failed to evaluate");
+        }
     }
 
     #[test]

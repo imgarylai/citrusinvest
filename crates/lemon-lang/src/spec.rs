@@ -12,6 +12,22 @@ fn default_stoch_d() -> usize {
     3
 }
 
+fn default_macd_fast() -> usize {
+    12
+}
+
+fn default_macd_slow() -> usize {
+    26
+}
+
+fn default_macd_signal() -> usize {
+    9
+}
+
+fn default_bollinger_k() -> f64 {
+    2.0
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(tag = "op")]
 pub enum Expr {
@@ -35,6 +51,58 @@ pub enum Expr {
     Shift { of: Box<Expr>, n: usize },
     /// Rolling maximum of `of` over `n` days.
     RollingMax { of: Box<Expr>, n: usize },
+    /// Rolling minimum of `of` over `n` days.
+    RollingMin { of: Box<Expr>, n: usize },
+    /// Bollinger mid band: the `n`-day simple moving average of `of`.
+    BollingerMid { of: Box<Expr>, n: usize },
+    /// Bollinger upper band: `sma(of, n) + k * std(of, n)` (`k` defaults to 2).
+    BollingerUpper {
+        of: Box<Expr>,
+        n: usize,
+        #[serde(default = "default_bollinger_k")]
+        k: f64,
+    },
+    /// Bollinger lower band: `sma(of, n) - k * std(of, n)` (`k` defaults to 2).
+    BollingerLower {
+        of: Box<Expr>,
+        n: usize,
+        #[serde(default = "default_bollinger_k")]
+        k: f64,
+    },
+    /// MACD line: `ema(of, fast) - ema(of, slow)` (defaults 12/26).
+    Macd {
+        of: Box<Expr>,
+        #[serde(default = "default_macd_fast")]
+        fast: usize,
+        #[serde(default = "default_macd_slow")]
+        slow: usize,
+    },
+    /// MACD signal line: `signal`-day EMA of the MACD line (defaults 12/26/9).
+    MacdSignal {
+        of: Box<Expr>,
+        #[serde(default = "default_macd_fast")]
+        fast: usize,
+        #[serde(default = "default_macd_slow")]
+        slow: usize,
+        #[serde(default = "default_macd_signal")]
+        signal: usize,
+    },
+    /// MACD histogram: MACD line minus its signal line (defaults 12/26/9).
+    MacdHist {
+        of: Box<Expr>,
+        #[serde(default = "default_macd_fast")]
+        fast: usize,
+        #[serde(default = "default_macd_slow")]
+        slow: usize,
+        #[serde(default = "default_macd_signal")]
+        signal: usize,
+    },
+    /// Donchian channel upper band: rolling `n`-day high of `of`.
+    DonchianHigh { of: Box<Expr>, n: usize },
+    /// Donchian channel lower band: rolling `n`-day low of `of`.
+    DonchianLow { of: Box<Expr>, n: usize },
+    /// Donchian channel mid-line: `(rolling_max + rolling_min) / 2` over `n` days.
+    DonchianMid { of: Box<Expr>, n: usize },
     /// Average True Range over `n` days from high/low/close.
     Atr {
         high: Box<Expr>,

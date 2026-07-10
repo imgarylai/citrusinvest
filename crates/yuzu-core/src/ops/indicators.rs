@@ -322,6 +322,64 @@ impl Panel {
         }
     }
 
+    /// Donchian channel upper band: the rolling `n`-day high. Alias of
+    /// `rolling_max` under the named-indicator surface (`min_periods = n`; first
+    /// finite at row `n-1`).
+    pub fn donchian_high(&self, n: usize) -> Panel {
+        self.rolling_max(n)
+    }
+
+    /// Donchian channel lower band: the rolling `n`-day low. Alias of
+    /// `rolling_min` (`min_periods = n`).
+    pub fn donchian_low(&self, n: usize) -> Panel {
+        self.rolling_min(n)
+    }
+
+    /// Donchian channel mid-line: `(rolling_max(n) + rolling_min(n)) / 2`.
+    /// Finite only where both bands are (row `n-1` onward).
+    pub fn donchian_mid(&self, n: usize) -> Panel {
+        self.rolling_max(n)
+            .add(&self.rolling_min(n))
+            .scalar_mul(0.5)
+    }
+
+    /// Bollinger mid band: the `n`-day simple moving average (`average`, so
+    /// `min_periods = n/2`).
+    pub fn bollinger_mid(&self, n: usize) -> Panel {
+        self.average(n)
+    }
+
+    /// Bollinger upper band: `average(n) + k * rolling_std(n)`. The dispersion
+    /// term warms up at row `n-1` (`rolling_std` uses `min_periods = n`), so the
+    /// band is `NaN` before then even where the mid line (`min_periods = n/2`) is
+    /// already finite.
+    pub fn bollinger_upper(&self, n: usize, k: f64) -> Panel {
+        self.average(n).add(&self.rolling_std(n).scalar_mul(k))
+    }
+
+    /// Bollinger lower band: `average(n) - k * rolling_std(n)`.
+    pub fn bollinger_lower(&self, n: usize, k: f64) -> Panel {
+        self.average(n).sub(&self.rolling_std(n).scalar_mul(k))
+    }
+
+    /// MACD line: `ema(fast) - ema(slow)`. Finite once the slow EMA warms up (a
+    /// symbol's `slow`-th finite row).
+    pub fn macd(&self, fast: usize, slow: usize) -> Panel {
+        self.ema(fast).sub(&self.ema(slow))
+    }
+
+    /// MACD signal line: the `signal`-day EMA of the MACD line (seeded, like all
+    /// EMAs here, from the SMA of its first `signal` finite values).
+    pub fn macd_signal(&self, fast: usize, slow: usize, signal: usize) -> Panel {
+        self.macd(fast, slow).ema(signal)
+    }
+
+    /// MACD histogram: the MACD line minus its signal line.
+    pub fn macd_hist(&self, fast: usize, slow: usize, signal: usize) -> Panel {
+        self.macd(fast, slow)
+            .sub(&self.macd_signal(fast, slow, signal))
+    }
+
     pub fn quantile_row(&self, c: f64) -> Panel {
         let nrows = self.nrows();
         let mut out = Array2::from_elem((nrows, 1), f64::NAN);
@@ -498,6 +556,81 @@ mod tests {
         assert_eq!(m.data[[2, 0]], 10.0);
         assert_eq!(m.data[[3, 0]], 11.0);
         assert_eq!(m.data[[4, 0]], 9.0);
+    }
+
+    /// Single-column panel from a slice of daily values, dates from 20240102.
+    fn col(v: &[f64]) -> Panel {
+        Panel::from_rows(
+            (0..v.len() as i32).map(|i| 20240102 + i).collect(),
+            vec!["A".into()],
+            v.iter().map(|x| vec![*x]).collect(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn donchian_bands_wrap_rolling_extremes() {
+        // n=3 over [10,12,11,15,9]: high = rolling_max, low = rolling_min,
+        // mid = (high+low)/2. r0,r1 warm up to NaN.
+        let p = col(&[10.0, 12.0, 11.0, 15.0, 9.0]);
+        let hi = p.donchian_high(3);
+        let lo = p.donchian_low(3);
+        let mid = p.donchian_mid(3);
+        assert!(hi.data[[1, 0]].is_nan() && lo.data[[1, 0]].is_nan() && mid.data[[1, 0]].is_nan());
+        assert_eq!(
+            (hi.data[[2, 0]], hi.data[[3, 0]], hi.data[[4, 0]]),
+            (12.0, 15.0, 15.0)
+        );
+        assert_eq!(
+            (lo.data[[2, 0]], lo.data[[3, 0]], lo.data[[4, 0]]),
+            (10.0, 11.0, 9.0)
+        );
+        assert_eq!(
+            (mid.data[[2, 0]], mid.data[[3, 0]], mid.data[[4, 0]]),
+            (11.0, 13.0, 12.0)
+        );
+    }
+
+    #[test]
+    fn bollinger_bands_are_sma_plus_minus_k_std() {
+        // n=3, k=2 over [1,2,3,4]. average(min_periods=n/2=1): 1,1.5,2,3.
+        // rolling_std(min_periods=3): NaN,NaN,sqrt(2/3),sqrt(2/3).
+        let p = col(&[1.0, 2.0, 3.0, 4.0]);
+        let mid = p.bollinger_mid(3);
+        let up = p.bollinger_upper(3, 2.0);
+        let lo = p.bollinger_lower(3, 2.0);
+        let s = (2.0f64 / 3.0).sqrt();
+        // Mid is the SMA and is finite from row 0 (min_periods = n/2).
+        assert_eq!(mid.data[[0, 0]], 1.0);
+        assert_eq!(mid.data[[2, 0]], 2.0);
+        // Bands warm up with the std term: NaN until row n-1 even though mid is finite.
+        assert!(up.data[[1, 0]].is_nan() && lo.data[[1, 0]].is_nan());
+        assert!((up.data[[2, 0]] - (2.0 + 2.0 * s)).abs() < 1e-12);
+        assert!((lo.data[[2, 0]] - (2.0 - 2.0 * s)).abs() < 1e-12);
+        assert!((up.data[[3, 0]] - (3.0 + 2.0 * s)).abs() < 1e-12);
+        assert!((lo.data[[3, 0]] - (3.0 - 2.0 * s)).abs() < 1e-12);
+    }
+
+    #[test]
+    fn macd_line_signal_and_hist_compose_from_ema() {
+        // fast=2, slow=3, signal=2 over [1,2,3,4,5].
+        // ema(2)=[_,1.5,2.5,3.5,4.5]; ema(3)=[_,_,2,3,4].
+        // macd = ema2-ema3 = [_,_,0.5,0.5,0.5]; signal = ema(macd,2) = [_,_,_,0.5,0.5];
+        // hist = macd-signal = [_,_,_,0,0].
+        let p = col(&[1.0, 2.0, 3.0, 4.0, 5.0]);
+        let macd = p.macd(2, 3);
+        let sig = p.macd_signal(2, 3, 2);
+        let hist = p.macd_hist(2, 3, 2);
+        assert!(macd.data[[1, 0]].is_nan());
+        for r in 2..5 {
+            assert!((macd.data[[r, 0]] - 0.5).abs() < 1e-12);
+        }
+        assert!(sig.data[[2, 0]].is_nan());
+        assert!((sig.data[[3, 0]] - 0.5).abs() < 1e-12);
+        assert!((sig.data[[4, 0]] - 0.5).abs() < 1e-12);
+        assert!(hist.data[[2, 0]].is_nan());
+        assert!((hist.data[[3, 0]] - 0.0).abs() < 1e-12);
+        assert!((hist.data[[4, 0]] - 0.0).abs() < 1e-12);
     }
 
     #[test]

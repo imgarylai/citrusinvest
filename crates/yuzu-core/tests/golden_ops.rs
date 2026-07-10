@@ -121,6 +121,68 @@ fn quantile_50_matches_reference() {
 }
 
 #[test]
+fn rolling_min_3_matches_reference() {
+    assert_panel_eq(
+        &input("rolling_min_3").rolling_min(3),
+        &expected("rolling_min_3"),
+        1e-9,
+    );
+}
+
+#[test]
+fn donchian_bands_match_reference() {
+    assert_panel_eq(
+        &input("donchian_high_3").donchian_high(3),
+        &expected("donchian_high_3"),
+        1e-9,
+    );
+    assert_panel_eq(
+        &input("donchian_low_3").donchian_low(3),
+        &expected("donchian_low_3"),
+        1e-9,
+    );
+    assert_panel_eq(
+        &input("donchian_mid_3").donchian_mid(3),
+        &expected("donchian_mid_3"),
+        1e-9,
+    );
+}
+
+#[test]
+fn bollinger_bands_match_reference() {
+    assert_panel_eq(
+        &input("bollinger_mid_2").bollinger_mid(2),
+        &expected("bollinger_mid_2"),
+        1e-9,
+    );
+    assert_panel_eq(
+        &input("bollinger_upper_2").bollinger_upper(2, 2.0),
+        &expected("bollinger_upper_2"),
+        1e-9,
+    );
+    assert_panel_eq(
+        &input("bollinger_lower_2").bollinger_lower(2, 2.0),
+        &expected("bollinger_lower_2"),
+        1e-9,
+    );
+}
+
+#[test]
+fn macd_line_signal_hist_match_reference() {
+    assert_panel_eq(&input("macd_2_3").macd(2, 3), &expected("macd_2_3"), 1e-9);
+    assert_panel_eq(
+        &input("macd_signal_2_3_2").macd_signal(2, 3, 2),
+        &expected("macd_signal_2_3_2"),
+        1e-9,
+    );
+    assert_panel_eq(
+        &input("macd_hist_2_3_2").macd_hist(2, 3, 2),
+        &expected("macd_hist_2_3_2"),
+        1e-9,
+    );
+}
+
+#[test]
 fn exit_when_matches_reference() {
     let inp = input("exit_when");
     let cond = inp.gt(&inp.average(2));

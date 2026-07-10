@@ -238,6 +238,244 @@
         },
         {
           "additionalProperties": false,
+          "description": "Rolling minimum of `of` over `n` days.",
+          "properties": {
+            "n": {
+              "type": "number"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "RollingMin"
+            }
+          },
+          "required": [
+            "op",
+            "of",
+            "n"
+          ],
+          "title": "RollingMin",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Bollinger mid band: the `n`-day simple moving average of `of`.",
+          "properties": {
+            "n": {
+              "type": "number"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "BollingerMid"
+            }
+          },
+          "required": [
+            "op",
+            "of",
+            "n"
+          ],
+          "title": "BollingerMid",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Bollinger upper band: sma(of, n) + k * std(of, n) (k defaults to 2).",
+          "properties": {
+            "k": {
+              "type": "number"
+            },
+            "n": {
+              "type": "number"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "BollingerUpper"
+            }
+          },
+          "required": [
+            "op",
+            "of",
+            "n"
+          ],
+          "title": "BollingerUpper",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Bollinger lower band: sma(of, n) - k * std(of, n) (k defaults to 2).",
+          "properties": {
+            "k": {
+              "type": "number"
+            },
+            "n": {
+              "type": "number"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "BollingerLower"
+            }
+          },
+          "required": [
+            "op",
+            "of",
+            "n"
+          ],
+          "title": "BollingerLower",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "MACD line: ema(of, fast) - ema(of, slow) (fast/slow default 12/26).",
+          "properties": {
+            "fast": {
+              "type": "number"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "Macd"
+            },
+            "slow": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "op",
+            "of"
+          ],
+          "title": "Macd",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "MACD signal line: `signal`-day EMA of the MACD line (defaults 12/26/9).",
+          "properties": {
+            "fast": {
+              "type": "number"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "MacdSignal"
+            },
+            "signal": {
+              "type": "number"
+            },
+            "slow": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "op",
+            "of"
+          ],
+          "title": "MacdSignal",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "MACD histogram: MACD line minus its signal line (defaults 12/26/9).",
+          "properties": {
+            "fast": {
+              "type": "number"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "MacdHist"
+            },
+            "signal": {
+              "type": "number"
+            },
+            "slow": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "op",
+            "of"
+          ],
+          "title": "MacdHist",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Donchian channel upper band: rolling `n`-day high of `of`.",
+          "properties": {
+            "n": {
+              "type": "number"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "DonchianHigh"
+            }
+          },
+          "required": [
+            "op",
+            "of",
+            "n"
+          ],
+          "title": "DonchianHigh",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Donchian channel lower band: rolling `n`-day low of `of`.",
+          "properties": {
+            "n": {
+              "type": "number"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "DonchianLow"
+            }
+          },
+          "required": [
+            "op",
+            "of",
+            "n"
+          ],
+          "title": "DonchianLow",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Donchian channel mid-line: (rolling_max + rolling_min) / 2 over `n` days.",
+          "properties": {
+            "n": {
+              "type": "number"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "DonchianMid"
+            }
+          },
+          "required": [
+            "op",
+            "of",
+            "n"
+          ],
+          "title": "DonchianMid",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
           "description": "Average True Range over `n` days from high/low/close.",
           "properties": {
             "close": {
