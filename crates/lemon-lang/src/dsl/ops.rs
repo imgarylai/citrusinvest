@@ -523,6 +523,14 @@ static ROWS: &[Row] = &[
         desc: "Rank `of` within each industry, optionally limited to `categories`.",
     },
     Row {
+        names: &["cap_industry"],
+        sig: OpSig {
+            tag: "CapIndustry",
+            fields: &[Expr("of"), NumOpt("max_weight")],
+        },
+        desc: "Cap each industry's gross weight (sum of |w|) in the weight panel `of` at `max_weight` (default 0.3), scaling that industry's names down proportionally; residual left as cash.",
+    },
+    Row {
         names: &["groupby_category"],
         sig: OpSig {
             tag: "GroupbyCategory",
@@ -563,6 +571,7 @@ pub fn field_default(tag: &str, field_name: &str) -> Option<serde_json::Value> {
         ("Rank", "ascending") => Some(json!(true)),
         ("Neutralize", "add_const") => Some(json!(true)),
         ("NeutralizeIndustry", "add_const") => Some(json!(true)),
+        ("CapIndustry", "max_weight") => Some(json!(0.3)),
         _ => None,
     }
 }
@@ -742,6 +751,7 @@ pub static ALL_OP_TAGS: &[&str] = &[
     "Neutralize",
     "NeutralizeIndustry",
     "IndustryRank",
+    "CapIndustry",
     "GroupbyCategory",
     "InSector",
 ];

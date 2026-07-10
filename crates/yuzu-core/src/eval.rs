@@ -326,6 +326,7 @@ pub fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
         IndustryRank { of, categories } => {
             eval(of, ctx)?.industry_rank(&ctx.industry, categories.as_deref())
         }
+        CapIndustry { of, max_weight } => eval(of, ctx)?.cap_industry(&ctx.industry, *max_weight),
         GroupbyCategory { of, agg } => eval(of, ctx)?.groupby_category(&ctx.industry, agg)?,
         InSector { of, name } => eval(of, ctx)?.in_sector(&ctx.industry, name),
     })
@@ -1026,6 +1027,7 @@ mod tests {
             format!(r#"{{"op":"Neutralize","of":{d},"by":[{d}],"add_const":true}}"#),
             format!(r#"{{"op":"NeutralizeIndustry","of":{d},"add_const":true}}"#),
             format!(r#"{{"op":"IndustryRank","of":{d},"categories":null}}"#),
+            format!(r#"{{"op":"CapIndustry","of":{d},"max_weight":0.3}}"#),
             format!(r#"{{"op":"GroupbyCategory","of":{d},"agg":"mean"}}"#),
         ];
         for s in &specs {

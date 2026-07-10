@@ -1335,6 +1335,27 @@
         },
         {
           "additionalProperties": false,
+          "description": "Cap each industry's gross weight (sum of |w|) in the weight panel `of` at `max_weight` (default 0.3), scaling that industry's names down proportionally; residual left as cash.",
+          "properties": {
+            "max_weight": {
+              "type": "number"
+            },
+            "of": {
+              "$ref": "#/$defs/Expr"
+            },
+            "op": {
+              "const": "CapIndustry"
+            }
+          },
+          "required": [
+            "op",
+            "of"
+          ],
+          "title": "CapIndustry",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
           "description": "Aggregate `of` within each industry using `agg` (e.g. mean).",
           "properties": {
             "agg": {

@@ -210,6 +210,51 @@ impl Panel {
         }
     }
 
+    /// `cap_industry`: per date, cap each industry's **gross** weight (Σ|w| over
+    /// the group) at `max_weight` by scaling that group's names down by
+    /// `max_weight / gross` (sign-preserving, so long/short books stay balanced
+    /// within the group). Groups already at or under the cap are untouched; the
+    /// residual freed by a scaled-down group is left as cash — no redistribution
+    /// (the NAV loop's row-normalize takes the book from there). NaN cells stay
+    /// NaN and don't count toward a group's gross.
+    ///
+    /// Grouping reuses [`group_cols_by_industry`](Self::group_cols_by_industry),
+    /// so symbols missing from `industry` share the single "其他" bucket. With an
+    /// **empty industry map** the whole cross-section is that one bucket, so the
+    /// op caps total gross exposure at `max_weight`.
+    ///
+    /// `max_weight <= 0` (or NaN) is a no-op — a degenerate cap must not zero the
+    /// book.
+    pub fn cap_industry(&self, industry: &HashMap<String, String>, max_weight: f64) -> Panel {
+        if max_weight <= 0.0 || max_weight.is_nan() {
+            return self.clone();
+        }
+        let (nrows, ncols) = self.data.dim();
+        let mut data = self.data.clone();
+        for r in 0..nrows {
+            let valid: Vec<usize> = (0..ncols)
+                .filter(|&c| self.data[[r, c]].is_finite())
+                .collect();
+            if valid.is_empty() {
+                continue;
+            }
+            for (_, cols) in self.group_cols_by_industry(industry, &valid) {
+                let gross: f64 = cols.iter().map(|&c| self.data[[r, c]].abs()).sum();
+                if gross > max_weight {
+                    let factor = max_weight / gross;
+                    for &c in &cols {
+                        data[[r, c]] *= factor;
+                    }
+                }
+            }
+        }
+        Panel {
+            dates: self.dates.clone(),
+            symbols: self.symbols.clone(),
+            data,
+        }
+    }
+
     /// `groupby_category().<agg>()`: group columns by sector and aggregate
     /// per date. Result columns are the sorted distinct sectors. NaN cells are
     /// skipped; a group with no valid cell that date yields NaN. `std` is the
@@ -312,6 +357,88 @@ fn aggregate(agg: &str, vals: &[f64]) -> Result<f64, crate::error::EngineError> 
             )));
         }
     })
+}
+
+#[cfg(test)]
+mod cap_industry_tests {
+    use super::*;
+    use ndarray::array;
+
+    fn map(pairs: &[(&str, &str)]) -> HashMap<String, String> {
+        pairs
+            .iter()
+            .map(|(s, i)| (s.to_string(), i.to_string()))
+            .collect()
+    }
+
+    #[test]
+    fn scales_only_over_cap_groups_and_preserves_nan() {
+        // Tech {AAA,BBB} gross 0.4 > 0.3 -> ×0.75; Energy {CCC} single valid
+        // (DDD is NaN) gross 0.1 <= 0.3 -> untouched; NaN stays NaN.
+        let p = Panel::new(
+            vec![20240102],
+            vec!["AAA".into(), "BBB".into(), "CCC".into(), "DDD".into()],
+            array![[0.2, 0.2, 0.1, f64::NAN]],
+        )
+        .unwrap();
+        let ind = map(&[
+            ("AAA", "Tech"),
+            ("BBB", "Tech"),
+            ("CCC", "Energy"),
+            ("DDD", "Energy"),
+        ]);
+        let got = p.cap_industry(&ind, 0.3);
+        assert!((got.data[[0, 0]] - 0.15).abs() < 1e-12);
+        assert!((got.data[[0, 1]] - 0.15).abs() < 1e-12);
+        assert!((got.data[[0, 2]] - 0.1).abs() < 1e-12); // Energy under cap
+        assert!(got.data[[0, 3]].is_nan()); // NaN preserved
+    }
+
+    #[test]
+    fn preserves_signs_for_long_short_groups() {
+        // Tech gross |0.3|+|-0.3| = 0.6 > 0.3 -> ×0.5, signs kept.
+        let p = Panel::new(
+            vec![20240102],
+            vec!["AAA".into(), "BBB".into()],
+            array![[0.3, -0.3]],
+        )
+        .unwrap();
+        let ind = map(&[("AAA", "Tech"), ("BBB", "Tech")]);
+        let got = p.cap_industry(&ind, 0.3);
+        assert!((got.data[[0, 0]] - 0.15).abs() < 1e-12);
+        assert!((got.data[[0, 1]] + 0.15).abs() < 1e-12);
+    }
+
+    #[test]
+    fn empty_industry_map_caps_the_whole_book() {
+        // No map -> every symbol shares the "其他" bucket -> one group whose
+        // gross (0.5) is capped at 0.3 (×0.6).
+        let p = Panel::new(
+            vec![20240102],
+            vec!["AAA".into(), "BBB".into()],
+            array![[0.25, 0.25]],
+        )
+        .unwrap();
+        let got = p.cap_industry(&HashMap::new(), 0.3);
+        assert!((got.data[[0, 0]] - 0.15).abs() < 1e-12);
+        assert!((got.data[[0, 1]] - 0.15).abs() < 1e-12);
+    }
+
+    #[test]
+    fn non_positive_cap_is_a_noop() {
+        let p = Panel::new(
+            vec![20240102],
+            vec!["AAA".into(), "BBB".into()],
+            array![[0.4, 0.4]],
+        )
+        .unwrap();
+        let ind = map(&[("AAA", "Tech"), ("BBB", "Tech")]);
+        for cap in [0.0, -1.0, f64::NAN] {
+            let got = p.cap_industry(&ind, cap);
+            assert_eq!(got.data[[0, 0]], 0.4);
+            assert_eq!(got.data[[0, 1]], 0.4);
+        }
+    }
 }
 
 #[cfg(test)]

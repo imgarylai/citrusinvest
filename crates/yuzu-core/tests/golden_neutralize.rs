@@ -82,6 +82,27 @@ fn groupby_category_matches_reference() {
 }
 
 #[test]
+fn cap_industry_matches_reference() {
+    let v = load_golden("cap_industry");
+    let weights = panel_from_json(&v, "input");
+    let industry: std::collections::HashMap<String, String> = weights
+        .symbols
+        .iter()
+        .cloned()
+        .zip(
+            v["industry"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|s| s.as_str().unwrap().to_string()),
+        )
+        .collect();
+    let max_weight = v["max_weight"].as_f64().unwrap();
+    let got = weights.cap_industry(&industry, max_weight);
+    assert_panel_eq(&got, &expected("cap_industry"), 1e-9);
+}
+
+#[test]
 fn groupby_category_rejects_invalid_agg() {
     let v = load_golden("groupby_category");
     let factor = panel_from_json(&v, "input");
