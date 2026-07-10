@@ -107,6 +107,9 @@ pub fn run_backtest_json(input_json: &str) -> Result<String, String> {
         bootstrap_samples: input.config.bootstrap_samples,
         bootstrap_block: input.config.bootstrap_block,
         live_performance_start: input.config.live_performance_start,
+        // Execution-layer stops are not yet exposed through the WASM request
+        // config (follow-up); default them off.
+        stops: yuzu_core::backtest::StopConfig::default(),
     };
     let report =
         run_backtest_core(&spec_str, &ctx, &input.price_key, &cfg).map_err(|e| e.to_string())?;

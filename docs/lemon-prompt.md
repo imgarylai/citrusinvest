@@ -45,8 +45,8 @@ gross weight — explicit portfolio weights, e.g. inverse-vol: `normalize_row(si
 `vol_target(of, prices, target?=0.1, n?=63)` (scale weights toward annualized portfolio-vol target; deleverage only).
 
 **Streaks, edges & rotation**: `sustain(of, nwindow, nsatisfy?)` · `is_entry(of)` / `is_exit(of)`
-(rising/falling edge) · `exit_when(entry, exit)` · `hold_until(entry, exit, nstocks_limit?, rank?, stop_loss?, take_profit?,
-trail_stop?, trail_stop_activation?)` (stateful; `rank` is an expression, the stops are numbers) ·
+(rising/falling edge) · `exit_when(entry, exit)` · `hold_until(entry, exit, nstocks_limit?, rank?)`
+(stateful selection; `rank` is an expression. **Price stops live in the backtest config, not the op.**) ·
 `rebalance(of, freq?, on?)` (`freq` = `"W"`/`"ME"`/`"QE"`/`"YE"`).
 
 **Neutralization / industry**: `neutralize(of, by=[...], add_const?=true)` (`by` is a list) ·
@@ -69,12 +69,12 @@ mask(rsi(close, 14) < 30, market_cap > 1000000000)
 # 3. Top 20 by a cheap-quality blend, rebalanced monthly.
 rebalance(is_largest(rank(-pe) + rank(roe), 20), freq = "ME")
 
-# 4. Momentum rotation with a stop, max 20 names.
+# 4. Momentum rotation, max 20 names. (A stop-loss is set on the backtest
+#    config — e.g. `--stop-loss 0.08` — not in the strategy.)
 hold_until(
   entry = close > sma(close, 200),
   exit  = close < sma(close, 50),
   nstocks_limit = 20,
-  stop_loss = 0.08,
 )
 ```
 

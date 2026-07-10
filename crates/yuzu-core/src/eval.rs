@@ -241,10 +241,6 @@ pub fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
             exit,
             nstocks_limit,
             rank,
-            stop_loss,
-            take_profit,
-            trail_stop,
-            trail_stop_activation,
         } => {
             let e = eval(entry, ctx)?;
             let x = eval(exit, ctx)?;
@@ -252,30 +248,10 @@ pub fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
                 Some(r) => Some(eval(r, ctx)?),
                 None => None,
             };
-            // Keep Default sentinels (±INF = off) for unset stops; override only what's set.
-            let mut opts = HoldUntilOpts {
+            let opts = HoldUntilOpts {
                 nstocks_limit: *nstocks_limit,
                 rank: rank_panel,
-                ..Default::default()
             };
-            if let Some(v) = stop_loss {
-                opts.stop_loss = *v;
-            }
-            if let Some(v) = take_profit {
-                opts.take_profit = *v;
-            }
-            if let Some(v) = trail_stop {
-                opts.trail_stop = *v;
-            }
-            if let Some(v) = trail_stop_activation {
-                opts.trail_stop_activation = *v;
-            }
-            // Stops price off close — supply it from the context when any stop is set.
-            if stop_loss.is_some() || take_profit.is_some() || trail_stop.is_some() {
-                opts.price = Some(ctx.panels.get("close").cloned().ok_or_else(|| {
-                    EngineError::Eval("HoldUntil stops require a 'close' panel".into())
-                })?);
-            }
             e.hold_until(&x, &opts)
         }
         Rebalance { of, freq, on } => {
@@ -338,7 +314,7 @@ pub fn eval(expr: &Expr, ctx: &EvalContext) -> Result<Panel, EngineError> {
     })
 }
 
-use crate::backtest::{run, BacktestConfig};
+use crate::backtest::BacktestConfig;
 use crate::report::{benchmark_equity, build_report_with_benchmark, Report};
 
 /// Fixed seed for the report bootstrap — same input, same bands, every run.
@@ -355,10 +331,14 @@ pub fn run_backtest(
         .panels
         .get(price_key)
         .ok_or_else(|| EngineError::Eval(format!("unknown price series '{price_key}'")))?;
+    let open = ctx.panels.get("open");
     let high = ctx.panels.get("high");
     let low = ctx.panels.get("low");
     let volume = ctx.panels.get("volume");
-    let out = run(&positions, prices, high, low, volume, cfg);
+    // `open` feeds the execution-layer stops' gap fills; `run` ignores it when
+    // stops are off, so the default path is unchanged.
+    let out =
+        crate::backtest::run_with_initial(&positions, prices, open, high, low, volume, cfg, None);
     let benchmark = match &cfg.benchmark_key {
         Some(key) => {
             let p = ctx
@@ -968,49 +948,9 @@ mod tests {
         assert!(run_strategy(spec, &ohlc_ctx()).is_ok());
     }
 
-    #[test]
-    fn hold_until_stops_default_price_to_close() {
-        // ctx close col A = [1,2,3] (always > 0, so entry always true, exit never).
-        // Without a stop, A is held every row. With take_profit=0.2 priced off the
-        // close panel, A's return from entry (3/1 = 2.0 by row 2) blows past the
-        // threshold and forces an exit — so the two runs MUST differ. This proves
-        // the take_profit value is actually wired into HoldUntilOpts (not dropped
-        // and left at the INFINITY sentinel, which would make the outputs identical).
-        let c = ctx();
-        let entry = r#"{ "op": "Gt", "l": { "op": "Data", "name": "close" }, "r": { "op": "Const", "value": 0.0 } }"#;
-        let exit = r#"{ "op": "Lt", "l": { "op": "Data", "name": "close" }, "r": { "op": "Const", "value": 0.0 } }"#;
-        let no_stop = format!(r#"{{ "op": "HoldUntil", "entry": {entry}, "exit": {exit} }}"#);
-        let with_tp = format!(
-            r#"{{ "op": "HoldUntil", "entry": {entry}, "exit": {exit}, "take_profit": 0.2 }}"#
-        );
-
-        let held = run_strategy(&no_stop, &c).unwrap();
-        let stopped = run_strategy(&with_tp, &c).unwrap();
-
-        // No-stop baseline: A held the whole way up the column.
-        assert_eq!(held.data[[2, 0]], 1.0);
-        // take_profit forces A out by row 2 (return 3/1 = 2.0 >> 0.2).
-        assert_eq!(stopped.data[[2, 0]], 0.0);
-    }
-
-    #[test]
-    fn hold_until_stops_error_without_close_panel() {
-        // A context whose only panel is "signal" (no "close") must error when stops are set.
-        let signal = Panel::new(
-            vec![20240102, 20240103],
-            vec!["A".into()],
-            ndarray::array![[1.0], [1.0]],
-        )
-        .unwrap();
-        let c = EvalContext::new(HashMap::from([("signal".to_string(), signal)]));
-        let spec = r#"{
-            "op": "HoldUntil",
-            "entry": { "op": "Data", "name": "signal" },
-            "exit": { "op": "Data", "name": "signal" },
-            "stop_loss": 0.1
-        }"#;
-        assert!(run_strategy(spec, &c).is_err());
-    }
+    // `hold_until` no longer carries price stops — they moved to
+    // `BacktestConfig::stops` (execution layer). Stop behavior is tested in
+    // `backtest.rs`; the old op-level stop tests are retired.
 
     #[test]
     fn all_remaining_variants_evaluate() {

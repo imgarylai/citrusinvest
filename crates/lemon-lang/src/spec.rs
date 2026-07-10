@@ -283,20 +283,12 @@ pub enum Expr {
         #[serde(default = "default_vol_target_n")]
         n: usize,
     },
-    /// Stateful rotation: enter on `entry`, exit on `exit`, hold up to `nstocks_limit` (prioritised by `rank`), with optional stop_loss/take_profit/trail_stop/trail_stop_activation.
+    /// Stateful rotation: enter on `entry`, exit on `exit`, hold up to `nstocks_limit` (prioritised by `rank`). Price stops live in the backtest config, not here.
     HoldUntil {
         entry: Box<Expr>,
         exit: Box<Expr>,
         nstocks_limit: Option<usize>,
         rank: Option<Box<Expr>>,
-        #[serde(default)]
-        stop_loss: Option<f64>,
-        #[serde(default)]
-        take_profit: Option<f64>,
-        #[serde(default)]
-        trail_stop: Option<f64>,
-        #[serde(default)]
-        trail_stop_activation: Option<f64>,
     },
     /// Hold `of`, refreshing on calendar `freq` (W/ME/QE) or on dates where `on` is true.
     Rebalance {
