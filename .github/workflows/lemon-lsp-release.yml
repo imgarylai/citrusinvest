@@ -61,7 +61,7 @@ jobs:
             ext: ".exe"
             rustflags: "-C target-feature=+crt-static"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Build from the tagged source so each binary matches its release.
           ref: ${{ github.event.release.tag_name || inputs.tag }}
