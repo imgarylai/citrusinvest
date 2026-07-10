@@ -699,8 +699,11 @@ so an unset config leaves every equity curve unchanged.
   position signal drops and re-adds it — so a stopped `hold_until` slot refills
   only at the next rebalance (more realistic than same-day refill).
 - **Needs OHLC**: `Touched` reads open/high/low. `run_backtest` picks up
-  `open`/`high`/`low` panels from the context; the CLI (`--stop-loss` /
-  `--take-profit` / `--trail-stop` / `--stop-fill`) loads them automatically.
+  `open`/`high`/`low` panels from the context. Surfaces that expose the knobs and
+  load the panels automatically: the **CLI** (`--stop-loss` / `--take-profit` /
+  `--trail-stop` / `--trail-stop-activation` / `--stop-fill`), the **server**
+  request (`stop_loss` / … / `stop_fill`, flat fields), and the **WASM** request
+  (`config.stops.{stop_loss,…,fill}`). All default to off.
 
 Per-trade **MAE / MFE** (maximum adverse / favorable excursion) and factor
 **neutralization** (`neutralize` / `neutralize_industry` / `industry_rank` /

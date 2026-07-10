@@ -109,16 +109,16 @@ enum StopFillArg {
 impl CommonArgs {
     fn config(&self) -> yuzu_core::backtest::BacktestConfig {
         use yuzu_core::backtest::{StopConfig, StopFill};
-        let stops = StopConfig {
-            stop_loss: self.stop_loss.unwrap_or(f64::NEG_INFINITY),
-            take_profit: self.take_profit.unwrap_or(f64::INFINITY),
-            trail_stop: self.trail_stop.unwrap_or(f64::INFINITY),
-            trail_stop_activation: self.trail_stop_activation,
-            fill: match self.stop_fill {
+        let stops = StopConfig::from_options(
+            self.stop_loss,
+            self.take_profit,
+            self.trail_stop,
+            self.trail_stop_activation,
+            match self.stop_fill {
                 StopFillArg::Touched => StopFill::Touched,
                 StopFillArg::Close => StopFill::Close,
             },
-        };
+        );
         yuzu_core::backtest::BacktestConfig {
             fee_ratio: self.fee_ratio,
             slippage_ratio: self.slippage_ratio,

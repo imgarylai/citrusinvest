@@ -96,6 +96,25 @@ impl StopConfig {
     pub fn is_active(&self) -> bool {
         !self.is_off()
     }
+
+    /// Build from optional levels (`None` = that stop off) — the shape the CLI,
+    /// server, and WASM request configs use, so the `±INF` sentinels live in one
+    /// place.
+    pub fn from_options(
+        stop_loss: Option<f64>,
+        take_profit: Option<f64>,
+        trail_stop: Option<f64>,
+        trail_stop_activation: f64,
+        fill: StopFill,
+    ) -> Self {
+        StopConfig {
+            stop_loss: stop_loss.unwrap_or(f64::NEG_INFINITY),
+            take_profit: take_profit.unwrap_or(f64::INFINITY),
+            trail_stop: trail_stop.unwrap_or(f64::INFINITY),
+            trail_stop_activation,
+            fill,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
