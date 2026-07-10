@@ -55,6 +55,20 @@ pub fn lint_to_json(src: &str, series_json: &str) -> String {
     }
 }
 
+/// Validate a strategy-envelope JSON document (see `lemon::envelope`). NEVER
+/// throws — a registry / web app inspects `ok` and shows `errors` client-side.
+/// success: `{"ok":true,"name":"...","spec":<expr tree>}`
+/// failure: `{"ok":false,"errors":["...", ...]}`
+/// (a non-JSON `doc` yields `ok:false` with a single "invalid JSON" error.)
+pub fn check_envelope_to_json(doc: &str) -> String {
+    match lemon::envelope::check(doc) {
+        Ok(checked) => {
+            json!({ "ok": true, "name": checked.name, "spec": checked.spec }).to_string()
+        }
+        Err(errors) => json!({ "ok": false, "errors": errors }).to_string(),
+    }
+}
+
 /// Hover for the token at 1-based `(line, col)`, as a JSON object, or `null`
 /// when there is nothing to show: `{"line","col","endLine","endCol","markdown"}`.
 pub fn hover_to_json(src: &str, line: usize, col: usize) -> String {
@@ -109,6 +123,12 @@ pub fn format(json_str: &str) -> Result<String, JsValue> {
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
+pub fn check_envelope(doc: &str) -> String {
+    check_envelope_to_json(doc)
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
 pub fn hover(src: &str, line: usize, col: usize) -> String {
     hover_to_json(src, line, col)
 }
@@ -159,6 +179,26 @@ mod tests {
         let out: Value = serde_json::from_str(&lint_to_json("sma(close,", "null")).unwrap();
         assert_eq!(out["ok"], false);
         assert!(out["error"]["line"].is_number());
+    }
+
+    #[test]
+    fn check_envelope_tags_valid_and_lists_errors() {
+        // Valid source envelope → ok + resolved spec.
+        let ok = r#"{"format":1,"name":"Momentum","source":"close > sma(close, 2)"}"#;
+        let out: Value = serde_json::from_str(&check_envelope_to_json(ok)).unwrap();
+        assert_eq!(out["ok"], true);
+        assert_eq!(out["name"], "Momentum");
+        assert_eq!(out["spec"]["op"], "Gt");
+
+        // Malformed → ok:false with a list of human-readable errors.
+        let bad = r#"{"format":1,"name":"X"}"#; // neither spec nor source
+        let out: Value = serde_json::from_str(&check_envelope_to_json(bad)).unwrap();
+        assert_eq!(out["ok"], false);
+        assert!(!out["errors"].as_array().unwrap().is_empty());
+
+        // Non-JSON doc still returns a tagged error (never throws).
+        let out: Value = serde_json::from_str(&check_envelope_to_json("{not json")).unwrap();
+        assert_eq!(out["ok"], false);
     }
 
     #[test]

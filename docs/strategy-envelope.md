@@ -67,7 +67,10 @@ checks, in order:
 
 The same check is available as a library entry point,
 `lemon::envelope::check(doc) -> Result<Checked, Vec<String>>`, returning the
-resolved `Expr` tree on success.
+resolved `Expr` tree on success — and in the browser via the `lemon-wasm`
+`check_envelope(doc)` export, which returns
+`{"ok":true,"name","spec"}` or `{"ok":false,"errors":[…]}` (never throws), so a
+web app / registry can validate submissions client-side.
 
 ## Reproducibility
 
