@@ -45,11 +45,11 @@ jobs:
         working-directory: crates/lemon-wasm
         run: |
           wasm-pack build --release --target bundler --scope citrusquant --out-dir pkg
-          npm publish pkg --access public
+          npm publish ./pkg --access public
 
       - name: Build & publish @citrusquant/yuzu-wasm
         if: ${{ inputs.package == 'yuzu-wasm' || inputs.package == 'both' }}
         working-directory: crates/yuzu-wasm
         run: |
           wasm-pack build --release --target bundler --scope citrusquant --out-dir pkg
-          npm publish pkg --access public
+          npm publish ./pkg --access public
