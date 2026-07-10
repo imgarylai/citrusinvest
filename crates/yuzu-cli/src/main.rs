@@ -197,9 +197,15 @@ enum Cmd {
         /// Output data root: writes prices/ (+ fundamentals/, tracked/ if asked).
         #[arg(long)]
         out: PathBuf,
-        /// Comma-separated tickers, e.g. AAPL,MSFT,GOOGL.
+        /// Comma-separated tickers, e.g. AAPL,MSFT,GOOGL. Omit and pass
+        /// --all-symbols to sync the whole FMP universe instead.
         #[arg(long, value_delimiter = ',')]
         symbols: Vec<String>,
+        /// Sync every symbol FMP lists (its full stock universe) instead of an
+        /// explicit --symbols list. Large — combine with --min-market-cap /
+        /// --rate-limit / --resume. Mutually exclusive with --symbols.
+        #[arg(long)]
+        all_symbols: bool,
         #[arg(long, default_value_t = 20000101)]
         from: i32,
         #[arg(long, default_value_t = 20991231)]
@@ -210,6 +216,15 @@ enum Cmd {
         /// Also fetch each symbol's sector → tracked/universe.csv.gz.
         #[arg(long)]
         include_industry: bool,
+        /// Keep ETFs and mutual/closed-end funds. By default only individual
+        /// stocks are synced (non-stocks are classified via the profile
+        /// endpoint and skipped).
+        #[arg(long)]
+        include_etf: bool,
+        /// Skip symbols whose company market cap is below this (0 = off).
+        /// Reads the profile endpoint's marketCap.
+        #[arg(long, default_value_t = 0.0)]
+        min_market_cap: f64,
         /// Max requests per minute (0 = no throttle). Match your FMP plan's
         /// rate limit (Starter-class keys are commonly ~300/min).
         #[arg(long, default_value_t = 300)]
@@ -369,10 +384,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             api_key,
             out,
             symbols,
+            all_symbols,
             from,
             to,
             include_fundamentals,
             include_industry,
+            include_etf,
+            min_market_cap,
             rate_limit,
             max_retries,
             append,
@@ -382,13 +400,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .or_else(|| std::env::var("FMP_API_KEY").ok())
                 .filter(|k| !k.trim().is_empty())
                 .ok_or("provide --api-key or set FMP_API_KEY")?;
-            let symbols: Vec<String> = symbols
+            let explicit: Vec<String> = symbols
                 .into_iter()
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty())
                 .collect();
-            if symbols.is_empty() {
-                return Err("provide --symbols AAPL,MSFT,... (comma-separated)".into());
+            if all_symbols && !explicit.is_empty() {
+                return Err("--symbols and --all-symbols are mutually exclusive".into());
+            }
+            if !all_symbols && explicit.is_empty() {
+                return Err("provide --symbols AAPL,MSFT,... or --all-symbols".into());
             }
             let mode = if resume {
                 yuzu_cli::fmp::WriteMode::Resume
@@ -402,17 +423,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 to,
                 include_fundamentals,
                 include_industry,
+                skip_non_stocks: !include_etf,
+                min_market_cap,
                 rate_limit_per_min: rate_limit,
                 max_retries,
                 backoff_base: std::time::Duration::from_secs(2),
                 mode,
             };
             let client = yuzu_cli::fmp::UreqClient::new();
+            let symbols = if all_symbols {
+                eprintln!("fetching full FMP symbol universe…");
+                let all = yuzu_cli::fmp::list_all_symbols(&client, &api_key, &cfg)?;
+                eprintln!("universe: {} symbols", all.len());
+                all
+            } else {
+                explicit
+            };
             let summary = yuzu_cli::fmp::sync(&client, &api_key, &symbols, &out, &cfg)?;
             eprintln!(
-                "done: {} symbols written, {} skipped, {} price rows, {} fundamentals, {} failures",
+                "done: {} written, {} skipped, {} filtered, {} price rows, {} fundamentals, {} failures",
                 summary.symbols_written,
                 summary.symbols_skipped,
+                summary.symbols_filtered,
                 summary.price_rows,
                 summary.fundamentals_written,
                 summary.failures.len(),
