@@ -1,6 +1,8 @@
 //! Native batch backtest runner. Logic lives here (testable); `main.rs` is a thin
 //! clap front end. Reads a locally-synced mirror of R2's `prices/` tree.
 
+pub mod fmp;
+
 use std::collections::HashMap;
 use std::path::Path;
 

@@ -2168,9 +2168,11 @@ name = "yuzu-cli"
 version = "0.3.0"
 dependencies = [
  "clap",
+ "flate2",
  "rayon",
  "serde",
  "serde_json",
+ "ureq",
  "yuzu-core",
  "yuzu-data",
 ]
