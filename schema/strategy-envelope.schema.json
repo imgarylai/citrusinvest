@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/imgarylai/citrusinvest/schema/strategy-envelope.schema.json",
+  "title": "Lemon strategy envelope",
+  "description": "A shareable, versioned strategy document: metadata + a strategy (as lemon `source` text or a lowered `spec` Expr tree) + reproducibility hints. Contains NO market data — it references series names and a universe window only. The authoritative validator is `lemon check` (crates/lemon-lang); this schema mirrors it for external consumers.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "name"],
+  "properties": {
+    "format": {
+      "description": "Envelope format version. This build understands version 1.",
+      "type": "integer",
+      "const": 1
+    },
+    "name": {
+      "description": "Human-readable strategy name (non-empty).",
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "author": {
+      "type": "string"
+    },
+    "source": {
+      "description": "Lemon source text. Exactly one of `source` / `spec` must be present.",
+      "type": "string"
+    },
+    "spec": {
+      "description": "A lowered Expr tree. Exactly one of `source` / `spec` must be present. Validated against schema/lemon-spec.schema.json.",
+      "$ref": "lemon-spec.schema.json"
+    },
+    "config": {
+      "description": "Engine config knobs (fees, slippage, delist, benchmark, bootstrap, …), interpreted by the engine/runner. Opaque here beyond being an object.",
+      "type": "object"
+    },
+    "universe": {
+      "description": "Date window + universe hint the run should cover. Names/windows only — never embedded data.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "description": "Inclusive start date, YYYYMMDD.",
+          "type": "integer"
+        },
+        "to": {
+          "description": "Inclusive end date, YYYYMMDD.",
+          "type": "integer"
+        },
+        "symbols_hint": {
+          "description": "A named universe hint (e.g. \"sp500\") the runner resolves to symbols.",
+          "type": "string"
+        },
+        "symbols": {
+          "description": "An explicit symbol list, if pinned.",
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "engine_version": {
+      "description": "Free-form engine-version pin for reproducibility (e.g. \"yuzu-core 0.4\").",
+      "type": "string"
+    }
+  },
+  "oneOf": [
+    { "required": ["source"], "not": { "required": ["spec"] } },
+    { "required": ["spec"], "not": { "required": ["source"] } }
+  ]
+}

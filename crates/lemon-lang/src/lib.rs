@@ -40,10 +40,12 @@
 //! `docs/lemon.md` in the repository.
 
 mod dsl;
+pub mod envelope;
 pub mod services;
 pub mod spec;
 
 pub use dsl::{format, lint, parse, parse_analyzed, Analysis, Lint, ParseError};
+pub use envelope::{Envelope, FORMAT_VERSION};
 pub use spec::Expr;
 
 /// Machine-readable op vocabulary: the catalog of callable ops (canonical names,
