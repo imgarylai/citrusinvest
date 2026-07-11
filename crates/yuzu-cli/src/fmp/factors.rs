@@ -8,6 +8,7 @@
 //! be lifted into a shared `yuzu-factors` crate and compiled to wasm (web) /
 //! PyO3 (Python) as the single source of truth for factor formulas. Keep it
 //! pure: numbers in, numbers out, no `Fetcher`, no `serde_json`.
+#![allow(dead_code)] // consumed by the snapshot-factor sync in a follow-up commit (#132)
 
 /// Midrank percentile of `v` within `cohort`: the fraction of cohort values
 /// strictly below `v`, plus half of those equal to `v`, in `[0, 1]`.
