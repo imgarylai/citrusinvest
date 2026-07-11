@@ -54,7 +54,7 @@ pub use config::{SyncConfig, SyncSummary, WriteMode};
 pub use delisted::{fetch_delisted, DelistedSymbol};
 pub use http::{HttpClient, HttpError, UreqClient};
 pub use index::{Index, IndexMembership, MEMBERSHIP_SERIES};
-pub use sync::sync;
+pub use sync::{sync, sync_into};
 pub use universe::{
     build_symbol_list, parse_market_cap, parse_symbols_list, SymbolFilter, US_EXCHANGES,
 };

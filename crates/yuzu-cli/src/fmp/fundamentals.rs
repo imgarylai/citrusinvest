@@ -6,7 +6,7 @@ use serde_json::Value;
 use yuzu_data::fundamentals::{
     write_fundamentals, FundamentalRow, FUNDAMENTALS_DIR, FUNDAMENTAL_FIELDS,
 };
-use yuzu_data::{LocalSource, ObjectSink};
+use yuzu_data::ObjectSink;
 
 use super::http::Fetcher;
 use super::util::{iso_to_i32, num};
@@ -139,7 +139,7 @@ pub(crate) fn densify_fundamentals(
 }
 pub(crate) fn sync_fundamentals<H: HttpClient>(
     fetcher: &Fetcher<H>,
-    sink: &LocalSource,
+    sink: &impl ObjectSink,
     sym: &str,
     api_key: &str,
     price_days: &[i32],

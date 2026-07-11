@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use serde_json::Value;
 use yuzu_data::industry::parse_industry_csv;
-use yuzu_data::{LocalSource, ObjectSource};
+use yuzu_data::ObjectSource;
 
 use super::http::Fetcher;
 use super::util::num;
@@ -60,7 +60,9 @@ pub(crate) fn fetch_profile<H: HttpClient>(
 
 /// Read the existing `tracked/universe.csv.gz` back into the accumulator so a
 /// resumed run does not drop sectors for symbols it skipped.
-pub(crate) fn load_existing_industry(src: &LocalSource) -> BTreeMap<String, (String, Option<f64>)> {
+pub(crate) fn load_existing_industry(
+    src: &impl ObjectSource,
+) -> BTreeMap<String, (String, Option<f64>)> {
     let Some(bytes) = src.get(INDUSTRY_KEY).ok().flatten() else {
         return BTreeMap::new();
     };

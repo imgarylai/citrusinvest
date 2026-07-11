@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use serde_json::Value;
 use yuzu_data::csv_io::{parse_series, Field, OhlcvRow};
-use yuzu_data::{LocalSource, ObjectSource, PRICES_DIR};
+use yuzu_data::{ObjectSource, PRICES_DIR};
 
 use super::config::SyncConfig;
 use super::util::{i32_to_iso, iso_to_i32, num};
@@ -48,7 +48,7 @@ pub(crate) fn parse_price_rows(rows: &[Value], cfg: &SyncConfig) -> Vec<OhlcvRow
     out.dedup_by_key(|r| r.day);
     out
 }
-pub(crate) fn read_existing_prices(src: &LocalSource, sym: &str) -> BTreeMap<i32, OhlcvRow> {
+pub(crate) fn read_existing_prices(src: &impl ObjectSource, sym: &str) -> BTreeMap<i32, OhlcvRow> {
     let key = format!("{PRICES_DIR}/{sym}.csv.gz");
     let Some(bytes) = src.get(&key).ok().flatten() else {
         return BTreeMap::new();
