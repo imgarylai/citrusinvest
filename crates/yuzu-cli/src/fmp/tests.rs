@@ -2,7 +2,7 @@
 
 use super::config::SyncConfig;
 use super::delisted::{exchange_filter, keep_exchange, parse_delisted_rows, DelistedSymbol};
-use super::fundamentals::{densify_fundamentals, merge_fundamentals};
+use super::fundamentals::{densify_fundamentals, merge_fundamentals, Snapshot};
 use super::http::{redact, HttpError};
 use super::price::parse_price_rows;
 use super::universe::parse_market_cap;
@@ -54,13 +54,18 @@ fn retryable_classification() {
     assert!(!HttpError::Status(404).retryable());
 }
 
+fn snap(visible: i32, fill: f64) -> Snapshot {
+    Snapshot {
+        visible,
+        values: vec![fill; FUNDAMENTAL_FIELDS.len()],
+        fell_back: false,
+    }
+}
+
 #[test]
 fn densify_forward_fills_and_marks_events() {
-    // Two annual snapshots; a 4-day trading calendar straddling both.
-    let snaps = vec![
-        (20240102, vec![10.0; FUNDAMENTAL_FIELDS.len()]),
-        (20240104, vec![20.0; FUNDAMENTAL_FIELDS.len()]),
-    ];
+    // Two snapshots (by visibility day); a 4-day trading calendar straddling both.
+    let snaps = vec![snap(20240102, 10.0), snap(20240104, 20.0)];
     let days = [20240101, 20240102, 20240103, 20240104];
     let rows = densify_fundamentals(&snaps, &days);
     assert_eq!(rows.len(), 4);
@@ -85,11 +90,59 @@ fn merge_fundamentals_spreads_fields_across_endpoints() {
     let growth = vec![serde_json::json!({"date":"2024-01-02","revenueGrowth":0.08})];
     let snaps = merge_fundamentals(&[ratios, metrics, growth]);
     assert_eq!(snaps.len(), 1);
-    let (day, vals) = &snaps[0];
-    assert_eq!(*day, 20240102);
-    assert_eq!(vals[0], 15.0); // pe
-    assert_eq!(vals[6], 1.0e12); // market_cap
-    assert_eq!(vals[11], 0.08); // revenue_growth
+    let s = &snaps[0];
+    // No filing date in any body → visible falls back to the period-end date.
+    assert_eq!(s.visible, 20240102);
+    assert!(s.fell_back);
+    assert_eq!(s.values[0], 15.0); // pe
+    assert_eq!(s.values[6], 1.0e12); // market_cap
+    assert_eq!(s.values[11], 0.08); // revenue_growth
+}
+
+#[test]
+fn merge_fundamentals_uses_filing_date_as_visibility() {
+    // Fiscal year ends 2023-12-31 but the report is only filed 2024-02-01.
+    // The snapshot must become visible on the *filing* day, not period-end.
+    let ratios = vec![serde_json::json!({"date":"2023-12-31","priceToEarningsRatio":12.0})];
+    let income = vec![serde_json::json!({
+        "date":"2023-12-31","filingDate":"2024-02-01","revenue":5.0e11
+    })];
+    let snaps = merge_fundamentals(&[ratios, income]);
+    assert_eq!(snaps.len(), 1);
+    let s = &snaps[0];
+    assert_eq!(s.visible, 20240201); // filing day, not 2023-12-31
+    assert!(!s.fell_back);
+    assert_eq!(s.values[0], 12.0); // pe (from ratios)
+    assert_eq!(s.values[10], 5.0e11); // revenue backfilled from income-statement
+
+    // And it must NOT appear in panel rows before the filing day.
+    let days = [20240102, 20240201, 20240202];
+    let rows = densify_fundamentals(&snaps, &days);
+    assert!(rows[0].values[0].is_nan()); // period-end passed, but not yet filed
+    assert_eq!(rows[0].report_event, 0.0);
+    assert_eq!(rows[1].values[0], 12.0); // visible on filing day
+    assert_eq!(rows[1].report_event, 1.0);
+    assert_eq!(rows[2].values[0], 12.0); // carried forward
+}
+
+#[test]
+fn merge_fundamentals_accepts_filing_date_aliases_and_sorts_by_visibility() {
+    // Older misspelled `fillingDate` and `acceptedDate` (with a time suffix) are
+    // both honored; snapshots come back ordered by visibility day.
+    let a = vec![serde_json::json!({
+        "date":"2023-12-31","fillingDate":"2024-03-01","priceToEarningsRatio":20.0
+    })];
+    let b = vec![serde_json::json!({
+        "date":"2022-12-31","acceptedDate":"2023-02-15 17:04:00","priceToEarningsRatio":10.0
+    })];
+    let snaps = merge_fundamentals(&[a, b]);
+    assert_eq!(snaps.len(), 2);
+    // 2023-02-15 (older fiscal year, earlier filing) sorts first.
+    assert_eq!(snaps[0].visible, 20230215);
+    assert_eq!(snaps[0].values[0], 10.0);
+    assert!(!snaps[0].fell_back);
+    assert_eq!(snaps[1].visible, 20240301);
+    assert_eq!(snaps[1].values[0], 20.0);
 }
 
 #[test]

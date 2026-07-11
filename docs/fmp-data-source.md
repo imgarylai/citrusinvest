@@ -197,7 +197,7 @@ yuzu-cli fmp-sync --api-key "$FMP_API_KEY" --out ./mydata \
 | Output | Flag | FMP endpoint (stable) |
 |--------|------|-----------------------|
 | `prices/{SYM}.csv.gz` (adjusted OHLCV) | always | `historical-price-eod/dividend-adjusted` |
-| `fundamentals/{SYM}.csv.gz` (dense forward-filled factors + `report_event`) | `--include-fundamentals` | `ratios` + `key-metrics` + `financial-growth` (annual) |
+| `fundamentals/{SYM}.csv.gz` (dense forward-filled factors + `report_event`, visible from the **filing date**) | `--include-fundamentals` | `ratios` + `key-metrics` + `financial-growth` + `income-statement` (annual) |
 | `tracked/universe.csv.gz` (`symbol,sector,market_cap`) | `--include-industry` | `profile` |
 | — (universe discovery / exchange, ETF & market-cap screen) | `--all-symbols`, `--exchange`, `--min-market-cap` | `company-screener`, `profile` |
 | — (delisted names unioned into the universe) | `--include-delisted` | `delisted-companies` |
@@ -285,6 +285,14 @@ ratios/metrics/growth endpoints and are dense forward-filled onto the price
 calendar; fields the plan does not return are left `NaN`. Delisted names can be
 unioned in with `--include-delisted` for survivorship-honest backtests (#124),
 and `--index sp500` reconstructs point-in-time index membership (#125).
+
+**Point-in-time visibility (#131).** A snapshot becomes visible on the day the
+report was **filed** (`filingDate` / `acceptedDate` from `income-statement`), not
+on the fiscal period-end — which is typically 1–3 months earlier. This avoids the
+lookahead bias of "seeing" full-year numbers before they were public. If a plan
+does not serve `income-statement` for a symbol, that symbol's snapshots fall back
+to period-end visibility (logged per symbol, and optimistic — the older behavior).
+`report_event` fires on the filing day.
 Richer fundamentals and full-universe / bulk rebuilds remain out
 of scope — see §2–§4 above for what a Starter key can and cannot honestly
 support, and #53 for the remaining follow-up.
