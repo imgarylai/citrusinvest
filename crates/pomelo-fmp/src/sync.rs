@@ -3,8 +3,8 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use yuzu_data::csv_io::{write_series, OhlcvRow};
-use yuzu_data::{LocalSource, ObjectSink, ObjectSource, PRICES_DIR};
+use pomelo_data::csv_io::{write_series, OhlcvRow};
+use pomelo_data::{LocalSource, ObjectSink, ObjectSource, PRICES_DIR};
 
 use super::config::{SyncConfig, SyncSummary, WriteMode};
 use super::fundamentals::sync_fundamentals;
@@ -28,7 +28,7 @@ pub fn sync<H: HttpClient>(
 }
 
 /// Storage-agnostic core: sync `symbols` from FMP into any `store` — local disk
-/// ([`LocalSource`]) or an S3/R2 bucket (`yuzu-source-s3`'s `S3Source`) — so the
+/// ([`LocalSource`]) or an S3/R2 bucket (`pomelo-s3`'s `S3Source`) — so the
 /// CLI and a backend service produce **byte-identical** trees for the same
 /// inputs. Prices are always fetched; fundamentals and industry are opt-in.
 /// Progress and per-symbol failures are logged to stderr (API key redacted); a

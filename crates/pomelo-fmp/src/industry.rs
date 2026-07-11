@@ -2,9 +2,9 @@
 
 use std::collections::BTreeMap;
 
+use pomelo_data::industry::parse_industry_csv;
+use pomelo_data::ObjectSource;
 use serde_json::Value;
-use yuzu_data::industry::parse_industry_csv;
-use yuzu_data::ObjectSource;
 
 use super::http::Fetcher;
 use super::util::num;

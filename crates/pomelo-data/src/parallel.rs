@@ -74,7 +74,7 @@ where
                                 }
                             }
                         }
-                        Err(e) => eprintln!("[yuzu-data] {dir}/{sym} parse failed: {e}"),
+                        Err(e) => eprintln!("[pomelo-data] {dir}/{sym} parse failed: {e}"),
                     }
                 }
                 Ok(map)
@@ -108,7 +108,7 @@ mod tests {
 
     #[test]
     fn fetch_symbols_probes_extensions_in_order_with_none_for_missing() {
-        let dir = std::env::temp_dir().join("yuzu_data_fetch_symbols");
+        let dir = std::env::temp_dir().join("pomelo_data_fetch_symbols");
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(dir.join("prices")).unwrap();
         // gzip CSV for AAA, plain CSV for BBB, nothing for CCC

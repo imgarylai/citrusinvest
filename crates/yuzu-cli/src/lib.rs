@@ -9,15 +9,15 @@ pub use pomelo_fmp as fmp;
 use std::collections::HashMap;
 use std::path::Path;
 
+use pomelo_data::{
+    load_combined_panel, load_panel, write_combined_panel, Field, LocalSource, ObjectSink,
+    PANELS_DIR, PRICES_DIR,
+};
 use rayon::prelude::*;
 use serde::Serialize;
 use yuzu_core::backtest::BacktestConfig;
 use yuzu_core::report::Report;
 use yuzu_core::{run_backtest, EvalContext};
-use yuzu_data::{
-    load_combined_panel, load_panel, write_combined_panel, Field, LocalSource, ObjectSink,
-    PANELS_DIR, PRICES_DIR,
-};
 
 /// Symbols with a per-symbol price file under `root/prices`, sorted and
 /// de-duplicated. Recognizes `.csv.gz`, `.parquet`, and `.csv`; the
@@ -123,7 +123,7 @@ pub(crate) fn load_ctx(
     // Auto-load snapshot-factor panels (piotroski_score, altman_z, …) from panels/
     // when present, so a factor strategy resolves them on the CLI path (the server
     // already loads these). Missing file → skipped (factor stays NaN).
-    for name in yuzu_data::fundamentals::FACTOR_PANEL_FIELDS {
+    for name in pomelo_data::fundamentals::FACTOR_PANEL_FIELDS {
         if panels.contains_key(*name) {
             continue;
         }

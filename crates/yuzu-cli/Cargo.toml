@@ -18,7 +18,7 @@ path = "src/main.rs"
 
 [dependencies]
 yuzu-core = { path = "../yuzu-core", version = "0.5.1" }
-yuzu-data = { path = "../yuzu-data", version = "0.5.1" }
+pomelo-data = { path = "../pomelo-data", version = "0.5.1" }
 # FMP data sync + snapshot-factor formulas live in their own crate so a backend
 # service can link the same logic (and write to S3/R2 via the ObjectSink core).
 # default-features=false keeps the pure parts (index membership, factor math)

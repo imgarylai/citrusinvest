@@ -7,7 +7,7 @@ use super::http::{redact, HttpError};
 use super::price::parse_price_rows;
 use super::universe::parse_market_cap;
 use super::util::{i32_to_iso, iso_to_i32};
-use yuzu_data::fundamentals::FUNDAMENTAL_FIELDS;
+use pomelo_data::fundamentals::FUNDAMENTAL_FIELDS;
 
 #[test]
 fn parse_market_cap_handles_suffixes_and_plain_numbers() {

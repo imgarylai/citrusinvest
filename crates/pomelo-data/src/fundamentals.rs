@@ -322,7 +322,7 @@ mod tests {
     fn load_fundamental_panel_union_dates_and_nan() {
         use crate::source::LocalSource;
         use std::fs;
-        let dir = std::env::temp_dir().join("yuzu_data_fund_panel");
+        let dir = std::env::temp_dir().join("pomelo_data_fund_panel");
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(dir.join("fundamentals")).unwrap();
         fs::write(

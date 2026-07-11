@@ -1,15 +1,15 @@
-//! Generic S3 `ObjectSource` for `yuzu-data` — reads objects from any
+//! Generic S3 `ObjectSource` for `pomelo-data` — reads objects from any
 //! S3-compatible store (Cloudflare R2, AWS S3, MinIO, GCS-S3) over HTTPS with
 //! SigV4-presigned GETs. Endpoint is configurable, so nothing here is
 //! Cloudflare-specific; the container points it at R2, OSS users at anything.
 //!
-//! `yuzu-data` stays pure (trait + `LocalSource`); cloud access lives here.
+//! `pomelo-data` stays pure (trait + `LocalSource`); cloud access lives here.
 
 use std::time::Duration;
 
+use pomelo_data::error::DataError;
+use pomelo_data::{ObjectSink, ObjectSource};
 use rusty_s3::{Bucket, Credentials, S3Action, UrlStyle};
-use yuzu_data::error::DataError;
-use yuzu_data::{ObjectSink, ObjectSource};
 
 /// How long a presigned GET URL stays valid — generous, single-shot use.
 const SIGN_TTL: Duration = Duration::from_secs(300);

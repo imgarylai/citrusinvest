@@ -5,15 +5,15 @@
 use std::cell::RefCell;
 use std::time::Duration;
 
+use pomelo_data::csv_io::parse_series;
+use pomelo_data::fundamentals::parse_fundamentals;
+use pomelo_data::{load_combined_panel, Field, LocalSource, ObjectSource, PANELS_DIR};
 use yuzu_cli::fmp::{
     build_symbol_list, fetch_delisted, parse_symbols_list, sync, HttpClient, HttpError, Index,
     IndexMembership, SymbolFilter, SyncConfig, WriteMode, US_EXCHANGES,
 };
 use yuzu_cli::{run_single, write_index_membership};
 use yuzu_core::backtest::BacktestConfig;
-use yuzu_data::csv_io::parse_series;
-use yuzu_data::fundamentals::parse_fundamentals;
-use yuzu_data::{load_combined_panel, Field, LocalSource, ObjectSource, PANELS_DIR};
 
 /// A scripted mock HTTP client. Each entry maps a URL *substring* to a queue of
 /// responses; each GET pops the next response for the first matching pattern
@@ -592,7 +592,7 @@ fn industry_snapshot_is_written_from_profiles() {
         .get("tracked/universe.csv.gz")
         .unwrap()
         .unwrap();
-    let map = yuzu_data::industry::parse_industry_csv(&decode(&bytes));
+    let map = pomelo_data::industry::parse_industry_csv(&decode(&bytes));
     assert_eq!(map.get("AAPL").map(String::as_str), Some("Technology"));
     assert_eq!(map.get("XOM").map(String::as_str), Some("Energy"));
 }

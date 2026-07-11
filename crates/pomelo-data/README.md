@@ -1,6 +1,6 @@
-# yuzu-data
+# pomelo-data
 
-[![crates.io](https://img.shields.io/crates/v/yuzu-data)](https://crates.io/crates/yuzu-data)
+[![crates.io](https://img.shields.io/crates/v/pomelo-data)](https://crates.io/crates/pomelo-data)
 
 Native I/O layer for [citrusquant](https://github.com/citrusquant/citrusquant):
 reads price and fundamental files into
@@ -25,7 +25,7 @@ Parquet pulls the arrow stack. Consumers that only need CSV/gzip and want to
 avoid that dependency can opt out:
 
 ```toml
-yuzu-data = { version = "0.1", default-features = false }
+pomelo-data = { version = "0.1", default-features = false }
 ```
 
 **On-disk / object-key contract** (directory tree, CSV columns, series-name map):

@@ -18,8 +18,8 @@ path = "src/main.rs"
 
 [dependencies]
 yuzu-core = { path = "../yuzu-core", version = "0.5.1" }
-yuzu-data = { path = "../yuzu-data", version = "0.5.1" }
-yuzu-source-s3 = { path = "../yuzu-source-s3", version = "0.5.1" }
+pomelo-data = { path = "../pomelo-data", version = "0.5.1" }
+pomelo-s3 = { path = "../pomelo-s3", version = "0.5.1" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tiny_http = "0.12"

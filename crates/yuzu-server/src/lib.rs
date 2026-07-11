@@ -11,14 +11,14 @@ use std::collections::{BTreeSet, HashMap};
 use serde::Deserialize;
 use serde_json::Value;
 
-use yuzu_core::backtest::BacktestConfig;
-use yuzu_core::report::Report;
-use yuzu_core::{run_backtest, EvalContext};
-use yuzu_data::{
+use pomelo_data::{
     is_fundamental_series, load_combined_panel, load_fundamental_panel, load_panel,
     rebuild_combined_panels, Field, ObjectSink, ObjectSource, RebuildSummary, FUNDAMENTALS_DIR,
     PANELS_DIR, PRICES_DIR,
 };
+use yuzu_core::backtest::BacktestConfig;
+use yuzu_core::report::Report;
+use yuzu_core::{run_backtest, EvalContext};
 
 /// Object-key layout, overridable via env so a custom bucket prefix works.
 pub struct DataDirs {
@@ -302,10 +302,10 @@ pub fn handle_backtest<S: ObjectSource + Sync>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pomelo_data::csv_io::{write_series, OhlcvRow};
+    use pomelo_data::fundamentals::{write_fundamentals, FundamentalRow};
+    use pomelo_data::{LocalSource, FUNDAMENTAL_FIELDS};
     use std::path::Path;
-    use yuzu_data::csv_io::{write_series, OhlcvRow};
-    use yuzu_data::fundamentals::{write_fundamentals, FundamentalRow};
-    use yuzu_data::{LocalSource, FUNDAMENTAL_FIELDS};
 
     fn ohlcv(day: i32, c: f64) -> OhlcvRow {
         OhlcvRow {
@@ -614,7 +614,7 @@ mod tests {
         let source = LocalSource::new(&dir);
         let syms = vec!["CMBA".to_string(), "CMBB".to_string()];
         // build the combined panels the loader will now prefer
-        yuzu_data::rebuild_combined_panels(&source, &syms, "prices", "fundamentals", "panels")
+        pomelo_data::rebuild_combined_panels(&source, &syms, "prices", "fundamentals", "panels")
             .unwrap();
         // delete per-symbol sources so only the combined files remain — forces the
         // combined-first path (fallback now has nothing to load).
