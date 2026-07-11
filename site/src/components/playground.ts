@@ -97,7 +97,15 @@ function fmt(key: string, v: number | null | undefined): string {
   return v.toFixed(2);
 }
 
-function drawEquity(canvas: HTMLCanvasElement, report: Report): void {
+const reducedMotion = () =>
+  typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/**
+ * Draw the equity curve. Colors come from CSS custom properties on the canvas
+ * (--pg-line, --pg-grid, --pg-canvas-bg) so the chart follows the site theme.
+ * On first draw the line sweeps in left-to-right (skipped for reduced motion).
+ */
+function drawEquity(canvas: HTMLCanvasElement, report: Report, animate: boolean): void {
   const dpr = window.devicePixelRatio || 1;
   const cssW = canvas.clientWidth || 640;
   const cssH = 280;
@@ -105,8 +113,10 @@ function drawEquity(canvas: HTMLCanvasElement, report: Report): void {
   canvas.height = cssH * dpr;
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
-  ctx.scale(dpr, dpr);
-  ctx.clearRect(0, 0, cssW, cssH);
+
+  const styles = getComputedStyle(canvas);
+  const lineColor = styles.getPropertyValue('--pg-line').trim() || '#b8860b';
+  const gridColor = styles.getPropertyValue('--pg-grid').trim() || 'rgba(128,128,128,0.3)';
 
   const eq = report.equity.filter((x) => Number.isFinite(x));
   if (eq.length < 2) return;
@@ -120,39 +130,56 @@ function drawEquity(canvas: HTMLCanvasElement, report: Report): void {
   const x = (i: number) => pad.l + (i / (n - 1)) * w;
   const y = (v: number) => pad.t + h - ((v - min) / span) * h;
 
-  // baseline at 1.0 (rebased start)
-  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(pad.l, y(1));
-  ctx.lineTo(pad.l + w, y(1));
-  ctx.stroke();
+  const drawUpTo = (frac: number) => {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, cssW, cssH);
 
-  // equity line
-  ctx.strokeStyle = '#ffcf40';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  let started = false;
-  for (let i = 0; i < n; i++) {
-    const v = report.equity[i];
-    if (!Number.isFinite(v)) continue;
-    const px = x(i);
-    const py = y(v);
-    if (!started) {
-      ctx.moveTo(px, py);
-      started = true;
-    } else {
-      ctx.lineTo(px, py);
+    // baseline at 1.0 (rebased start)
+    ctx.strokeStyle = gridColor;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(pad.l, y(1));
+    ctx.lineTo(pad.l + w, y(1));
+    ctx.stroke();
+
+    const last = Math.max(2, Math.ceil(n * frac));
+    ctx.strokeStyle = lineColor;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    let started = false;
+    for (let i = 0; i < last; i++) {
+      const v = report.equity[i];
+      if (!Number.isFinite(v)) continue;
+      if (!started) {
+        ctx.moveTo(x(i), y(v));
+        started = true;
+      } else {
+        ctx.lineTo(x(i), y(v));
+      }
     }
-  }
-  ctx.stroke();
+    ctx.stroke();
 
-  // end label
-  const last = report.equity[n - 1];
-  ctx.fillStyle = '#ffcf40';
-  ctx.font = '12px system-ui, sans-serif';
-  ctx.textAlign = 'right';
-  ctx.fillText(`${last.toFixed(2)}×`, pad.l + w, y(last) - 6);
+    if (frac >= 1) {
+      const end = report.equity[n - 1];
+      ctx.fillStyle = lineColor;
+      ctx.font = '12px ui-monospace, monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText(`${end.toFixed(2)}×`, pad.l + w, Math.max(12, y(end) - 6));
+    }
+  };
+
+  if (!animate || reducedMotion()) {
+    drawUpTo(1);
+    return;
+  }
+  const t0 = performance.now();
+  const DURATION = 550;
+  const step = (t: number) => {
+    const frac = Math.min(1, (t - t0) / DURATION);
+    drawUpTo(frac);
+    if (frac < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
 }
 
 function setStatus(el: HTMLElement, msg: string, kind: 'info' | 'error'): void {
@@ -166,6 +193,7 @@ export function initPlayground(root: HTMLElement): void {
   const status = root.querySelector<HTMLElement>('.pg-status')!;
   const metricsEl = root.querySelector<HTMLElement>('.pg-metrics')!;
   const canvas = root.querySelector<HTMLCanvasElement>('.pg-chart')!;
+  let firstDraw = true;
 
   const editor = createLemonEditor(
     editorEl,
@@ -210,9 +238,12 @@ export function initPlayground(root: HTMLElement): void {
       };
 
       setStatus(status, 'Running backtest…', 'info');
+      const t0 = performance.now();
       const report = JSON.parse(yuzuMod!.run_backtest(JSON.stringify(input))) as Report;
+      const ms = performance.now() - t0;
 
-      drawEquity(canvas, report);
+      drawEquity(canvas, report, firstDraw);
+      firstDraw = false;
       metricsEl.innerHTML = METRIC_TILES.map(
         ([k, label]) =>
           `<div class="pg-metric"><div class="k">${label}</div><div class="v">${fmt(
@@ -222,7 +253,11 @@ export function initPlayground(root: HTMLElement): void {
       ).join('');
       const first = report.dates[0];
       const lastD = report.dates[report.dates.length - 1];
-      setStatus(status, `Done — ${report.dates.length} trading days (${first} → ${lastD}).`, 'info');
+      setStatus(
+        status,
+        `Done in ${ms < 10 ? ms.toFixed(1) : Math.round(ms)} ms — ${report.dates.length} trading days (${first} → ${lastD}), in your browser.`,
+        'info',
+      );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (/wasm|import|fetch|\.js/i.test(msg)) {
@@ -240,4 +275,21 @@ export function initPlayground(root: HTMLElement): void {
   }
 
   runBtn.addEventListener('click', run);
+
+  // Example chips: any element with data-pg-example anywhere on the page loads
+  // its strategy into the editor and runs it.
+  document.addEventListener('click', (ev) => {
+    const chip = (ev.target as HTMLElement).closest<HTMLElement>('[data-pg-example]');
+    if (!chip) return;
+    ev.preventDefault();
+    editor.setValue(chip.dataset.pgExample ?? '');
+    root.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'center' });
+    run();
+  });
+
+  // Landing-page embeds auto-run once so the hero is alive without a click.
+  if (root.dataset.autorun !== undefined) {
+    const kick = () => run();
+    'requestIdleCallback' in window ? requestIdleCallback(kick, { timeout: 1500 }) : setTimeout(kick, 200);
+  }
 }

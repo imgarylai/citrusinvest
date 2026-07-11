@@ -57,14 +57,18 @@ above their 50-day average."*
 
 ## 5. Using fundamentals
 
-The sample dataset also carries a `pe` panel. Prefer cheaper names by ranking on
-inverse P/E — `rank(of, ascending=...)` gives a cross-sectional rank:
+The sample dataset also carries a `pe` panel — real trailing P/E built from SEC
+EDGAR filings (see [about the data](../playground#about-the-data)). Prefer
+cheaper names by ranking on it:
 
 ```text
 is_smallest(pe, 3) and (close > sma(close, 20))
 ```
 
-*"Hold the 3 lowest-P/E names that are also trending up."*
+*"Hold the 3 lowest-P/E names that are also trending up."* Note that P/E can be
+**missing**: AMZN's trailing EPS was negative through 2015, so its P/E is
+undefined there — and `is_smallest` simply never selects it. Missing data is a
+first-class case in the engine, not an error.
 
 ## 6. Run it
 

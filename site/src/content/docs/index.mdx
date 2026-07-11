@@ -1,57 +1,167 @@
 ---
-title: citrusquant
-description: Learn the yuzu backtest engine and the lemon strategy DSL — with an in-browser backtest playground.
+title: A readable open-source backtest engine
+description: yuzu is an open-source Rust backtest engine; lemon is a one-expression strategy DSL. The demo on this page runs the real engine on real market data, in your browser.
 template: splash
 hero:
-  tagline: An open-source Rust backtest engine (yuzu) and a small strategy DSL (lemon). Write a strategy, run a backtest — right here in your browser.
+  title: '<span class="lp-kicker">Open source · MIT · Rust</span><code class="lp-code">is_largest(sma(close,&nbsp;2),&nbsp;3)</code>'
+  tagline: >-
+    …is a complete trading strategy: <em>“hold the 3 names with the highest
+    2-day average close.”</em> <strong>lemon</strong> is the little language
+    it&rsquo;s written in; <strong>yuzu</strong> is the Rust engine that backtests
+    it. Below, the real engine — compiled to WebAssembly — runs it against three
+    years of real market data, right here in your browser. No server, no signup.
   actions:
+    - text: Star on GitHub
+      link: https://github.com/citrusquant/citrusquant
+      icon: github
+      variant: primary
     - text: Quickstart
       link: start/quickstart
       icon: right-arrow
-      variant: primary
-    - text: Try the playground
-      link: playground
-      icon: rocket
-    - text: View on GitHub
-      link: https://github.com/citrusquant/citrusquant
-      icon: external
+    - text: Read the language spec
+      link: reference/lemon
+      variant: minimal
 ---
 
-import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+import { Tabs, TabItem, LinkCard, CardGrid } from '@astrojs/starlight/components';
+import Playground from '../../components/Playground.astro';
 
-## What this is
+<Playground autorun />
 
-**citrusquant** turns a one-line strategy into an equity curve, a trade list,
-and a full metrics report. Two pieces:
+<p class="lp-provenance not-content">
+  <strong>Real data, honestly sourced.</strong> Daily bars for 10 US large-caps
+  (AAPL, NVDA, XOM, …), Nov 2014 – Nov 2017, from a
+  <a href="https://www.kaggle.com/datasets/borismarjanovic/price-volume-data-for-all-us-stocks-etfs">CC0 public-domain dataset</a>;
+  P/E derived from <a href="https://www.sec.gov/search-filings/edgar-application-programming-interfaces">SEC EDGAR</a> filings
+  and visible only from each 10-K's <em>filing date</em> — no look-ahead.
+  Why data ending in 2017? It's the newest daily dataset that's genuinely free
+  to redistribute — <a href="playground/#about-the-data">the fine print</a>.
+</p>
 
-- **lemon** — a small, readable DSL. `is_largest(sma(close, 2), 3)` means
-  *"hold the three names with the highest 2-day average close."*
-- **yuzu** — a pure, I/O-free engine that evaluates the strategy against your
-  price/fundamental panels and produces a `Report`.
+## Try an idea
 
-It compiles to native (batch backtests via Rayon) **and** WebAssembly — which is
-exactly why the [playground](playground) can run a real backtest with no server.
+<div class="lp-chips not-content">
+  <button type="button" data-pg-example={`# 3-month momentum: hold the 3 strongest names.
+is_largest(pct_change(close, 63), 3)`}>Momentum</button>
+  <button type="button" data-pg-example={`# Cheap AND trending: lowest P/E, above the 20-day average.
+is_smallest(pe, 3) and (close > sma(close, 20))`}>Value + trend</button>
+  <button type="button" data-pg-example={`# Trend filter across the whole universe, skip the overbought.
+close > sma(close, 50) and rsi(close, 14) < 70`}>Trend + RSI</button>
+  <button type="button" data-pg-example={`# Same momentum idea, rebalanced monthly instead of daily.
+rebalance(is_largest(pct_change(close, 63), 3), freq="ME")`}>Monthly rebalance</button>
+</div>
 
-<CardGrid stagger>
-  <Card title="Readable strategies" icon="pencil">
-    Author in lemon; the engine lowers it to a JSON `Expr` tree. No boilerplate.
-  </Card>
-  <Card title="Runs in the browser" icon="rocket">
-    The same engine that runs native batch backtests is compiled to WASM.
-  </Card>
-  <Card title="Bring your own data" icon="document">
-    The engine ships no market data — you feed panels. See the data guide.
-  </Card>
-  <Card title="Rust-native API" icon="setting">
-    Published crates document themselves on docs.rs.
-  </Card>
-</CardGrid>
+Each chip loads into the editor above and re-runs — watch how the metrics move.
+The language has ~60 built-in ops: moving averages, MACD / ADX / Bollinger,
+cross-sectional ranks, industry neutralization, volatility targeting, stateful
+entry/exit rotation. [The whole spec fits on one page](reference/lemon).
 
-## Start here
+## How it's built
+
+<div class="lp-grid not-content">
+  <div class="lp-cell">
+    <h3>A pure function</h3>
+    <p>The core is I/O-free: <code>(strategy spec, data panels) → Report</code>.
+    No database, no network, no hidden state — which is what makes it trivially
+    embeddable, and easy to test.</p>
+  </div>
+  <div class="lp-cell">
+    <h3>One core, two targets</h3>
+    <p>The same crate compiles native (batch backtests parallelized with Rayon)
+    and to WASM. This page and the <a href="https://crates.io/crates/yuzu-core">published crates</a>
+    run the identical engine — there is no JavaScript reimplementation to drift.</p>
+  </div>
+  <div class="lp-cell">
+    <h3>A DSL, not a framework</h3>
+    <p>lemon parses to a JSON expression tree; the engine evaluates it over
+    price/fundamental panels. Even this page's <em>syntax highlighting</em> comes
+    from the engine's own lexer, compiled to WASM.</p>
+  </div>
+  <div class="lp-cell">
+    <h3>Bring your own data</h3>
+    <p>The engine ships no market data and never phones home. Feed it panels
+    from any source you're licensed to use — see the
+    <a href="guides/bring-your-own-data">data guide</a>.</p>
+  </div>
+</div>
+
+## Get it
+
+<Tabs>
+  <TabItem label="Rust">
+    ```bash
+    cargo add yuzu-core lemon-lang
+    ```
+
+    ```rust
+    let spec = lemon::parse("is_largest(sma(close, 2), 3)")?;
+    let report = yuzu_core::run_backtest(&spec, &ctx, "close", &cfg)?;
+    ```
+
+    Or clone and run the self-contained example — the best 40 lines to read first:
+
+    ```bash
+    git clone https://github.com/citrusquant/citrusquant
+    cargo run -p yuzu-core --example basic_backtest
+    ```
+  </TabItem>
+  <TabItem label="Python">
+    ```bash
+    pip install yuzu-backtest
+    ```
+
+    ```python
+    import yuzu
+
+    report = yuzu.run_backtest(
+        "close > sma(close, 20)",   # lemon source, straight in
+        panels={"close": df_close}, # pandas/polars DataFrame (dates × symbols)
+        config={"fee_ratio": 0.001},
+    )
+    report["metrics"]["sharpe"]
+    ```
+
+    Same Rust core underneath (abi3 wheels, Python ≥ 3.9) —
+    see <a href="https://github.com/citrusquant/citrusquant/tree/main/crates/yuzu-py">crates/yuzu-py</a>.
+  </TabItem>
+  <TabItem label="Browser / Workers">
+    ```bash
+    npm install @citrusquant/yuzu-wasm @citrusquant/lemon-wasm
+    ```
+
+    The wasm-pack artifacts this very page runs on. They work in browsers and
+    Cloudflare Workers — see the <a href="reference/api">API reference</a>.
+  </TabItem>
+</Tabs>
+
+## What it is — and isn't
+
+<div class="lp-honest not-content">
+  <div class="lp-is">
+    <h3>It is</h3>
+    <ul>
+      <li>A daily-bar, portfolio-level backtest engine for cross-sectional and trend strategies</li>
+      <li>A small, readable strategy language with a complete <a href="reference/lemon">one-page spec</a></li>
+      <li>Deterministic and I/O-free — same input, same <code>Report</code>, native or WASM</li>
+      <li>MIT-licensed: <a href="https://crates.io/crates/yuzu-core">crates</a>, <a href="https://pypi.org/project/yuzu-backtest/">PyPI wheels</a>, npm WASM packages</li>
+    </ul>
+  </div>
+  <div class="lp-isnt">
+    <h3>It isn't</h3>
+    <ul>
+      <li>Not a data vendor — you bring panels you're licensed to use</li>
+      <li>Not tick or order-book simulation — bars in, portfolio NAV out</li>
+      <li>Not a broker or execution layer — it stops at the report</li>
+      <li>Not investment advice — it computes; you decide</li>
+    </ul>
+  </div>
+</div>
+
+## Keep reading
 
 <CardGrid>
-  <LinkCard title="Quickstart" description="Install, run the bundled example, see a report in minutes." href="start/quickstart" />
+  <LinkCard title="Quickstart" description="Install, run the bundled example, read your first report." href="start/quickstart" />
   <LinkCard title="Your first strategy" description="Build up a lemon strategy one operator at a time." href="start/first-strategy" />
-  <LinkCard title="Interactive playground" description="Edit a strategy and backtest it in your browser." href="playground" />
-  <LinkCard title="Reading a report" description="What every metric and series in a Report means." href="guides/reading-a-report" />
+  <LinkCard title="Reading a report" description="What every metric in a Report means — and what it doesn't." href="guides/reading-a-report" />
+  <LinkCard title="Engine internals" description="NAV model, warm-ups, fees, stops — the full contract." href="reference/backtest-engine" />
 </CardGrid>

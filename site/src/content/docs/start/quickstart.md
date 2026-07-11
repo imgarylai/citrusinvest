@@ -9,9 +9,10 @@ You have two ways to run a backtest: **in your browser** (zero install) or
 ## Option A — the browser playground (0 minutes)
 
 Open the [interactive playground](../playground). It loads the WASM build of the
-engine plus a small synthetic dataset and runs a real backtest locally — nothing
-is sent to a server. Edit the strategy, press **Run**, and read the equity curve
-and metrics. This is the fastest way to get a feel for lemon.
+engine plus three years of real daily bars for 10 US large-caps and runs a real
+backtest locally — nothing is sent to a server. Edit the strategy, press
+**Run**, and read the equity curve and metrics. This is the fastest way to get
+a feel for lemon.
 
 ## Option B — native Rust (a few minutes)
 
