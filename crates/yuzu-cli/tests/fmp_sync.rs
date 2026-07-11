@@ -91,7 +91,7 @@ fn cfg() -> SyncConfig {
 }
 
 fn tmp(tag: &str) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("yuzu_fmp_{tag}"));
+    let dir = std::env::temp_dir().join(format!("pomelo_fmp_{tag}"));
     let _ = std::fs::remove_dir_all(&dir);
     dir
 }

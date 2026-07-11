@@ -1,20 +1,31 @@
 //! Bring-your-own-key FMP ([Financial Modeling Prep](https://site.financialmodelingprep.com/))
-//! data sync for `yuzu-cli` (issue #52).
+//! data sync + snapshot-factor formulas (issue #52 / #132).
 //!
 //! Direct HTTP, **no third-party FMP SDK**. Given the user's own API key, fetch
-//! adjusted daily bars (and optionally annual fundamentals + a `symbol → sector`
-//! industry map) and write a local tree that matches
-//! [`docs/data-layout.md`](../../../docs/data-layout.md):
+//! adjusted daily bars (and optionally annual fundamentals, a `symbol → sector`
+//! industry map, and snapshot-factor panels) and write a [`docs/data-layout.md`](../../../docs/data-layout.md)
+//! tree:
 //!
 //! ```text
 //! <out>/prices/{SYM}.csv.gz        adjusted OHLCV                 (always)
 //! <out>/fundamentals/{SYM}.csv.gz  dense forward-filled factors   (--include-fundamentals)
 //! <out>/tracked/universe.csv.gz    symbol,sector,market_cap       (--include-industry)
+//! <out>/panels/{name}.csv.gz       snapshot-factor panels         (--include-snapshot-factors)
 //! ```
 //!
+//! ## Reuse across CLI and service
+//!
+//! [`sync`] writes to a local path; [`sync_into`] is the storage-agnostic core
+//! over any `ObjectSink` + `ObjectSource`, so the CLI and a backend service
+//! produce **byte-identical** trees whether the destination is local disk or an
+//! S3/R2 bucket (`yuzu-source-s3`'s `S3Source`). The pure [`factors`] formulas
+//! are the single source of truth a Rust service links directly (and wasm/PyO3
+//! bindings can expose later).
+//!
 //! The key never leaves the machine; we neither host nor redistribute FMP data.
-//! FMP lives **only** here in the CLI — never in `yuzu-core`, `yuzu-data`, or WASM
-//! (the [`HttpClient`] indirection keeps the networking optional and testable).
+//! FMP stays **out** of `yuzu-core` / `yuzu-data` / WASM — the [`HttpClient`]
+//! indirection keeps networking optional (build with `--no-default-features`)
+//! and testable.
 //!
 //! ## MVP scope
 //!
@@ -31,7 +42,9 @@
 
 mod config;
 mod delisted;
-mod factors;
+/// Pure, I/O-free snapshot-factor formulas — the canonical implementation the
+/// CLI, a Rust service, and (later) wasm/PyO3 bindings all share.
+pub mod factors;
 mod fundamentals;
 mod http;
 mod index;
@@ -53,7 +66,11 @@ pub(crate) const INDUSTRY_KEY: &str = "tracked/universe.csv.gz";
 
 pub use config::{SyncConfig, SyncSummary, WriteMode};
 pub use delisted::{fetch_delisted, DelistedSymbol};
-pub use http::{HttpClient, HttpError, UreqClient};
+/// The real ureq-backed client — only with the `fmp-sync` feature. A dependent
+/// that supplies its own [`HttpClient`] can build with the feature off.
+#[cfg(feature = "fmp-sync")]
+pub use http::UreqClient;
+pub use http::{HttpClient, HttpError};
 pub use index::{Index, IndexMembership, MEMBERSHIP_SERIES};
 pub use sync::{sync, sync_into};
 pub use universe::{
