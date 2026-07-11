@@ -14,15 +14,29 @@ use super::price::{parse_price_rows, price_url, read_existing_prices};
 use super::HttpClient;
 use super::INDUSTRY_KEY;
 
-/// Sync `symbols` from FMP into the `out` tree per [`SyncConfig`]. Prices are
-/// always fetched; fundamentals and industry are opt-in. Progress and per-symbol
-/// failures are logged to stderr (with the API key redacted); a per-symbol
-/// failure is recorded and the batch continues.
+/// Sync `symbols` from FMP into the local `out` tree per [`SyncConfig`] — a thin
+/// convenience wrapper over [`sync_into`] for the common on-disk case.
 pub fn sync<H: HttpClient>(
     http: &H,
     api_key: &str,
     symbols: &[String],
     out: &Path,
+    cfg: &SyncConfig,
+) -> Result<SyncSummary, String> {
+    sync_into(http, api_key, symbols, &LocalSource::new(out), cfg)
+}
+
+/// Storage-agnostic core: sync `symbols` from FMP into any `store` — local disk
+/// ([`LocalSource`]) or an S3/R2 bucket (`yuzu-source-s3`'s `S3Source`) — so the
+/// CLI and a backend service produce **byte-identical** trees for the same
+/// inputs. Prices are always fetched; fundamentals and industry are opt-in.
+/// Progress and per-symbol failures are logged to stderr (API key redacted); a
+/// per-symbol failure is recorded and the batch continues.
+pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
+    http: &H,
+    api_key: &str,
+    symbols: &[String],
+    store: &S,
     cfg: &SyncConfig,
 ) -> Result<SyncSummary, String> {
     if api_key.trim().is_empty() {
@@ -35,14 +49,13 @@ pub fn sync<H: HttpClient>(
         return Err(format!("from ({}) is after to ({})", cfg.from, cfg.to));
     }
 
-    let sink = LocalSource::new(out);
     let fetcher = Fetcher::new(http, cfg);
     let mut summary = SyncSummary::default();
 
     // For --include-industry, start from the existing snapshot so resumed /
     // skipped symbols keep their sector rows.
     let mut industry: BTreeMap<String, (String, Option<f64>)> = if cfg.include_industry {
-        load_existing_industry(&sink)
+        load_existing_industry(store)
     } else {
         BTreeMap::new()
     };
@@ -53,7 +66,7 @@ pub fn sync<H: HttpClient>(
 
     for sym in symbols {
         let price_key = format!("{PRICES_DIR}/{sym}.csv.gz");
-        if cfg.mode == WriteMode::Resume && sink.get(&price_key).ok().flatten().is_some() {
+        if cfg.mode == WriteMode::Resume && store.get(&price_key).ok().flatten().is_some() {
             eprintln!("{sym}: already present, skipping (resume)");
             summary.symbols_skipped += 1;
             continue;
@@ -117,7 +130,7 @@ pub fn sync<H: HttpClient>(
 
         // Merge onto existing history when appending.
         let rows: Vec<OhlcvRow> = if cfg.mode == WriteMode::Append {
-            let mut by_day = read_existing_prices(&sink, sym);
+            let mut by_day = read_existing_prices(store, sym);
             for r in fetched {
                 by_day.insert(r.day, r);
             }
@@ -128,7 +141,7 @@ pub fn sync<H: HttpClient>(
 
         match write_series(&rows).map_err(|e| e.to_string()) {
             Ok(bytes) => {
-                if let Err(e) = sink.put(&price_key, &bytes) {
+                if let Err(e) = store.put(&price_key, &bytes) {
                     let e = e.to_string();
                     eprintln!("{sym}: write failed: {e}");
                     summary.failures.push((sym.clone(), e));
@@ -148,7 +161,7 @@ pub fn sync<H: HttpClient>(
         let price_days: Vec<i32> = rows.iter().map(|r| r.day).collect();
 
         if cfg.include_fundamentals {
-            match sync_fundamentals(&fetcher, &sink, sym, api_key, &price_days) {
+            match sync_fundamentals(&fetcher, store, sym, api_key, &price_days) {
                 Ok(true) => summary.fundamentals_written += 1,
                 Ok(false) => {}
                 Err(e) => {
@@ -174,7 +187,7 @@ pub fn sync<H: HttpClient>(
 
     if cfg.include_industry && !industry.is_empty() {
         let bytes = encode_industry(&industry).map_err(|e| e.to_string())?;
-        sink.put(INDUSTRY_KEY, &bytes).map_err(|e| e.to_string())?;
+        store.put(INDUSTRY_KEY, &bytes).map_err(|e| e.to_string())?;
         summary.industry_written = true;
         eprintln!("wrote {} industry rows to {INDUSTRY_KEY}", industry.len());
     }
