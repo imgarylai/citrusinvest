@@ -1,7 +1,10 @@
 //! Native batch backtest runner. Logic lives here (testable); `main.rs` is a thin
 //! clap front end. Reads a locally-synced mirror of R2's `prices/` tree.
 
-pub mod fmp;
+/// The FMP data sync + snapshot-factor formulas, re-exported from the standalone
+/// `pomelo-fmp` crate. Kept under the `yuzu_cli::fmp::…` path so existing callers
+/// (and the CLI binary) are unchanged after the extraction.
+pub use pomelo_fmp as fmp;
 
 use std::collections::HashMap;
 use std::path::Path;

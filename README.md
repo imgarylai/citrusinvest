@@ -27,7 +27,8 @@ contract live in [`docs/backtest-engine.md`](docs/backtest-engine.md).
 |-------|-------------|
 | [`yuzu-core`](https://crates.io/crates/yuzu-core) | Pure, I/O-free backtest engine core. |
 | [`yuzu-data`](https://crates.io/crates/yuzu-data) | Native I/O: gzip CSV price/fundamental files → panels. |
-| [`yuzu-source-s3`](https://crates.io/crates/yuzu-source-s3) | S3-compatible `ObjectSource` for `yuzu-data`. |
+| [`yuzu-source-s3`](https://crates.io/crates/yuzu-source-s3) | S3-compatible `ObjectSource`/`ObjectSink` for `yuzu-data`. |
+| [`pomelo-fmp`](https://crates.io/crates/pomelo-fmp) | Bring-your-own-key FMP data sync + snapshot-factor formulas; writes to local disk or S3/R2. |
 | [`lemon-lang`](https://crates.io/crates/lemon-lang) | The lemon strategy DSL (imported as `lemon`). |
 
 **Python**: `crates/yuzu-py` binds the engine + DSL for Python (`pip install ./crates/yuzu-py`,

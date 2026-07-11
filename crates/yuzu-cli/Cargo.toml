@@ -19,21 +19,21 @@ path = "src/main.rs"
 [dependencies]
 yuzu-core = { path = "../yuzu-core", version = "0.5.1" }
 yuzu-data = { path = "../yuzu-data", version = "0.5.1" }
+# FMP data sync + snapshot-factor formulas live in their own crate so a backend
+# service can link the same logic (and write to S3/R2 via the ObjectSink core).
+# default-features=false keeps the pure parts (index membership, factor math)
+# available without a TLS stack; the CLI's `fmp-sync` feature turns on the real
+# ureq client via pomelo-fmp/fmp-sync.
+pomelo-fmp = { path = "../pomelo-fmp", version = "0.5.1", default-features = false }
 clap = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 flate2 = { workspace = true }
-# BYO-key FMP data sync (issue #52). Direct HTTP, no third-party FMP SDK.
-# default-features=false drops `gzip` so ureq never transparently decompresses a
-# response (same reasoning as yuzu-source-s3). Optional + behind the default-on
-# `fmp-sync` feature so a networking-free build of the engine tooling can drop it
-# entirely — FMP never touches yuzu-core / yuzu-data / WASM.
-ureq = { version = "3.3.0", default-features = false, features = ["rustls"], optional = true }
 
 [features]
 default = ["fmp-sync"]
 # `yuzu-cli fmp-sync`: fetch prices/fundamentals from FMP with the user's own
-# key over HTTPS. Pulls the ureq TLS stack; disable with --no-default-features
-# for an offline-only CLI build.
-fmp-sync = ["dep:ureq"]
+# key over HTTPS. Pulls the ureq TLS stack (via pomelo-fmp); disable with
+# --no-default-features for an offline-only CLI build.
+fmp-sync = ["pomelo-fmp/fmp-sync"]

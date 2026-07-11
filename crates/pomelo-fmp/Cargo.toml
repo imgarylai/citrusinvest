@@ -1,0 +1,26 @@
+[package]
+name = "pomelo-fmp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+description = "Bring-your-own-key FMP data sync + snapshot-factor formulas for the yuzu backtest engine. Writes a data-layout tree to any ObjectSink (local disk or S3/R2). No FMP data redistributed."
+
+[dependencies]
+yuzu-core = { path = "../yuzu-core", version = "0.5.1" }
+yuzu-data = { path = "../yuzu-data", version = "0.5.1" }
+serde_json = { workspace = true }
+flate2 = { workspace = true }
+# Direct HTTP for the real FMP client (no third-party FMP SDK). Optional +
+# behind the default-on `fmp-sync` feature so the pure factor math + panel
+# writers can be used without pulling a TLS stack (e.g. a service that fetches
+# with its own client and only calls the formulas). default-features=false
+# drops ureq's transparent gzip (FMP JSON is read verbatim), matching yuzu-source-s3.
+ureq = { version = "3.3.0", default-features = false, features = ["rustls"], optional = true }
+
+[features]
+default = ["fmp-sync"]
+# The real ureq-backed `UreqClient`. Disable for a networking-free dependent
+# that supplies its own `HttpClient` (the sync/build fns are generic over it).
+fmp-sync = ["dep:ureq"]

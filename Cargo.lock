@@ -1283,6 +1283,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
 
 [[package]]
+name = "pomelo-fmp"
+version = "0.5.1"
+dependencies = [
+ "flate2",
+ "serde_json",
+ "ureq",
+ "yuzu-core",
+ "yuzu-data",
+]
+
+[[package]]
 name = "portable-atomic"
 version = "1.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2135,10 +2146,10 @@ version = "0.5.1"
 dependencies = [
  "clap",
  "flate2",
+ "pomelo-fmp",
  "rayon",
  "serde",
  "serde_json",
- "ureq",
  "yuzu-core",
  "yuzu-data",
 ]

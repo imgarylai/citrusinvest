@@ -8,7 +8,6 @@
 //! be lifted into a shared `yuzu-factors` crate and compiled to wasm (web) /
 //! PyO3 (Python) as the single source of truth for factor formulas. Keep it
 //! pure: numbers in, numbers out, no `Fetcher`, no `serde_json`.
-#![allow(dead_code)] // consumed by the snapshot-factor sync in a follow-up commit (#132)
 
 /// Midrank percentile of `v` within `cohort`: the fraction of cohort values
 /// strictly below `v`, plus half of those equal to `v`, in `[0, 1]`.
@@ -16,7 +15,7 @@
 /// Non-finite cohort entries are ignored; a `v` that is non-finite, or an empty
 /// finite cohort, returns `0.0`. Mirrors `percentileRank` in the web app's
 /// `lib/quant/percentile.ts` (e.g. `percentile_rank([10,20,30,40], 30) == 0.625`).
-pub(crate) fn percentile_rank(cohort: &[f64], v: f64) -> f64 {
+pub fn percentile_rank(cohort: &[f64], v: f64) -> f64 {
     if !v.is_finite() {
         return 0.0;
     }
@@ -44,7 +43,7 @@ pub(crate) fn percentile_rank(cohort: &[f64], v: f64) -> f64 {
 /// `cohort`, scaled to `[0, 100]`. Returns `None` (→ NaN panel cell) when the
 /// P/E is non-positive/non-finite or the finite cohort has fewer than
 /// [`MIN_COHORT`] members — matching the web builder's thin-cohort suppression.
-pub(crate) fn pe_industry_pctile(pe: f64, cohort: &[f64]) -> Option<f64> {
+pub fn pe_industry_pctile(pe: f64, cohort: &[f64]) -> Option<f64> {
     if !pe.is_finite() || pe <= 0.0 {
         return None;
     }
@@ -56,11 +55,11 @@ pub(crate) fn pe_industry_pctile(pe: f64, cohort: &[f64]) -> Option<f64> {
 }
 
 /// Minimum finite cohort size below which `pe_industry_pctile` is suppressed.
-pub(crate) const MIN_COHORT: usize = 5;
+pub const MIN_COHORT: usize = 5;
 
 /// `analyst_upside_pct` = `(target − close) / close × 100`. Returns `None` when
 /// the close price is non-positive or either input is non-finite.
-pub(crate) fn analyst_upside_pct(target: f64, close: f64) -> Option<f64> {
+pub fn analyst_upside_pct(target: f64, close: f64) -> Option<f64> {
     if !target.is_finite() || !close.is_finite() || close <= 0.0 {
         return None;
     }
@@ -71,7 +70,7 @@ pub(crate) fn analyst_upside_pct(target: f64, close: f64) -> Option<f64> {
 /// (lower = more bullish): Strong Buy = 1 … Strong Sell = 5. Case- and
 /// whitespace-insensitive; unrecognised labels → `None`. Mirrors
 /// `consensusToRating` in the web app's `db/queries/factor-snapshots.ts`.
-pub(crate) fn consensus_to_rating(consensus: &str) -> Option<f64> {
+pub fn consensus_to_rating(consensus: &str) -> Option<f64> {
     match consensus.trim().to_ascii_lowercase().as_str() {
         "strong buy" => Some(1.0),
         "buy" => Some(2.0),
