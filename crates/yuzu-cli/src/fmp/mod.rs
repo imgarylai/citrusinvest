@@ -20,7 +20,8 @@
 //!
 //! Enough to backtest **price-based** strategies over a short US window: close /
 //! OHLC TA and cross-section ops on a modest symbol list. Fundamentals are
-//! best-effort from the annual ratios/key-metrics/growth endpoints; richer
+//! best-effort from the annual ratios/key-metrics/growth endpoints (plus
+//! `income-statement` for filing-date visibility, #131); richer
 //! fundamentals, full-universe, and point-in-time index membership are out of
 //! scope (see #53 / #125). Delisted names can be unioned into the universe with
 //! `--include-delisted` for survivorship-honest backtests (#124 / #26) — see

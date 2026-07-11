@@ -459,19 +459,26 @@ fn resume_skips_symbols_that_already_exist() {
 #[test]
 fn fundamentals_are_densified_onto_the_price_calendar() {
     let dir = tmp("fund");
+    // Trading days are 01-02, 01-03, 01-04. Fiscal period ends 2024-01-01 but the
+    // report is only filed 2024-01-04, so the snapshot must become visible on the
+    // filing day, NOT the (earlier) period-end — otherwise it would peek ahead.
     let http = MockHttp::new()
         .ok("historical-price-eod", AAPL_PRICES) // matches any symbol's prices
         .ok(
             "ratios",
-            r#"[{"date":"2024-01-03","priceToEarningsRatio":15.0,"netProfitMargin":0.2}]"#,
+            r#"[{"date":"2024-01-01","priceToEarningsRatio":15.0,"netProfitMargin":0.2}]"#,
         )
         .ok(
             "key-metrics",
-            r#"[{"date":"2024-01-03","marketCap":2.5e12}]"#,
+            r#"[{"date":"2024-01-01","marketCap":2.5e12}]"#,
         )
         .ok(
             "financial-growth",
-            r#"[{"date":"2024-01-03","revenueGrowth":0.08}]"#,
+            r#"[{"date":"2024-01-01","revenueGrowth":0.08}]"#,
+        )
+        .ok(
+            "income-statement",
+            r#"[{"date":"2024-01-01","filingDate":"2024-01-04","revenue":4.0e11}]"#,
         );
     let mut c = cfg();
     c.include_fundamentals = true;
@@ -482,26 +489,29 @@ fn fundamentals_are_densified_onto_the_price_calendar() {
         .get("fundamentals/AAPL.csv.gz")
         .unwrap()
         .unwrap();
-    // One row per trading day (3), forward-filled from the single annual snapshot.
+    // One row per trading day (3). The snapshot is visible from the filing day
+    // (01-04), NOT the fiscal period-end (01-01) — no lookahead.
     let pe = parse_fundamentals(&bytes, "pe").unwrap();
     assert_eq!(pe.len(), 3);
-    assert!(pe[0].1.is_nan()); // before the 01-03 snapshot
-    assert_eq!(pe[1].1, 15.0); // snapshot day
-    assert_eq!(pe[2].1, 15.0); // carried forward
+    assert!(pe[0].1.is_nan()); // 01-02: period-end passed but not yet filed
+    assert!(pe[1].1.is_nan()); // 01-03: still not filed
+    assert_eq!(pe[2].1, 15.0); // 01-04: filed → visible
                                // Cross-endpoint fields merged in.
     assert_eq!(
-        parse_fundamentals(&bytes, "market_cap").unwrap()[1].1,
+        parse_fundamentals(&bytes, "market_cap").unwrap()[2].1,
         2.5e12
     );
     assert_eq!(
-        parse_fundamentals(&bytes, "revenue_growth").unwrap()[1].1,
+        parse_fundamentals(&bytes, "revenue_growth").unwrap()[2].1,
         0.08
     );
-    // report_event flags the snapshot's first effective day.
+    // `revenue` is backfilled from the income statement.
+    assert_eq!(parse_fundamentals(&bytes, "revenue").unwrap()[2].1, 4.0e11);
+    // report_event flags the filing day, not the period-end.
     let ev = parse_fundamentals(&bytes, "report_event").unwrap();
     assert_eq!(ev[0].1, 0.0);
-    assert_eq!(ev[1].1, 1.0);
-    assert_eq!(ev[2].1, 0.0);
+    assert_eq!(ev[1].1, 0.0);
+    assert_eq!(ev[2].1, 1.0);
 }
 
 #[test]
