@@ -31,6 +31,7 @@
 
 mod config;
 mod delisted;
+mod factors;
 mod fundamentals;
 mod http;
 mod index;
