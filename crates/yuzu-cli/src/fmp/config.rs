@@ -24,6 +24,10 @@ pub struct SyncConfig {
     pub include_fundamentals: bool,
     /// Also fetch company sector → `tracked/universe.csv.gz`.
     pub include_industry: bool,
+    /// Also compute the snapshot-factor panels (`piotroski_score`, `altman_z`,
+    /// `fcf_yield`, `analyst_upside_pct`, `consensus_rating`) → `panels/{name}.csv.gz`.
+    /// Current-snapshot factors for universe screening (see [`super::snapshot`]).
+    pub include_snapshot_factors: bool,
     /// Skip ETFs / mutual & closed-end funds (default on) — keep only individual
     /// stocks. Classified from the profile endpoint's `isEtf` / `isFund`.
     pub skip_non_stocks: bool,
@@ -52,6 +56,7 @@ impl Default for SyncConfig {
             to: 99991231,
             include_fundamentals: false,
             include_industry: false,
+            include_snapshot_factors: false,
             skip_non_stocks: true,
             min_market_cap: 0.0,
             rate_limit_per_min: 300,
@@ -77,6 +82,8 @@ pub struct SyncSummary {
     pub fundamentals_written: usize,
     /// Whether the industry snapshot was written.
     pub industry_written: bool,
+    /// Number of `panels/{name}.csv.gz` snapshot-factor panels written.
+    pub snapshot_factor_panels: usize,
     /// Per-symbol hard failures (symbol, redacted message). A failure on one
     /// symbol does not abort the batch.
     pub failures: Vec<(String, String)>,

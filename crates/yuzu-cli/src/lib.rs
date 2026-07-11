@@ -117,6 +117,19 @@ pub(crate) fn load_ctx(
             panels.insert((*name).to_string(), p);
         }
     }
+    // Auto-load snapshot-factor panels (piotroski_score, altman_z, …) from panels/
+    // when present, so a factor strategy resolves them on the CLI path (the server
+    // already loads these). Missing file → skipped (factor stays NaN).
+    for name in yuzu_data::fundamentals::FACTOR_PANEL_FIELDS {
+        if panels.contains_key(*name) {
+            continue;
+        }
+        if let Some(p) = load_combined_panel(&src, name, &syms, from, to, PANELS_DIR)
+            .map_err(|e| e.to_string())?
+        {
+            panels.insert((*name).to_string(), p);
+        }
+    }
     // The CLI treats benchmark_key as a SYMBOL: its closes are loaded as a
     // one-column panel under that key (e.g. --benchmark SPY).
     if let Some(sym) = &cfg.benchmark_key {

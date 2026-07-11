@@ -37,6 +37,7 @@ mod http;
 mod index;
 mod industry;
 mod price;
+mod snapshot;
 mod sync;
 mod universe;
 mod util;

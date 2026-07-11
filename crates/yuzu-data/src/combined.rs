@@ -226,7 +226,10 @@ pub fn rebuild_combined_panels<S: ObjectSource + ObjectSink + Sync>(
 
 /// Union-dates assembly: rows = sorted union of all symbols' days, cols = symbols
 /// in order, missing cells NaN. (Mirrors the per-symbol loaders' assembly.)
-fn assemble(symbols: &[String], per_symbol: &[Vec<(i32, f64)>]) -> Result<Panel, DataError> {
+/// Public so producers (e.g. the CLI's FMP snapshot-factor writer) can build a
+/// combined [`Panel`] from per-symbol `(day, value)` rows before serializing it
+/// with [`write_combined_panel`].
+pub fn assemble(symbols: &[String], per_symbol: &[Vec<(i32, f64)>]) -> Result<Panel, DataError> {
     let mut date_set: BTreeSet<i32> = BTreeSet::new();
     for rows in per_symbol {
         for (d, _) in rows {

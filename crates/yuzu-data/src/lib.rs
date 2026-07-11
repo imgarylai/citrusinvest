@@ -18,7 +18,8 @@ mod parquet_io;
 pub mod source;
 
 pub use combined::{
-    load_combined_panel, rebuild_combined_panels, write_combined_panel, RebuildSummary, PANELS_DIR,
+    assemble, load_combined_panel, rebuild_combined_panels, write_combined_panel, RebuildSummary,
+    PANELS_DIR,
 };
 pub use csv_io::{Field, OhlcvRow};
 pub use format::Format;

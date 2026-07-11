@@ -80,6 +80,7 @@ fn cfg() -> SyncConfig {
         to: 20240104,
         include_fundamentals: false,
         include_industry: false,
+        include_snapshot_factors: false,
         skip_non_stocks: false, // most tests isolate prices; screening tests opt in
         min_market_cap: 0.0,
         rate_limit_per_min: 0, // no throttle in tests
@@ -512,6 +513,57 @@ fn fundamentals_are_densified_onto_the_price_calendar() {
     assert_eq!(ev[0].1, 0.0);
     assert_eq!(ev[1].1, 0.0);
     assert_eq!(ev[2].1, 1.0);
+}
+
+#[test]
+fn snapshot_factor_panels_are_written() {
+    let dir = tmp("snap");
+    // Trading days 01-02, 01-03, 01-04; last close = 11.5 (AAPL_PRICES).
+    // income-statement filing date 01-03 anchors the report-derived factors;
+    // analyst/consensus are current (last day 01-04).
+    let http = MockHttp::new()
+        .ok("historical-price-eod", AAPL_PRICES)
+        .ok(
+            "financial-scores",
+            r#"[{"piotroskiScore":7,"altmanZScore":3.5}]"#,
+        )
+        .ok(
+            "income-statement",
+            r#"[{"date":"2024-01-01","filingDate":"2024-01-03"}]"#,
+        )
+        .ok("key-metrics-ttm", r#"[{"freeCashFlowYieldTTM":0.05}]"#)
+        .ok("price-target-consensus", r#"[{"targetConsensus":13.0}]"#)
+        .ok("grades-summary", r#"[{"consensus":"Buy"}]"#);
+    let mut c = cfg();
+    c.include_snapshot_factors = true;
+    let summary = sync(&http, "KEY", &[String::from("AAPL")], &dir, &c).unwrap();
+    assert_eq!(summary.snapshot_factor_panels, 5);
+
+    let src = LocalSource::new(&dir);
+    let syms = vec!["AAPL".to_string()];
+    let load = |name: &str| {
+        load_combined_panel(&src, name, &syms, 20240101, 20240104, PANELS_DIR)
+            .unwrap()
+            .unwrap()
+    };
+
+    // piotroski_score: visible from the filing day (01-03) onward, NOT before.
+    let p = load("piotroski_score");
+    assert_eq!(p.dates, vec![20240103, 20240104]);
+    assert_eq!(p.data[[0, 0]], 7.0);
+    assert_eq!(p.data[[1, 0]], 7.0);
+    // altman_z + fcf_yield share the filing-day anchor.
+    assert_eq!(load("altman_z").data[[0, 0]], 3.5);
+    assert_eq!(load("fcf_yield").data[[0, 0]], 0.05);
+
+    // analyst_upside_pct is current: only the last day, (13-11.5)/11.5*100.
+    let up = load("analyst_upside_pct");
+    assert_eq!(up.dates, vec![20240104]);
+    assert!((up.data[[0, 0]] - 13.043_478_260_869_565).abs() < 1e-9);
+    // consensus_rating: "Buy" → 2, on the last day.
+    let cr = load("consensus_rating");
+    assert_eq!(cr.dates, vec![20240104]);
+    assert_eq!(cr.data[[0, 0]], 2.0);
 }
 
 #[test]

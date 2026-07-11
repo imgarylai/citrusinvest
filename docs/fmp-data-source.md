@@ -189,7 +189,7 @@ the key stays on your machine and no FMP data is redistributed. FMP lives only i
 ```bash
 yuzu-cli fmp-sync --api-key "$FMP_API_KEY" --out ./mydata \
   --symbols AAPL,MSFT,GOOGL --from 20200101 --to 20251231 \
-  [--include-fundamentals] [--include-industry] \
+  [--include-fundamentals] [--include-industry] [--include-snapshot-factors] \
   [--include-etf] [--include-delisted] [--min-market-cap 1b] [--all-symbols] [--index sp500] [--exchange NASDAQ,NYSE,AMEX] \
   [--rate-limit 300] [--max-retries 4] [--append | --resume]
 ```
@@ -199,10 +199,40 @@ yuzu-cli fmp-sync --api-key "$FMP_API_KEY" --out ./mydata \
 | `prices/{SYM}.csv.gz` (adjusted OHLCV) | always | `historical-price-eod/dividend-adjusted` |
 | `fundamentals/{SYM}.csv.gz` (dense forward-filled factors + `report_event`, visible from the **filing date**) | `--include-fundamentals` | `ratios` + `key-metrics` + `financial-growth` + `income-statement` (annual) |
 | `tracked/universe.csv.gz` (`symbol,sector,market_cap`) | `--include-industry` | `profile` |
+| `panels/{piotroski_score,altman_z,fcf_yield,analyst_upside_pct,consensus_rating}.csv.gz` (snapshot-factor panels) | `--include-snapshot-factors` | `financial-scores` + `key-metrics-ttm` + `price-target-consensus` + `grades-summary` + `income-statement` |
 | — (universe discovery / exchange, ETF & market-cap screen) | `--all-symbols`, `--exchange`, `--min-market-cap` | `company-screener`, `profile` |
 | — (delisted names unioned into the universe) | `--include-delisted` | `delisted-companies` |
 | `panels/in_<index>.csv.gz` (PIT membership 0/1) + ever-member price universe | `--index sp500` | `sp-500` + `historical-sp-500` |
 | symbol list file (`yuzu-cli fmp-symbols`) | `fmp-symbols --out …` | `company-screener` |
+
+### Snapshot-factor panels (`--include-snapshot-factors`, #132)
+
+Computes five combined `panels/{name}.csv.gz` factor panels the engine reads as
+bare `Data` series (feed into `rank` / `zscore` / `is_largest`, etc.):
+
+| Series | Source | Transform |
+|--------|--------|-----------|
+| `piotroski_score` | `financial-scores` | `piotroskiScore` (0–9), authoritative |
+| `altman_z` | `financial-scores` | `altmanZScore` |
+| `fcf_yield` | `key-metrics-ttm` | `freeCashFlowYieldTTM` |
+| `analyst_upside_pct` | `price-target-consensus` | `(targetConsensus − close) / close × 100` |
+| `consensus_rating` | `grades-summary` | Strong Buy = 1 … Strong Sell = 5 (lower = more bullish) |
+
+**Formulas are a native port of the web app's `factor-snapshot-panels.ts`** so
+CLI- and web-built panels agree. `pe_industry_pctile` (the sixth
+`FACTOR_PANEL_FIELDS` entry) needs a cross-sectional industry cohort and is
+Phase 2.
+
+**Current-snapshot semantics (honest limitation).** FMP's `financial-scores` /
+`*-ttm` / `price-target-consensus` / `grades-summary` return a *current* value
+with no history, so a one-shot sync writes a **current snapshot**, not a time
+series: `piotroski_score` / `altman_z` / `fcf_yield` are anchored to the latest
+report's **filing date** (visible from then on); `analyst_upside_pct` /
+`consensus_rating` are anchored to the **last synced trading day** (final bar
+only). Use these for **current-universe screening**, not deep historical
+backtests — richer history needs daily snapshot accumulation over time (a service
+concern). Each factor costs extra FMP requests per symbol; pair with
+`--rate-limit`. On `--resume`, panels cover only the symbols processed this run.
 
 ### Establishing the symbol list first
 
