@@ -108,8 +108,8 @@ mod tests {
 
     #[test]
     fn pe_industry_pctile_scales_and_suppresses() {
-        let cohort = [10.0, 20.0, 30.0, 40.0, 50.0]; // 5 members (== MIN_COHORT)
-        // 30 sits at midrank 2.5/5 = 0.5 → 50.0.
+        // 5-member cohort (== MIN_COHORT); 30 sits at midrank 2.5/5 = 0.5 → 50.0.
+        let cohort = [10.0, 20.0, 30.0, 40.0, 50.0];
         assert_eq!(pe_industry_pctile(30.0, &cohort), Some(50.0));
         // Non-positive / non-finite P/E → suppressed.
         assert_eq!(pe_industry_pctile(0.0, &cohort), None);
