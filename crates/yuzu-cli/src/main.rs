@@ -334,6 +334,12 @@ enum Cmd {
         /// Also fetch each symbol's sector → tracked/universe.csv.gz.
         #[arg(long)]
         include_industry: bool,
+        /// Also compute snapshot-factor panels (piotroski_score, altman_z,
+        /// fcf_yield, analyst_upside_pct, consensus_rating) → panels/{name}.csv.gz.
+        /// Current-snapshot factors for universe screening; extra FMP requests
+        /// per symbol (see docs/fmp-data-source.md).
+        #[arg(long)]
+        include_snapshot_factors: bool,
         /// Keep ETFs and mutual/closed-end funds. By default only individual
         /// stocks are synced (non-stocks are classified via the profile
         /// endpoint and skipped).
@@ -608,6 +614,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             to,
             include_fundamentals,
             include_industry,
+            include_snapshot_factors,
             include_etf,
             include_delisted,
             min_market_cap,
@@ -658,6 +665,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 to,
                 include_fundamentals,
                 include_industry,
+                include_snapshot_factors,
                 skip_non_stocks: !include_etf,
                 min_market_cap,
                 rate_limit_per_min: rate_limit,

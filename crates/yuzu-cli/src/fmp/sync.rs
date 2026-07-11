@@ -11,6 +11,7 @@ use super::fundamentals::sync_fundamentals;
 use super::http::Fetcher;
 use super::industry::{encode_industry, fetch_profile, load_existing_industry, Profile};
 use super::price::{parse_price_rows, price_url, read_existing_prices};
+use super::snapshot::{compute_symbol, SnapshotAccum};
 use super::HttpClient;
 use super::INDUSTRY_KEY;
 
@@ -59,6 +60,10 @@ pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
     } else {
         BTreeMap::new()
     };
+
+    // Snapshot-factor columns accumulate across the run, written as combined
+    // panels after the loop (all symbols share one file per factor).
+    let mut snapshots = cfg.include_snapshot_factors.then(SnapshotAccum::new);
 
     // One profile GET per symbol serves the ETF/fund screen, the market-cap
     // screen, and the industry map — fetch it only when at least one needs it.
@@ -171,6 +176,12 @@ pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
             }
         }
 
+        if let Some(acc) = snapshots.as_mut() {
+            let last_close = rows.last().map(|r| r.adj_close).unwrap_or(f64::NAN);
+            let cols = compute_symbol(&fetcher, sym, api_key, &price_days, last_close);
+            acc.push(sym.clone(), cols);
+        }
+
         if cfg.include_industry {
             // Reuse the profile fetched above for the screen.
             match profile
@@ -183,6 +194,10 @@ pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
                 None => eprintln!("{sym}: no sector in profile"),
             }
         }
+    }
+
+    if let Some(acc) = snapshots {
+        summary.snapshot_factor_panels = acc.write_panels(store).map_err(|e| e.to_string())?;
     }
 
     if cfg.include_industry && !industry.is_empty() {

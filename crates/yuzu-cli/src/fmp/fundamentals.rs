@@ -47,7 +47,7 @@ const FUNDAMENTAL_KEYS: &[&[&str]] = &[
 /// [`iso_to_i32`] tolerates). Preferred over the fiscal period-end `date` so a
 /// snapshot only becomes visible once it was disclosed, not on the (earlier)
 /// period-end day — otherwise every fundamentals backtest peeks ahead (#131).
-const FILING_DATE_KEYS: &[&str] = &["filingDate", "fillingDate", "acceptedDate"];
+pub(crate) const FILING_DATE_KEYS: &[&str] = &["filingDate", "fillingDate", "acceptedDate"];
 
 /// One merged fundamentals snapshot for a single fiscal period.
 pub(crate) struct Snapshot {
