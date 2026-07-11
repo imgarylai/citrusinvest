@@ -1,5 +1,26 @@
-/* citrus accent — keeps the tutorial site visually distinct from plain rustdoc */
+/* ---------------------------------------------------------------------------
+   citrusquant site theme — citrus accent + IBM Plex Mono for everything code.
+   The landing page (template: splash) gets an editorial, terminal-report look:
+   code as the headline, thin rules instead of card boxes, tabular numerals.
+--------------------------------------------------------------------------- */
+
+@font-face {
+  font-family: 'IBM Plex Mono';
+  src: url('/fonts/IBMPlexMono-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  src: url('/fonts/IBMPlexMono-SemiBold.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
+  --sl-font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   --sl-color-accent-low: #3a3000;
   --sl-color-accent: #b8860b;
   --sl-color-accent-high: #ffe08a;
@@ -10,16 +31,261 @@
   --sl-color-accent-high: #4a3200;
 }
 
-/* Playground layout */
+/* --- landing hero (Starlight injects our HTML via hero.title) -------------- */
+
+.lp-kicker {
+  display: block;
+  font-family: var(--sl-font-mono);
+  font-size: clamp(0.72rem, 1.5vw, 0.85rem);
+  font-weight: 400;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--sl-color-accent);
+  margin-bottom: 1.1rem;
+}
+
+.hero .lp-code {
+  display: block;
+  font-family: var(--sl-font-mono);
+  font-weight: 600;
+  font-size: clamp(1.15rem, 4.2vw, 2.4rem);
+  letter-spacing: -0.01em;
+  color: var(--sl-color-white);
+  background: none;
+  border: none;
+  padding: 0;
+  overflow-wrap: anywhere;
+}
+.hero .lp-code::after {
+  /* terminal caret */
+  content: '';
+  display: inline-block;
+  width: 0.55em;
+  height: 1.05em;
+  margin-left: 0.12em;
+  vertical-align: text-bottom;
+  background: var(--sl-color-accent);
+  animation: lp-caret 1.1s steps(1) infinite;
+}
+@keyframes lp-caret {
+  50% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero .lp-code::after {
+    animation: none;
+  }
+}
+
+/* hero: no image, so drop Starlight's 7fr/4fr split and center the copy
+   (its own rules sit on .stacked/.copy/.actions at ≥50rem) */
+[data-has-hero] .hero {
+  grid-template-columns: 1fr;
+}
+[data-has-hero] .hero .stacked,
+[data-has-hero] .hero h1,
+[data-has-hero] .hero .tagline {
+  text-align: center !important;
+}
+[data-has-hero] .hero .copy {
+  align-items: center;
+}
+[data-has-hero] .hero .actions {
+  justify-content: center;
+}
+[data-has-hero] .hero .tagline {
+  max-width: 58ch;
+  margin-inline: auto;
+}
+
+/* landing content column: wide enough for the playground, prose stays readable */
+[data-has-hero] .sl-markdown-content {
+  max-width: 72rem;
+  margin-inline: auto;
+}
+[data-has-hero] .sl-markdown-content > p {
+  max-width: 68ch;
+  margin-inline: auto;
+}
+[data-has-hero] .sl-markdown-content h2 {
+  max-width: none;
+  margin-top: 4.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  font-family: var(--sl-font-mono);
+  font-size: 0.95rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--sl-color-accent);
+  text-align: center;
+}
+[data-has-hero] .sl-markdown-content h2::before,
+[data-has-hero] .sl-markdown-content h2::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--sl-color-gray-5);
+}
+
+.lp-provenance {
+  max-width: 62ch;
+  margin: 1.4rem auto 0;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: var(--sl-color-gray-3);
+  text-align: center;
+}
+
+/* --- example chips ---------------------------------------------------------- */
+
+.lp-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.6rem;
+  margin-top: 1.6rem;
+}
+.lp-chips button {
+  font-family: var(--sl-font-mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.45rem 1rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--sl-color-white);
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s,
+    transform 0.15s;
+}
+.lp-chips button:hover {
+  border-color: var(--sl-color-accent);
+  background: var(--sl-color-accent-low);
+  transform: translateY(-1px);
+}
+.lp-chips button:focus-visible {
+  outline: 2px solid var(--sl-color-accent);
+  outline-offset: 2px;
+}
+
+/* --- "how it's built" rule-cells (no card boxes) ----------------------------- */
+
+.lp-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0 3rem;
+  margin-top: 1.5rem;
+}
+@media (min-width: 50rem) {
+  .lp-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.lp-cell {
+  border-top: 1px solid var(--sl-color-gray-5);
+  padding: 1.1rem 0 1.6rem;
+}
+.lp-cell h3 {
+  font-family: var(--sl-font-mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--sl-color-white);
+  margin: 0 0 0.5rem;
+}
+.lp-cell h3::before {
+  content: '▸ ';
+  color: var(--sl-color-accent);
+}
+.lp-cell p {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--sl-color-gray-2);
+}
+
+/* --- is / isn't -------------------------------------------------------------- */
+
+.lp-honest {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0 3rem;
+  margin-top: 1.5rem;
+}
+@media (min-width: 50rem) {
+  .lp-honest {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.lp-honest h3 {
+  font-family: var(--sl-font-mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin: 0 0 0.6rem;
+}
+.lp-is h3 {
+  color: var(--sl-color-accent);
+}
+.lp-isnt h3 {
+  color: var(--sl-color-gray-3);
+}
+.lp-honest ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.lp-honest li {
+  position: relative;
+  padding-left: 1.4rem;
+  margin-bottom: 0.55rem;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--sl-color-gray-2);
+}
+.lp-honest li::before {
+  position: absolute;
+  left: 0;
+  font-family: var(--sl-font-mono);
+  font-weight: 600;
+}
+.lp-is li::before {
+  content: '+';
+  color: var(--sl-color-accent);
+}
+.lp-isnt li::before {
+  content: '−';
+  color: var(--sl-color-gray-4);
+}
+
+/* --- playground --------------------------------------------------------------- */
+
 .pg-wrap {
   display: grid;
   gap: 1rem;
   grid-template-columns: 1fr;
+  margin-top: 1.5rem;
 }
 @media (min-width: 60rem) {
   .pg-wrap {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
+}
+.pg-label {
+  font-family: var(--sl-font-mono);
+  font-weight: 600;
+  font-size: 0.78rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+  display: block;
+  margin-bottom: 0.35rem;
 }
 /* The editor surface itself is styled by CodeMirror's theme in
    components/lemon-editor.ts; just constrain its width here. */
@@ -29,6 +295,7 @@
 .pg-run {
   margin-top: 0.75rem;
   padding: 0.5rem 1.25rem;
+  font-family: var(--sl-font-mono);
   font-weight: 600;
   border: none;
   border-radius: 0.5rem;
@@ -42,12 +309,16 @@
 }
 .pg-status {
   margin-top: 0.5rem;
-  font-size: 0.85rem;
+  font-family: var(--sl-font-mono);
+  font-size: 0.8rem;
   color: var(--sl-color-gray-3);
   min-height: 1.2em;
 }
 .pg-status[data-kind='error'] {
   color: #ff6b6b;
+}
+:root[data-theme='light'] .pg-status[data-kind='error'] {
+  color: #c92a2a;
 }
 .pg-metrics {
   display: grid;
@@ -59,16 +330,39 @@
   border: 1px solid var(--sl-color-gray-5);
   border-radius: 0.5rem;
   padding: 0.5rem 0.75rem;
+  animation: pg-pop 0.35s ease both;
+}
+.pg-metric:nth-child(2) { animation-delay: 0.03s; }
+.pg-metric:nth-child(3) { animation-delay: 0.06s; }
+.pg-metric:nth-child(4) { animation-delay: 0.09s; }
+.pg-metric:nth-child(5) { animation-delay: 0.12s; }
+.pg-metric:nth-child(6) { animation-delay: 0.15s; }
+.pg-metric:nth-child(7) { animation-delay: 0.18s; }
+.pg-metric:nth-child(8) { animation-delay: 0.21s; }
+.pg-metric:nth-child(9) { animation-delay: 0.24s; }
+.pg-metric:nth-child(10) { animation-delay: 0.27s; }
+@keyframes pg-pop {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pg-metric {
+    animation: none;
+  }
 }
 .pg-metric .k {
-  font-size: 0.7rem;
+  font-family: var(--sl-font-mono);
+  font-size: 0.68rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--sl-color-gray-3);
 }
 .pg-metric .v {
+  font-family: var(--sl-font-mono);
   font-size: 1.1rem;
-  font-weight: 700;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 .pg-chart {
@@ -77,4 +371,11 @@
   border: 1px solid var(--sl-color-gray-5);
   border-radius: 0.5rem;
   background: var(--sl-color-black);
+  /* playground.ts reads these at draw time so the canvas follows the theme */
+  --pg-line: #ffcf40;
+  --pg-grid: rgba(255, 255, 255, 0.15);
+}
+:root[data-theme='light'] .pg-chart {
+  --pg-line: #a06a00;
+  --pg-grid: rgba(0, 0, 0, 0.12);
 }

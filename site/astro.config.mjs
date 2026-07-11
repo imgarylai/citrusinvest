@@ -31,7 +31,32 @@ export default defineConfig({
     starlight({
       title: 'citrusquant',
       description:
-        'Learn the yuzu backtest engine and the lemon strategy DSL — with an in-browser backtest playground.',
+        'An open-source Rust backtest engine (yuzu) and a one-expression strategy DSL (lemon). Write a strategy, backtest it in your browser — real engine, real data, no server.',
+      favicon: '/favicon.svg',
+      head: [
+        // Social cards. Starlight emits og:title/description/url itself; the
+        // image must be an absolute URL.
+        {
+          tag: 'meta',
+          attrs: { property: 'og:image', content: 'https://citrusquant.com/og.png' },
+        },
+        {
+          tag: 'meta',
+          attrs: { property: 'og:image:width', content: '1200' },
+        },
+        {
+          tag: 'meta',
+          attrs: { property: 'og:image:height', content: '630' },
+        },
+        {
+          tag: 'meta',
+          attrs: { name: 'twitter:card', content: 'summary_large_image' },
+        },
+        {
+          tag: 'meta',
+          attrs: { name: 'twitter:image', content: 'https://citrusquant.com/og.png' },
+        },
+      ],
       social: [
         {
           icon: 'github',

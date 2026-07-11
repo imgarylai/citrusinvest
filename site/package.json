@@ -8,7 +8,8 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "gen:data": "node scripts/gen-sample-data.mjs",
+    "fetch:data": "node scripts/fetch-sample-data.mjs",
+    "gen:og": "node scripts/gen-og.mjs",
     "import:docs": "node scripts/import-reference-docs.mjs"
   },
   "dependencies": {
