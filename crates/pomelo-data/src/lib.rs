@@ -1,8 +1,8 @@
-//! yuzu-data — native I/O layer. Reads per-symbol price files into yuzu-core
+//! pomelo-data — native I/O layer. Reads per-symbol price files into yuzu-core
 //! `Panel` matrices. Formats are detected by content: gzip CSV (`.csv.gz`),
 //! plain CSV (`.csv`), and — with the `parquet` feature — Apache Parquet
 //! (`.parquet`). NOT a dependency of yuzu-core (which stays WASM-pure);
-//! yuzu-data depends on yuzu-core, never the reverse.
+//! pomelo-data depends on yuzu-core, never the reverse.
 
 pub mod combined;
 pub mod csv_io;

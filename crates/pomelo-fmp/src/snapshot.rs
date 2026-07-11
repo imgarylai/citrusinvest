@@ -25,7 +25,7 @@
 
 use serde_json::Value;
 
-use yuzu_data::{assemble, write_combined_panel, ObjectSink, PANELS_DIR};
+use pomelo_data::{assemble, write_combined_panel, ObjectSink, PANELS_DIR};
 
 use super::factors::{analyst_upside_pct, consensus_to_rating};
 use super::fundamentals::{annual_url, FILING_DATE_KEYS};

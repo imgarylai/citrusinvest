@@ -18,12 +18,12 @@
 //! [`sync`] writes to a local path; [`sync_into`] is the storage-agnostic core
 //! over any `ObjectSink` + `ObjectSource`, so the CLI and a backend service
 //! produce **byte-identical** trees whether the destination is local disk or an
-//! S3/R2 bucket (`yuzu-source-s3`'s `S3Source`). The pure [`factors`] formulas
+//! S3/R2 bucket (`pomelo-s3`'s `S3Source`). The pure [`factors`] formulas
 //! are the single source of truth a Rust service links directly (and wasm/PyO3
 //! bindings can expose later).
 //!
 //! The key never leaves the machine; we neither host nor redistribute FMP data.
-//! FMP stays **out** of `yuzu-core` / `yuzu-data` / WASM — the [`HttpClient`]
+//! FMP stays **out** of `yuzu-core` / `pomelo-data` / WASM — the [`HttpClient`]
 //! indirection keeps networking optional (build with `--no-default-features`)
 //! and testable.
 //!

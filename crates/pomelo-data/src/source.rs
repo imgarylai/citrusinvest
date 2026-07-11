@@ -51,7 +51,7 @@ mod tests {
 
     #[test]
     fn local_source_reads_present_and_missing() {
-        let dir = std::env::temp_dir().join("yuzu_data_source_test");
+        let dir = std::env::temp_dir().join("pomelo_data_source_test");
         fs::create_dir_all(&dir).unwrap();
         fs::write(dir.join("hello.bin"), b"hi").unwrap();
         let src = LocalSource::new(&dir);
@@ -61,7 +61,7 @@ mod tests {
 
     #[test]
     fn local_source_put_writes_and_creates_parents() {
-        let dir = std::env::temp_dir().join("yuzu_data_sink_test");
+        let dir = std::env::temp_dir().join("pomelo_data_sink_test");
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         let src = LocalSource::new(&dir);

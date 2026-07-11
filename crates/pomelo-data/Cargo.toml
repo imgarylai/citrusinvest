@@ -1,5 +1,5 @@
 [package]
-name = "yuzu-data"
+name = "pomelo-data"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -1283,14 +1283,39 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
 
 [[package]]
+name = "pomelo-data"
+version = "0.5.1"
+dependencies = [
+ "arrow-array",
+ "arrow-cast",
+ "arrow-schema",
+ "bytes",
+ "flate2",
+ "ndarray",
+ "parquet",
+ "rayon",
+ "yuzu-core",
+]
+
+[[package]]
 name = "pomelo-fmp"
 version = "0.5.1"
 dependencies = [
  "flate2",
+ "pomelo-data",
  "serde_json",
  "ureq",
  "yuzu-core",
- "yuzu-data",
+]
+
+[[package]]
+name = "pomelo-s3"
+version = "0.5.1"
+dependencies = [
+ "flate2",
+ "pomelo-data",
+ "rusty-s3",
+ "ureq",
 ]
 
 [[package]]
@@ -2146,12 +2171,12 @@ version = "0.5.1"
 dependencies = [
  "clap",
  "flate2",
+ "pomelo-data",
  "pomelo-fmp",
  "rayon",
  "serde",
  "serde_json",
  "yuzu-core",
- "yuzu-data",
 ]
 
 [[package]]
@@ -2166,41 +2191,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "yuzu-data"
-version = "0.5.1"
-dependencies = [
- "arrow-array",
- "arrow-cast",
- "arrow-schema",
- "bytes",
- "flate2",
- "ndarray",
- "parquet",
- "rayon",
- "yuzu-core",
-]
-
-[[package]]
 name = "yuzu-server"
 version = "0.5.1"
 dependencies = [
  "ndarray",
+ "pomelo-data",
+ "pomelo-s3",
  "serde",
  "serde_json",
  "tiny_http",
  "yuzu-core",
- "yuzu-data",
- "yuzu-source-s3",
-]
-
-[[package]]
-name = "yuzu-source-s3"
-version = "0.5.1"
-dependencies = [
- "flate2",
- "rusty-s3",
- "ureq",
- "yuzu-data",
 ]
 
 [[package]]

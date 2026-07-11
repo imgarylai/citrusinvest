@@ -1,6 +1,6 @@
+use pomelo_data::csv_io::{write_series, OhlcvRow};
 use std::fs;
 use yuzu_cli::{list_symbols, run_single, run_sweep, SortKey};
-use yuzu_data::csv_io::{write_series, OhlcvRow};
 
 fn fixture(tag: &str) -> std::path::PathBuf {
     // per-test temp dir (tests run in parallel) holding prices/<sym>.csv.gz for AAA, BBB.

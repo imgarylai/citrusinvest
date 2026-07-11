@@ -184,9 +184,9 @@ list and ≤ ~5y:
 [`data-layout.md`](data-layout.md) tree. Direct HTTPS, **no third-party FMP SDK**;
 the key stays on your machine and no FMP data is redistributed. FMP lives in the
 standalone **`pomelo-fmp`** crate (behind the default-on `fmp-sync` cargo feature)
-— never in `yuzu-core` / `yuzu-data` / WASM. The CLI is a thin wrapper over
+— never in `yuzu-core` / `pomelo-data` / WASM. The CLI is a thin wrapper over
 `pomelo-fmp`; a Rust service can depend on the crate directly and write the same
-tree to an S3/R2 bucket via `pomelo_fmp::sync_into` + `yuzu-source-s3`.
+tree to an S3/R2 bucket via `pomelo_fmp::sync_into` + `pomelo-s3`.
 
 ```bash
 yuzu-cli fmp-sync --api-key "$FMP_API_KEY" --out ./mydata \
@@ -350,6 +350,6 @@ honesty (#26).
 | On-disk series names & directories | [`data-layout.md`](data-layout.md) |
 | Op list | [`lemon.md`](lemon.md), `schema/op-catalog.json` |
 | NAV / costs / MAE | [`backtest-engine.md`](backtest-engine.md) |
-| Fundamental field list | `crates/yuzu-data/src/fundamentals.rs` |
+| Fundamental field list | `crates/pomelo-data/src/fundamentals.rs` |
 | TA vs single-series indicators | `ops/ta.rs` vs `ops/indicators.rs` |
 | `fmp-sync` builder (endpoints, field mapping) | `crates/pomelo-fmp/` |

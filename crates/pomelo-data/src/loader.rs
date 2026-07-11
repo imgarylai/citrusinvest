@@ -64,7 +64,7 @@ mod tests {
 
     fn fixture_dir(tag: &str) -> std::path::PathBuf {
         // per-test dir (tests run in parallel) — a shared name races on remove/write.
-        let dir = std::env::temp_dir().join(format!("yuzu_data_loader_{tag}"));
+        let dir = std::env::temp_dir().join(format!("pomelo_data_loader_{tag}"));
         // Clean up any existing files
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(dir.join("prices")).unwrap();
@@ -104,7 +104,7 @@ mod tests {
     fn loads_plain_csv_files_alongside_gzip() {
         // A `.csv` (uncompressed) file must load via the same path (probed after
         // `.csv.gz`), so a mixed mirror works.
-        let dir = std::env::temp_dir().join("yuzu_data_loader_plaincsv");
+        let dir = std::env::temp_dir().join("pomelo_data_loader_plaincsv");
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(dir.join("prices")).unwrap();
         fs::write(
@@ -131,7 +131,7 @@ mod tests {
         use parquet::arrow::ArrowWriter;
         use std::sync::Arc;
 
-        let dir = std::env::temp_dir().join("yuzu_data_loader_parquet");
+        let dir = std::env::temp_dir().join("pomelo_data_loader_parquet");
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(dir.join("prices")).unwrap();
 

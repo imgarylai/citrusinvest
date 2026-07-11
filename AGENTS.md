@@ -7,9 +7,9 @@ Guidance for AI coding agents working in this repository.
 citrusquant is a Rust backtest engine (a Cargo workspace):
 
 - `yuzu-core` — pure, I/O-free backtest engine core (`run_backtest`).
-- `yuzu-data` — native data loading (reads gzip CSV price/fundamental files into panels).
-- `yuzu-source-s3` — an S3-backed data source (an `ObjectSource`/`ObjectSink` impl; `LocalSource` reads/writes local files).
-- `pomelo-fmp` — bring-your-own-key FMP data sync + snapshot-factor formulas. `sync_into` writes a data-layout tree to any `ObjectSink` (local or S3/R2); the CLI is a thin wrapper. FMP stays out of `yuzu-core`/`yuzu-data`/WASM.
+- `pomelo-data` — native data loading (reads gzip CSV price/fundamental files into panels).
+- `pomelo-s3` — an S3-backed data source (an `ObjectSource`/`ObjectSink` impl; `LocalSource` reads/writes local files).
+- `pomelo-fmp` — bring-your-own-key FMP data sync + snapshot-factor formulas. `sync_into` writes a data-layout tree to any `ObjectSink` (local or S3/R2); the CLI is a thin wrapper. FMP stays out of `yuzu-core`/`pomelo-data`/WASM.
 - `lemon` / `lemon-lang` — the **strategy DSL**. Strategies are written in lemon and lowered to a JSON `Expr` tree the engine evaluates. Its `services` module provides pure editor language services (diagnostics/hover/completions).
 - `lemon-lsp` — a thin `tower-lsp` language server over `lemon::services` (hover, completion, live diagnostics). Editor integration (incl. a VS Code extension + TextMate grammar) lives under `editors/`.
 
@@ -55,6 +55,6 @@ additionally flags unknown series names (typos become silent `Data` leaves) and 
 - **Conventional Commits** — release-plz derives versions/changelog from them. `feat:`→minor,
   `fix:`/`perf:`→patch; `docs`/`chore`/`refactor`/`test`/`ci` don't release.
 - Don't hand-edit crate `version` fields — release-plz owns them.
-- Published library crates: `yuzu-core`, `yuzu-data`, `yuzu-source-s3`, `pomelo-fmp`,
+- Published library crates: `yuzu-core`, `pomelo-data`, `pomelo-s3`, `pomelo-fmp`,
   `lemon-lang` (the `lemon` crate is imported as `lemon`). The wasm/CLI/server crates
   are `publish = false`.

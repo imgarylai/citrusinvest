@@ -43,8 +43,8 @@ crates/yuzu-core/          # pure, I/O-free evaluator — re-exports `lemon::spe
     golden_ops.rs          # per-op golden tests
     strategy_e2e.rs        # full spec → position matrix golden
     strategy_backtest_e2e.rs  # full spec → backtest report golden
-crates/yuzu-data/          # native I/O layer: OHLCV + fundamentals loaders (see below)
-crates/yuzu-source-s3/     # generic S3 ObjectSource for yuzu-data
+crates/pomelo-data/          # native I/O layer: OHLCV + fundamentals loaders (see below)
+crates/pomelo-s3/     # generic S3 ObjectSource for pomelo-data
 crates/yuzu-wasm/          # browser/Worker bindings (run_backtest_json)
 crates/yuzu-server/        # native backtest server core (source-agnostic handle_backtest)
 crates/yuzu-cli/           # native batch binary
@@ -57,9 +57,9 @@ so both the parser and the evaluator agree on one tree shape.
 
 ---
 
-## Data loader (yuzu-data)
+## Data loader (pomelo-data)
 
-`crates/yuzu-data/` is a **native** crate that reads per-symbol OHLCV price
+`crates/pomelo-data/` is a **native** crate that reads per-symbol OHLCV price
 files (plus fundamentals/industry) from disk or any `ObjectSource` implementation
 and returns a `Panel` ready for the evaluator. It depends on `yuzu-core`;
 `yuzu-core` never depends on it (keeping the WASM build I/O-free).
@@ -107,7 +107,7 @@ file doesn't exist; `load_panel` treats a missing file as an all-NaN column. A
 sibling `ObjectSink` trait (`fn put(&self, key, bytes)`) covers writes.
 
 **`LocalSource`** resolves keys under a root directory on the local filesystem —
-used by tests, the CLI, and offline development. The `yuzu-source-s3` crate ships a
+used by tests, the CLI, and offline development. The `pomelo-s3` crate ships a
 generic S3-backed `ObjectSource` for the batch runner.
 
 ### `load_panel`
@@ -135,9 +135,9 @@ pub fn load_panel<S: ObjectSource + Sync>(
   an all-NaN column. Symbols are fetched concurrently; a corrupt file is treated as
   missing rather than sinking the batch.
 
-Top-level re-exports (use as `yuzu_data::load_panel`, `yuzu_data::Field`,
-`yuzu_data::OhlcvRow`, `yuzu_data::LocalSource`, `yuzu_data::ObjectSource`,
-`yuzu_data::PRICES_DIR`):
+Top-level re-exports (use as `pomelo_data::load_panel`, `pomelo_data::Field`,
+`pomelo_data::OhlcvRow`, `pomelo_data::LocalSource`, `pomelo_data::ObjectSource`,
+`pomelo_data::PRICES_DIR`):
 
 ```rust
 pub use csv_io::{Field, OhlcvRow};

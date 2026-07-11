@@ -1,12 +1,12 @@
 [package]
-name = "yuzu-source-s3"
+name = "pomelo-s3"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 readme.workspace = true
 rust-version.workspace = true
-description = "S3-compatible ObjectSource for yuzu-data, reading objects over SigV4-presigned HTTPS GETs."
+description = "S3-compatible ObjectSource for pomelo-data, reading objects over SigV4-presigned HTTPS GETs."
 keywords = ["s3", "backtesting", "finance", "market-data"]
 categories = ["finance"]
 
@@ -18,7 +18,7 @@ rusty-s3 = "0.10.0"
 # would hand the loader plain bytes and break `GzDecoder`. `rustls` keeps TLS +
 # webpki roots for the HTTPS GETs.
 ureq = { version = "3.3.0", default-features = false, features = ["rustls"] }
-yuzu-data = { path = "../yuzu-data", version = "0.5.1" }
+pomelo-data = { path = "../pomelo-data", version = "0.5.1" }
 
 [dev-dependencies]
 flate2.workspace = true

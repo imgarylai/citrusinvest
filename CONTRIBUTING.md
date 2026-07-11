@@ -80,7 +80,7 @@ Releases are automated with [release-plz](https://release-plz.dev/) — every pu
 - **Don't** hand-edit crate `version` fields — release-plz owns them (a manual bump
   would publish immediately instead of going through the release PR).
 
-Published library crates: `yuzu-core`, `yuzu-data`, `yuzu-source-s3`, and `lemon-lang`
+Published library crates: `yuzu-core`, `pomelo-data`, `pomelo-s3`, and `lemon-lang`
 (the `lemon` crate — still imported as `lemon` — publishes under the name `lemon-lang`).
 The wasm/CLI/server crates are `publish = false`.
 
