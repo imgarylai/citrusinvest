@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0](https://github.com/citrusquant/citrusquant/compare/pomelo-s3-v0.6.0...pomelo-s3-v0.7.0) - 2026-07-12
+
+### Added
+
+- *(fmp-sync)* S3 credential chain (R2 + AWS IAM), session-token support
+
+### Other
+
+- *(yuzu-research)* extract multi-run research orchestration from the CLI
+- relocate library-grade logic from yuzu-cli to pomelo crates
+- *(audit)* move data-audit into a pomelo-audit crate; CLI just calls it
+
 ## [0.6.0](https://github.com/citrusquant/citrusquant/compare/pomelo-s3-v0.5.1...pomelo-s3-v0.6.0) - 2026-07-12
 
 ### Added

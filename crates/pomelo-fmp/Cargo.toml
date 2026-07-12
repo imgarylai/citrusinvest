@@ -8,8 +8,8 @@ readme.workspace = true
 description = "Bring-your-own-key FMP data sync + snapshot-factor formulas for the yuzu backtest engine. Writes a data-layout tree to any ObjectSink (local disk or S3/R2). No FMP data redistributed."
 
 [dependencies]
-yuzu-core = { path = "../yuzu-core", version = "0.6.0" }
-pomelo-data = { path = "../pomelo-data", version = "0.6.0" }
+yuzu-core = { path = "../yuzu-core", version = "0.7.0" }
+pomelo-data = { path = "../pomelo-data", version = "0.7.0" }
 serde_json = { workspace = true }
 flate2 = { workspace = true }
 # Direct HTTP for the real FMP client (no third-party FMP SDK). Optional +

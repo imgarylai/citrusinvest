@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0](https://github.com/citrusquant/citrusquant/compare/yuzu-core-v0.6.0...yuzu-core-v0.7.0) - 2026-07-12
+
+### Other
+
+- *(yuzu-research)* extract multi-run research orchestration from the CLI
+- *(audit)* move data-audit into a pomelo-audit crate; CLI just calls it
+
 ## [0.6.0](https://github.com/citrusquant/citrusquant/compare/yuzu-core-v0.5.1...yuzu-core-v0.6.0) - 2026-07-12
 
 ### Other
