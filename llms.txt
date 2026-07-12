@@ -20,6 +20,7 @@
 ## API (docs.rs)
 
 - [yuzu-core](https://docs.rs/yuzu-core) — `run_backtest(spec_json, ctx, price_key, cfg) -> Report`.
+- [yuzu-research](https://docs.rs/yuzu-research) — multi-run research: sweeps, grids, walk-forward, lookahead-bias.
 - [lemon-lang](https://docs.rs/lemon-lang) — `parse(src) -> Value`, `format(&value) -> String`.
 - [pomelo-data](https://docs.rs/pomelo-data) · [pomelo-s3](https://docs.rs/pomelo-s3) · [pomelo-fmp](https://docs.rs/pomelo-fmp) · [pomelo-audit](https://docs.rs/pomelo-audit)
 

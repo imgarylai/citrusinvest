@@ -2190,6 +2190,7 @@ dependencies = [
  "serde",
  "serde_json",
  "yuzu-core",
+ "yuzu-research",
 ]
 
 [[package]]
@@ -2201,6 +2202,18 @@ dependencies = [
  "ndarray",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "yuzu-research"
+version = "0.6.0"
+dependencies = [
+ "pomelo-data",
+ "pomelo-fmp",
+ "rayon",
+ "serde",
+ "serde_json",
+ "yuzu-core",
 ]
 
 [[package]]

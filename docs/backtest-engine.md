@@ -38,6 +38,7 @@ crates/yuzu-core/          # pure, I/O-free evaluator — re-exports `lemon::spe
     golden_ops.rs          # per-op golden tests
     strategy_e2e.rs        # full spec → position matrix golden
     strategy_backtest_e2e.rs  # full spec → backtest report golden
+crates/yuzu-research/      # multi-run research: sweeps, grids, walk-forward, lookahead-bias
 crates/pomelo-data/        # native I/O layer: OHLCV + fundamentals loaders (see below)
 crates/pomelo-s3/          # generic S3 ObjectSource for pomelo-data
 crates/pomelo-audit/       # read-only data-quality audit of a data-layout tree (yuzu-cli data-audit)

@@ -1,0 +1,21 @@
+[package]
+name = "yuzu-research"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+rust-version.workspace = true
+description = "Multi-run backtest research over yuzu-core: parameter sweeps, grids, walk-forward analysis, and lookahead-bias detection over a local data-layout tree."
+keywords = ["backtesting", "finance", "quant", "walk-forward"]
+categories = ["finance"]
+
+[dependencies]
+yuzu-core = { path = "../yuzu-core", version = "0.6.0" }
+pomelo-data = { path = "../pomelo-data", version = "0.6.0" }
+# Only the pure index-membership series names (no TLS/HTTP) — the sync client is
+# not needed here, so build pomelo-fmp with default-features off.
+pomelo-fmp = { path = "../pomelo-fmp", version = "0.6.0", default-features = false }
+rayon = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
