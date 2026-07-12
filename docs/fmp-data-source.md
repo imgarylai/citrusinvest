@@ -246,7 +246,7 @@ to a local tree (or omit `--index`).
 | `prices/{SYM}.csv.gz` (adjusted OHLCV) | always | `historical-price-eod/dividend-adjusted` |
 | `fundamentals/{SYM}.csv.gz` (dense forward-filled factors + `report_event`, visible from the **filing date**) | `--include-fundamentals` | `ratios` + `key-metrics` + `financial-growth` + `income-statement` (annual) |
 | `tracked/universe.csv.gz` (`symbol,sector,market_cap`) | `--include-industry` | `profile` |
-| `panels/{piotroski_score,altman_z,fcf_yield,analyst_upside_pct,consensus_rating}.csv.gz` (snapshot-factor panels) | `--include-snapshot-factors` | `financial-scores` + `key-metrics-ttm` + `price-target-consensus` + `grades-summary` + `income-statement` |
+| `panels/{piotroski_score,altman_z,fcf_yield,pe_industry_pctile,analyst_upside_pct,consensus_rating}.csv.gz` (snapshot-factor panels) | `--include-snapshot-factors` | `financial-scores` + `key-metrics-ttm` + `ratios-ttm` + `price-target-consensus` + `grades-summary` + `income-statement` + `profile` |
 | — (universe discovery / exchange, ETF & market-cap screen) | `--all-symbols`, `--exchange`, `--min-market-cap` | `company-screener`, `profile` |
 | — (delisted names unioned into the universe) | `--include-delisted` | `delisted-companies` |
 | `panels/in_<index>.csv.gz` (PIT membership 0/1) + ever-member price universe | `--index sp500` | `sp-500` + `historical-sp-500` |
@@ -254,27 +254,35 @@ to a local tree (or omit `--index`).
 
 ### Snapshot-factor panels (`--include-snapshot-factors`, #132)
 
-Computes five combined `panels/{name}.csv.gz` factor panels the engine reads as
-bare `Data` series (feed into `rank` / `zscore` / `is_largest`, etc.):
+Computes the six combined `panels/{name}.csv.gz` factor panels the engine reads
+as bare `Data` series (feed into `rank` / `zscore` / `is_largest`, etc.):
 
 | Series | Source | Transform |
 |--------|--------|-----------|
 | `piotroski_score` | `financial-scores` | `piotroskiScore` (0–9), authoritative |
 | `altman_z` | `financial-scores` | `altmanZScore` |
 | `fcf_yield` | `key-metrics-ttm` | `freeCashFlowYieldTTM` |
+| `pe_industry_pctile` | `ratios-ttm` (P/E) + `profile` (industry) | midrank percentile of P/E within the industry cohort × 100 |
 | `analyst_upside_pct` | `price-target-consensus` | `(targetConsensus − close) / close × 100` |
 | `consensus_rating` | `grades-summary` | Strong Buy = 1 … Strong Sell = 5 (lower = more bullish) |
 
 **Formulas are a native port of the web app's `factor-snapshot-panels.ts`** so
-CLI- and web-built panels agree. `pe_industry_pctile` (the sixth
-`FACTOR_PANEL_FIELDS` entry) needs a cross-sectional industry cohort and is
-Phase 2.
+CLI- and web-built panels agree.
+
+**`pe_industry_pctile` is cross-sectional.** Symbols are grouped by the profile's
+`industry` field; each symbol's TTM P/E is ranked (midrank percentile × 100)
+within its industry cohort of finite, strictly-positive P/Es. The web app draws
+that cohort from its entire stored universe; a one-shot CLI run only has **this
+run's symbols**, so the cohort is the intersection of the run universe with each
+industry, and thin cohorts (< 5 members) are suppressed to NaN. Sync a broad
+universe (e.g. `--all-symbols`) for meaningful percentiles.
 
 **Current-snapshot semantics (honest limitation).** FMP's `financial-scores` /
 `*-ttm` / `price-target-consensus` / `grades-summary` return a *current* value
 with no history, so a one-shot sync writes a **current snapshot**, not a time
-series: `piotroski_score` / `altman_z` / `fcf_yield` are anchored to the latest
-report's **filing date** (visible from then on); `analyst_upside_pct` /
+series: `piotroski_score` / `altman_z` / `fcf_yield` / `pe_industry_pctile` are
+anchored to the latest report's **filing date** (visible from then on);
+`analyst_upside_pct` /
 `consensus_rating` are anchored to the **last synced trading day** (final bar
 only). Use these for **current-universe screening**, not deep historical
 backtests — richer history needs daily snapshot accumulation over time (a service

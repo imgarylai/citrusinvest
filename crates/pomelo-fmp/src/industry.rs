@@ -16,9 +16,11 @@ pub(crate) fn profile_url(sym: &str, key: &str) -> String {
 }
 
 /// The bits of the company profile the sync uses: sector (for the industry
-/// map), market cap (cap screen), and security-type flags (stock-only screen).
+/// map), the finer `industry` (for `pe_industry_pctile` cohorts), market cap
+/// (cap screen), and security-type flags (stock-only screen).
 pub(crate) struct Profile {
     pub(crate) sector: Option<String>,
+    pub(crate) industry: Option<String>,
     pub(crate) market_cap: Option<f64>,
     pub(crate) is_etf: bool,
     pub(crate) is_fund: bool,
@@ -44,14 +46,16 @@ pub(crate) fn fetch_profile<H: HttpClient>(
     let Some(obj) = rows.first().and_then(Value::as_object) else {
         return Ok(None);
     };
-    let sector = obj
-        .get("sector")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(str::to_string);
+    let field = |key: &str| {
+        obj.get(key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+    };
     Ok(Some(Profile {
-        sector,
+        sector: field("sector"),
+        industry: field("industry"),
         market_cap: num(obj, &["marketCap", "marketCapitalization"]),
         is_etf: flag(obj, "isEtf"),
         is_fund: flag(obj, "isFund"),

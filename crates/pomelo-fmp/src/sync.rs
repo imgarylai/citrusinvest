@@ -66,8 +66,12 @@ pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
     let mut snapshots = cfg.include_snapshot_factors.then(SnapshotAccum::new);
 
     // One profile GET per symbol serves the ETF/fund screen, the market-cap
-    // screen, and the industry map — fetch it only when at least one needs it.
-    let need_profile = cfg.skip_non_stocks || cfg.min_market_cap > 0.0 || cfg.include_industry;
+    // screen, the industry map, and the `pe_industry_pctile` cohort key — fetch
+    // it only when at least one needs it.
+    let need_profile = cfg.skip_non_stocks
+        || cfg.min_market_cap > 0.0
+        || cfg.include_industry
+        || cfg.include_snapshot_factors;
 
     for sym in symbols {
         let price_key = format!("{PRICES_DIR}/{sym}.csv.gz");
@@ -178,8 +182,11 @@ pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
 
         if let Some(acc) = snapshots.as_mut() {
             let last_close = rows.last().map(|r| r.adj_close).unwrap_or(f64::NAN);
-            let cols = compute_symbol(&fetcher, sym, api_key, &price_days, last_close);
-            acc.push(sym.clone(), cols);
+            let snap = compute_symbol(&fetcher, sym, api_key, &price_days, last_close);
+            // Industry (the pe_industry_pctile cohort key) comes from the profile
+            // fetched above for the screen.
+            let industry = profile.as_ref().and_then(|p| p.industry.clone());
+            acc.push(sym.clone(), snap, industry, &price_days);
         }
 
         if cfg.include_industry {
