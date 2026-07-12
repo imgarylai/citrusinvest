@@ -201,6 +201,26 @@ yuzu-cli fmp-sync --api-key "$FMP_API_KEY" --out ./mydata \
   [--rate-limit 300] [--max-retries 4] [--append | --resume]
 ```
 
+### Output target: local path or S3/R2 (`--out`)
+
+`--out` takes a local path **or** an `s3://bucket[/prefix]` URL, so a service can
+sync straight to R2/S3 without a local staging dir. Both write a **byte-identical**
+`data-layout.md` tree — the CLI and a Rust service (`pomelo_fmp::sync_into` +
+`pomelo-s3`) share the same code path over an `ObjectSink`; only the destination
+differs.
+
+```bash
+export S3_ENDPOINT=https://<accountid>.r2.cloudflarestorage.com  # or your S3 endpoint
+export S3_ACCESS_KEY_ID=…  S3_SECRET_ACCESS_KEY=…  S3_REGION=auto  # region defaults to "auto"
+yuzu-cli fmp-sync --api-key "$FMP_API_KEY" --out s3://my-bucket/mirror/v1 \
+  --symbols AAPL,MSFT --include-fundamentals --include-snapshot-factors
+```
+
+Keys are written under the URL's optional `/prefix` (e.g.
+`mirror/v1/prices/AAPL.csv.gz`). **`--index` currently requires a local `--out`**
+— the point-in-time membership panel is written in a post-sync pass that reads a
+local trading calendar; sync the index to a local tree (or omit `--index`).
+
 | Output | Flag | FMP endpoint (stable) |
 |--------|------|-----------------------|
 | `prices/{SYM}.csv.gz` (adjusted OHLCV) | always | `historical-price-eod/dividend-adjusted` |
