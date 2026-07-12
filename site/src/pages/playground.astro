@@ -13,17 +13,62 @@ import '../styles/custom.css';
 import '../styles/playground-app.css';
 
 const BASE = import.meta.env.BASE_URL;
-const initial = `# Hold the 3 names with the highest 2-day average close.
-# Edit this and press Run (or Ctrl/Cmd+Enter).
-is_largest(sma(close, 2), 3)`;
 
-// Example strategies for the chip row (loaded + run on click by playground.ts).
-const examples: { label: string; src: string }[] = [
-  { label: 'Momentum', src: `# 3-month momentum: hold the 3 strongest names.\nis_largest(pct_change(close, 63), 3)` },
-  { label: 'Value + trend', src: `# Cheap AND trending: lowest P/E, above the 20-day average.\nis_smallest(pe, 3) and (close > sma(close, 20))` },
-  { label: 'Trend + RSI', src: `# Trend filter across the universe, skip the overbought.\nclose > sma(close, 50) and rsi(close, 14) < 70` },
-  { label: 'Monthly rebalance', src: `# Same momentum idea, rebalanced monthly instead of daily.\nrebalance(is_largest(pct_change(close, 63), 3), freq="ME")` },
+// Preset strategies, each with a one-line explanation. The first is the default
+// that loads (and autoruns) on page open. Every source here is a known-good
+// lemon expression drawn from the tutorial / reference examples. The dropdown +
+// explanation are wired by playground.ts (see the [data-pg-presets] handler).
+const presets: { label: string; src: string; explain: string }[] = [
+  {
+    label: 'Highest recent average',
+    src: 'is_largest(sma(close, 2), 3)',
+    explain:
+      "Hold the 3 names trading at the highest 2-day average close — a light momentum tilt, and the simplest thing that isn't “own everything.”",
+  },
+  {
+    label: '3-month momentum',
+    src: 'is_largest(pct_change(close, 63), 3)',
+    explain:
+      'Rank the universe by trailing ~3-month return (63 trading days) and hold the 3 strongest. Textbook cross-sectional momentum.',
+  },
+  {
+    label: 'Value + trend',
+    src: 'is_smallest(pe, 3) and (close > sma(close, 20))',
+    explain:
+      'The 3 cheapest names by trailing P/E, but only while each sits above its own 20-day average — cheap AND actually going up.',
+  },
+  {
+    label: 'Trend + RSI filter',
+    src: 'close > sma(close, 50) and rsi(close, 14) < 70',
+    explain:
+      'Own any name above its 50-day average, but skip the overbought ones (14-day RSI ≥ 70). A whole-universe trend filter, equal-weighted.',
+  },
+  {
+    label: 'Momentum, monthly rebalance',
+    src: 'rebalance(is_largest(pct_change(close, 63), 3), freq="ME")',
+    explain:
+      'The same 3-month momentum, but positions are only re-picked at each month-end (freq="ME") — far fewer trades and lower turnover.',
+  },
+  {
+    label: 'Single strongest name',
+    src: 'is_largest(sma(close, 2), 1)',
+    explain:
+      'Concentrate everything into the one highest-average name. Maximum conviction — and maximum single-name risk; watch the drawdowns.',
+  },
+  {
+    label: 'Pure trend filter',
+    src: 'close > sma(close, 50)',
+    explain:
+      "Hold every name while it trades above its 50-day average — no selection, just “own whatever is in an uptrend,” equal-weighted.",
+  },
+  {
+    label: 'Momentum by RSI',
+    src: 'is_largest(rsi(close, 14), 3)',
+    explain:
+      "Hold the 3 names with the highest 14-day RSI. With NVDA's 2016–17 run in the sample, momentum has an unfair tailwind here — watch what it holds.",
+  },
 ];
+const initial = presets[0].src;
 ---
 
 <!doctype html>
@@ -117,12 +162,17 @@ const examples: { label: string; src: string }[] = [
         <section class="pgx-left">
           <div class="pgx-pane-head">
             <span class="pg-label">Strategy · lemon DSL</span>
-            <div class="pgx-examples" aria-label="Example strategies">
-              {examples.map((ex) => (
-                <button type="button" data-pg-example={ex.src}>{ex.label}</button>
-              ))}
-            </div>
+            <label class="pgx-preset-wrap">
+              <span class="pgx-preset-caption">Preset</span>
+              <select class="pgx-preset" data-pg-presets aria-label="Preset strategies">
+                {presets.map((p) => (
+                  <option data-src={p.src} data-explain={p.explain}>{p.label}</option>
+                ))}
+              </select>
+            </label>
           </div>
+
+          <p class="pgx-explain" data-pg-explain>{presets[0].explain}</p>
 
           <div class="pg-editor pgx-editor" data-initial={initial}></div>
 

@@ -251,29 +251,60 @@ body {
   margin-bottom: 0.6rem;
 }
 
-/* example chips (compact, right-aligned in the pane head) */
-.pgx-examples {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
+/* preset dropdown */
+.pgx-preset-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
 }
-.pgx-examples button {
+.pgx-preset-caption {
   font-family: var(--sl-font-mono);
   font-size: 0.72rem;
-  font-weight: 600;
-  padding: 0.2rem 0.6rem;
-  border: 1px solid var(--sl-color-gray-5);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--sl-color-gray-2);
-  cursor: pointer;
-  transition:
-    border-color 0.15s,
-    color 0.15s;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--sl-color-gray-3);
 }
-.pgx-examples button:hover {
-  border-color: var(--sl-color-accent);
+.pgx-preset {
+  font-family: var(--sl-font-mono);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.3rem 1.9rem 0.3rem 0.7rem;
   color: var(--sl-color-white);
+  background: var(--sl-color-black);
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.45rem;
+  cursor: pointer;
+  /* custom caret so it reads as ours in both themes */
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--sl-color-accent) 50%),
+    linear-gradient(135deg, var(--sl-color-accent) 50%, transparent 50%);
+  background-position:
+    calc(100% - 1.05rem) 55%,
+    calc(100% - 0.7rem) 55%;
+  background-size:
+    0.35rem 0.35rem,
+    0.35rem 0.35rem;
+  background-repeat: no-repeat;
+}
+.pgx-preset:hover {
+  border-color: var(--sl-color-accent);
+}
+.pgx-preset:focus-visible {
+  outline: 2px solid var(--sl-color-accent);
+  outline-offset: 1px;
+}
+
+/* the explanation blurb that tracks the chosen preset */
+.pgx-explain {
+  margin: 0 0 0.7rem;
+  padding: 0.55rem 0.75rem;
+  border-left: 2px solid var(--sl-color-accent);
+  background: var(--sl-color-gray-6);
+  border-radius: 0 0.35rem 0.35rem 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--sl-color-gray-2);
 }
 
 /* editor fills the left column on desktop */
