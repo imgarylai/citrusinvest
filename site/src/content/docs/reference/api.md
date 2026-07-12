@@ -11,8 +11,9 @@ on this site; these links are always current with the latest release.
 |-------|----------|-----------|
 | `yuzu-core` | [docs.rs/yuzu-core](https://docs.rs/yuzu-core) | Pure, I/O-free backtest engine core. `run_backtest(spec_json, ctx, price_key, cfg) -> Report`. |
 | `lemon-lang` | [docs.rs/lemon-lang](https://docs.rs/lemon-lang) | The lemon strategy DSL. `parse(src) -> Value`, `format(&value) -> String`. |
-| `yuzu-data` | [docs.rs/yuzu-data](https://docs.rs/yuzu-data) | Native I/O: gzip CSV / Parquet price & fundamental files → panels. |
-| `yuzu-source-s3` | [docs.rs/yuzu-source-s3](https://docs.rs/yuzu-source-s3) | S3-compatible `ObjectSource` for `yuzu-data`. |
+| `pomelo-data` | [docs.rs/pomelo-data](https://docs.rs/pomelo-data) | Native I/O: gzip CSV / Parquet price & fundamental files → panels. |
+| `pomelo-s3` | [docs.rs/pomelo-s3](https://docs.rs/pomelo-s3) | S3-compatible `ObjectSource`/`ObjectSink` for `pomelo-data`. |
+| `pomelo-fmp` | [docs.rs/pomelo-fmp](https://docs.rs/pomelo-fmp) | Bring-your-own-key FMP data sync + snapshot-factor formulas; writes to local disk or S3/R2. |
 
 The `wasm`, `cli`, and `server` crates are not published to crates.io — they are
 application boundaries, not public library API. Read their source in the
