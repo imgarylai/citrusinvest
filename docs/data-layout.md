@@ -401,12 +401,15 @@ If this doc and the code disagree, **trust the code** and update this file.
 
 ## Auditing a tree
 
-`yuzu-cli data-audit --data <dir> [--from --to] [--json]` runs a read-only
-data-quality pass over this layout (coverage, calendar gaps, adjustment sanity,
-survivorship, NaN density, filing-date lag, index membership) and prints per-check
-`OK` / `WARN` / `FAIL`; any `FAIL` exits non-zero. See
-[`fmp-data-source.md`](fmp-data-source.md) § *Auditing a synced tree* for the check
-table.
+`yuzu-cli data-audit --data <dir|s3://bucket[/prefix]> [--from --to] [--json]`
+runs a read-only data-quality pass over this layout (coverage, calendar gaps,
+adjustment sanity, survivorship, NaN density, filing-date lag, index
+membership) and prints per-check `OK` / `WARN` / `FAIL`; any `FAIL` exits
+non-zero. `--data` audits a local tree or an S3/R2 tree identically — discovery
+goes through `ObjectLister`, reads through `ObjectSource`, both implemented for
+`LocalSource` and `pomelo-s3::S3Source`/`OutStore` (#149). See
+[`fmp-data-source.md`](fmp-data-source.md) § *Auditing a synced tree* for the
+check table and the shallow-vs-deep cost tradeoff over S3.
 
 ---
 

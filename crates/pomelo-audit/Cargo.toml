@@ -16,3 +16,8 @@ yuzu-core = { path = "../yuzu-core", version = "0.7.0" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 flate2 = { workspace = true }
+
+[dev-dependencies]
+# Proves run_data_audit is genuinely storage-agnostic (#149): one test drives it
+# against a stub S3 endpoint instead of LocalSource.
+pomelo-s3 = { path = "../pomelo-s3", version = "0.6.0" }

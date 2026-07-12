@@ -8,8 +8,13 @@
 use std::time::Duration;
 
 use pomelo_data::error::DataError;
-use pomelo_data::{ObjectSink, ObjectSource};
+use pomelo_data::{ObjectLister, ObjectSink, ObjectSource};
+use rusty_s3::actions::ListObjectsV2;
 use rusty_s3::{Bucket, Credentials, S3Action, UrlStyle};
+
+/// Cap on the XML `ListObjectsV2` response body per page — generous for even a
+/// full 1000-key page of long keys.
+const LIST_RESPONSE_LIMIT: u64 = 16 * 1024 * 1024;
 
 /// How long a presigned GET URL stays valid — generous, single-shot use.
 const SIGN_TTL: Duration = Duration::from_secs(300);
@@ -99,6 +104,41 @@ impl ObjectSink for S3Source {
             Ok(_) => Ok(()),
             Err(e) => Err(DataError::Io(format!("PUT {key}: {e}"))),
         }
+    }
+}
+
+impl ObjectLister for S3Source {
+    /// `ListObjectsV2`, paginating on `NextContinuationToken` (S3 returns at
+    /// most 1000 keys per page). Returns full keys (the `prefix` as stored),
+    /// matching what [`ObjectSource::get`] expects.
+    fn list(&self, prefix: &str) -> Result<Vec<String>, DataError> {
+        let mut keys = Vec::new();
+        let mut continuation_token: Option<String> = None;
+        loop {
+            let mut action = ListObjectsV2::new(&self.bucket, Some(&self.creds));
+            action.with_prefix(prefix);
+            if let Some(tok) = &continuation_token {
+                action.with_continuation_token(tok.as_str());
+            }
+            let url = action.sign(SIGN_TTL);
+            let body = match ureq::get(url.as_str()).call() {
+                Ok(resp) => resp
+                    .into_body()
+                    .with_config()
+                    .limit(LIST_RESPONSE_LIMIT)
+                    .read_to_string()
+                    .map_err(|e| DataError::Io(format!("read LIST {prefix}: {e}")))?,
+                Err(e) => return Err(DataError::Io(format!("LIST {prefix}: {e}"))),
+            };
+            let parsed = ListObjectsV2::parse_response(&body)
+                .map_err(|e| DataError::Io(format!("parse LIST {prefix} response: {e}")))?;
+            keys.extend(parsed.contents.into_iter().map(|c| c.key));
+            continuation_token = parsed.next_continuation_token;
+            if continuation_token.is_none() {
+                break;
+            }
+        }
+        Ok(keys)
     }
 }
 
@@ -222,9 +262,36 @@ impl ObjectSink for OutStore {
     }
 }
 
+impl ObjectLister for OutStore {
+    fn list(&self, prefix: &str) -> Result<Vec<String>, DataError> {
+        match self {
+            OutStore::Local(l) => l.list(prefix),
+            OutStore::S3 {
+                src,
+                prefix: store_prefix,
+            } => {
+                let full_prefix = OutStore::prefixed(store_prefix, prefix);
+                let keys = src.list(&full_prefix)?;
+                // Strip the store's own key prefix back off, so callers see the
+                // same data-layout-relative keys as with a local/unprefixed store.
+                let strip_from = if store_prefix.is_empty() {
+                    0
+                } else {
+                    store_prefix.len() + 1
+                };
+                Ok(keys
+                    .into_iter()
+                    .map(|k| k.get(strip_from..).unwrap_or(&k).to_string())
+                    .collect())
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use std::io::{Read, Write};
     use std::net::TcpListener;
     use std::thread;
@@ -270,6 +337,52 @@ mod tests {
             );
             sock.write_all(head.as_bytes()).unwrap();
             sock.write_all(&body).unwrap();
+        });
+        format!("http://{addr}")
+    }
+
+    /// A `ListObjectsV2` XML response body for `keys`, with `next_token` set
+    /// when the caller should page again.
+    fn list_objects_v2_xml(keys: &[String], next_token: Option<&str>) -> String {
+        let contents: String = keys
+            .iter()
+            .map(|k| {
+                format!(
+                    "<Contents><Key>{k}</Key><LastModified>2020-01-01T00:00:00.000Z</LastModified>\
+                     <ETag>\"e\"</ETag><Size>1</Size><StorageClass>STANDARD</StorageClass></Contents>"
+                )
+            })
+            .collect();
+        let token = next_token
+            .map(|t| format!("<NextContinuationToken>{t}</NextContinuationToken>"))
+            .unwrap_or_default();
+        format!(
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\
+             <ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">\
+             <Name>bucket</Name><Prefix>prices/</Prefix><KeyCount>{}</KeyCount>\
+             <MaxKeys>1000</MaxKeys><IsTruncated>{}</IsTruncated>{contents}{token}\
+             <EncodingType>url</EncodingType></ListBucketResult>",
+            keys.len(),
+            next_token.is_some(),
+        )
+    }
+
+    /// Serves each of `bodies` in order, one per accepted connection, as a
+    /// `200 OK` response. Used to stub successive `ListObjectsV2` pages.
+    fn spawn_body_pages_stub(bodies: Vec<String>) -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        thread::spawn(move || {
+            for body in bodies {
+                let (mut sock, _) = listener.accept().unwrap();
+                let mut buf = [0u8; 4096];
+                let _ = sock.read(&mut buf).unwrap();
+                let resp = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                sock.write_all(resp.as_bytes()).unwrap();
+            }
         });
         format!("http://{addr}")
     }
@@ -430,5 +543,69 @@ mod tests {
         assert!(resolve_s3_conn(env_of(&[("S3_ACCESS_KEY_ID", "x")])).is_err());
         // Nothing set → error.
         assert!(resolve_s3_conn(env_of(&[])).is_err());
+    }
+
+    #[test]
+    fn list_paginates_past_a_thousand_keys_via_continuation_token() {
+        // First page: a full 1000-key page (S3's per-page cap) + a continuation
+        // token; second page: the remainder, no token. `list` must concatenate
+        // both pages into a single result.
+        let page1: Vec<String> = (0..1000)
+            .map(|i| format!("prices/SYM{i:04}.csv.gz"))
+            .collect();
+        let page2: Vec<String> = (1000..1200)
+            .map(|i| format!("prices/SYM{i:04}.csv.gz"))
+            .collect();
+        let endpoint = spawn_body_pages_stub(vec![
+            list_objects_v2_xml(&page1, Some("tok1")),
+            list_objects_v2_xml(&page2, None),
+        ]);
+        let src = S3Source::new(&endpoint, "bucket", "ak", "sk", None, "auto").unwrap();
+        let keys = src.list("prices").unwrap();
+        assert_eq!(keys.len(), 1200);
+        assert_eq!(keys[0], "prices/SYM0000.csv.gz");
+        assert_eq!(keys[999], "prices/SYM0999.csv.gz");
+        assert_eq!(keys[1199], "prices/SYM1199.csv.gz");
+    }
+
+    #[test]
+    fn list_returns_empty_on_no_contents() {
+        let endpoint = spawn_body_pages_stub(vec![list_objects_v2_xml(&[], None)]);
+        let src = S3Source::new(&endpoint, "bucket", "ak", "sk", None, "auto").unwrap();
+        assert_eq!(src.list("panels").unwrap(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn list_surfaces_transport_errors() {
+        let src = S3Source::new(&dead_endpoint(), "bucket", "ak", "sk", None, "auto").unwrap();
+        assert!(matches!(src.list("prices"), Err(DataError::Io(_))));
+    }
+
+    #[test]
+    fn outstore_list_strips_the_store_prefix_from_s3_keys() {
+        let body = list_objects_v2_xml(&["mirror/v1/prices/AAPL.csv.gz".to_string()], None);
+        let endpoint = spawn_body_pages_stub(vec![body]);
+        let src = S3Source::new(&endpoint, "bucket", "ak", "sk", None, "auto").unwrap();
+        let out = OutStore::S3 {
+            src: Box::new(src),
+            prefix: "mirror/v1".to_string(),
+        };
+        assert_eq!(
+            out.list("prices").unwrap(),
+            vec!["prices/AAPL.csv.gz".to_string()]
+        );
+    }
+
+    #[test]
+    fn outstore_list_delegates_to_local_source() {
+        let dir = std::env::temp_dir().join("pomelo_s3_outstore_list_test");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("prices")).unwrap();
+        fs::write(dir.join("prices/AAPL.csv.gz"), b"x").unwrap();
+        let out = OutStore::parse(dir.to_str().unwrap()).unwrap();
+        assert_eq!(
+            out.list("prices").unwrap(),
+            vec!["prices/AAPL.csv.gz".to_string()]
+        );
     }
 }

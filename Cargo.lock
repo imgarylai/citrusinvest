@@ -1288,6 +1288,7 @@ version = "0.7.0"
 dependencies = [
  "flate2",
  "pomelo-data",
+ "pomelo-s3",
  "serde",
  "serde_json",
  "yuzu-core",

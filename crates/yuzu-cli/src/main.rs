@@ -283,13 +283,20 @@ enum Cmd {
     ///
     /// Walks `prices/` / `fundamentals/` / `panels/` / `tracked/` and reports
     /// per-check OK / WARN / FAIL (coverage, calendar gaps, adjustment sanity,
-    /// survivorship, NaN density, filing-date lag, index membership). No network,
-    /// no engine run. Human table by default; `--json` for machine consumption.
-    /// Exits non-zero when any check FAILs, so it can gate CI or a nightly job.
+    /// survivorship, NaN density, filing-date lag, index membership). Human
+    /// table by default; `--json` for machine consumption. Exits non-zero when
+    /// any check FAILs, so it can gate CI or a nightly job.
+    ///
+    /// `--data` accepts a local path or an `s3://bucket[/prefix]` URL (same
+    /// credential chain as `fmp-sync --out`, see docs/fmp-data-source.md).
+    /// Discovery (which symbols/files exist) is list-only and cheap either way;
+    /// the content checks (gaps, jumps, NaN density, filing lag) read every
+    /// object, so a deep audit of a remote tree costs about as much as syncing
+    /// it locally first.
     DataAudit {
-        /// Data root to audit (mirrors the `--data` tree the backtests read).
+        /// Data root to audit: a local path, or `s3://bucket[/prefix]`.
         #[arg(long)]
-        data: PathBuf,
+        data: String,
         #[arg(long, default_value_t = 20000101)]
         from: i32,
         #[arg(long, default_value_t = 99991231)]
@@ -455,6 +462,34 @@ fn emit(out: &Option<PathBuf>, json: String) -> std::io::Result<()> {
             Ok(())
         }
     }
+}
+
+/// `data-audit --data`: a local path or `s3://bucket[/prefix]` (same
+/// `pomelo_s3::OutStore` parsing / credential chain as `fmp-sync --out`).
+/// S3/R2 support pulls the `fmp-sync` feature's ureq/rusty-s3 stack — an
+/// `s3://` URL without it is a clear error rather than a silent local-path
+/// misinterpretation.
+#[cfg(feature = "fmp-sync")]
+fn run_data_audit_over(
+    data: &str,
+    from: i32,
+    to: i32,
+) -> Result<pomelo_audit::DataAuditReport, Box<dyn std::error::Error>> {
+    let src = pomelo_s3::OutStore::parse(data)?;
+    Ok(pomelo_audit::run_data_audit(&src, data, from, to)?)
+}
+
+#[cfg(not(feature = "fmp-sync"))]
+fn run_data_audit_over(
+    data: &str,
+    from: i32,
+    to: i32,
+) -> Result<pomelo_audit::DataAuditReport, Box<dyn std::error::Error>> {
+    if data.starts_with("s3://") {
+        return Err("data-audit --data s3://… needs the fmp-sync feature (on by default; rebuild without --no-default-features)".into());
+    }
+    let src = pomelo_data::LocalSource::new(data);
+    Ok(pomelo_audit::run_data_audit(&src, data, from, to)?)
 }
 
 fn load_grid_variants(path: &PathBuf) -> Result<Vec<(String, String)>, Box<dyn std::error::Error>> {
@@ -634,7 +669,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             json,
             out,
         } => {
-            let report = pomelo_audit::run_data_audit(&data, from, to)?;
+            let report = run_data_audit_over(&data, from, to)?;
             let overall = report.overall;
             let body = if json {
                 serde_json::to_string_pretty(&report)?
