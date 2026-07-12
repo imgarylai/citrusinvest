@@ -135,7 +135,7 @@ dependencies = [
 
 [[package]]
 name = "lemon-lang"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -509,7 +509,7 @@ dependencies = [
 
 [[package]]
 name = "yuzu-core"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "chrono",
  "lemon-lang",
