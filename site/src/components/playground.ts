@@ -36,6 +36,9 @@ let sample: SampleData | null = null;
 interface LemonMod {
   parse(src: string): string;
   tokens(src: string): string;
+  hover(src: string, line: number, col: number): string;
+  completions(src: string, line: number, col: number): string;
+  lint(src: string, seriesJson: string): string;
 }
 let lemonMod: LemonMod | null = null;
 let yuzuMod: { run_backtest(input: string): string } | null = null;
@@ -206,10 +209,28 @@ export function initPlayground(root: HTMLElement): void {
   );
 
   // Load the lemon WASM up front so the editor highlights from the engine's own
-  // lexer (tokens()) immediately — independent of running a backtest. Failure
-  // here is non-fatal: the editor just stays uncolored.
+  // lexer (tokens()) immediately — independent of running a backtest, and wires
+  // hover / completion / lint from the same engine services. Failure here is
+  // non-fatal: the editor just stays plain. The lint unknown-series check needs
+  // the known-series list, so it starts off (null) and refines to the sample's
+  // panel keys once the data loads — hover/completion don't wait on it.
   loadLemon()
-    .then((m) => editor.setTokenizer((src) => JSON.parse(m.tokens(src))))
+    .then((m) => {
+      editor.setTokenizer((src) => JSON.parse(m.tokens(src)));
+      const wire = (seriesJson: string) =>
+        editor.setServices({
+          hover: (src, line, col) => JSON.parse(m.hover(src, line, col)),
+          completions: (src, line, col) => JSON.parse(m.completions(src, line, col)),
+          lint: (src) => {
+            const r = JSON.parse(m.lint(src, seriesJson));
+            return r.ok ? r.lints : null; // parse error → linter stays quiet
+          },
+        });
+      wire('null');
+      loadSample()
+        .then((s) => wire(JSON.stringify(Object.keys(s.panels))))
+        .catch(() => {});
+    })
     .catch(() => {});
 
   async function run() {
