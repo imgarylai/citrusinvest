@@ -57,7 +57,7 @@ pub enum Expr {
     Rsi { of: Box<Expr>, n: usize },
     /// Percentage change of `of` over `n` days.
     PctChange { of: Box<Expr>, n: usize },
-    /// 1 where `of` rose for `n` consecutive days, else 0.
+    /// 1 where `of` is above its value `n` days ago, else 0.
     Rise { of: Box<Expr>, n: usize },
     /// `of` lagged forward by `n` days.
     Shift { of: Box<Expr>, n: usize },
@@ -202,7 +202,7 @@ pub enum Expr {
         volume: Box<Expr>,
         n: usize,
     },
-    /// 1 where `of` fell for `n` consecutive days, else 0.
+    /// 1 where `of` is below its value `n` days ago, else 0.
     Fall { of: Box<Expr>, n: usize },
     /// 1 for the `n` highest values per row (cross-section), else 0.
     IsLargest { of: Box<Expr>, n: usize },

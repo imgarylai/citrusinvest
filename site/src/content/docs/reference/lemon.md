@@ -249,8 +249,8 @@ works. `n`-style arguments are **plain numbers**, not expressions.
 | `std`                   | `of`, `n`               | Rolling standard deviation over `n` days.           |
 | `rsi`                   | `of`, `n`               | Relative Strength Index over `n` days.              |
 | `pct_change`            | `of`, `n`               | Percentage change of `of` over `n` days.            |
-| `rise`                  | `of`, `n`               | `1` where `of` rose `n` consecutive days, else `0`. |
-| `fall`                  | `of`, `n`               | `1` where `of` fell `n` consecutive days, else `0`. |
+| `rise`                  | `of`, `n`               | `1` where `of` is above its value `n` days ago, else `0`. |
+| `fall`                  | `of`, `n`               | `1` where `of` is below its value `n` days ago, else `0`. |
 | `shift`                 | `of`, `n`               | `of` lagged forward by `n` days.                    |
 | `rolling_max`           | `of`, `n`               | Rolling maximum over `n` days.                       |
 | `rolling_min`           | `of`, `n`               | Rolling minimum over `n` days.                       |
@@ -354,9 +354,9 @@ These are not written as calls but are still nodes in the tree:
 | `close`, `pe`, …     | `Data`                             | A raw input series by name (bare identifier).  |
 | `42`, `0.5`, `5e8`   | `Const`                            | A constant scalar, broadcast across the panel. A bare number used as an operand is auto-promoted to a `Const`. |
 
-That is the complete surface: **59 op tags** total in the engine — the leaves
+That is the complete surface: **71 op tags** total in the engine — the leaves
 `Data` and `Const`, the 10 operator ops above, the prefix ops `Neg` and `not`,
-and the 45 function-style calls in the tables.
+and the 57 function-style calls in the tables.
 
 ---
 

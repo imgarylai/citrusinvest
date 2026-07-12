@@ -150,7 +150,7 @@
         },
         {
           "additionalProperties": false,
-          "description": "1 where `of` rose for `n` consecutive days, else 0.",
+          "description": "1 where `of` is above its value `n` days ago, else 0.",
           "properties": {
             "n": {
               "type": "number"
@@ -172,7 +172,7 @@
         },
         {
           "additionalProperties": false,
-          "description": "1 where `of` fell for `n` consecutive days, else 0.",
+          "description": "1 where `of` is below its value `n` days ago, else 0.",
           "properties": {
             "n": {
               "type": "number"

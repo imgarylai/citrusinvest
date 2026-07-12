@@ -40,7 +40,7 @@ It's a layered stack — `pomelo-*` → `yuzu-core` → `lemon` — not parallel
 |-------|-------------|
 | [`yuzu-core`](https://crates.io/crates/yuzu-core) | Pure, I/O-free backtest engine core. |
 | [`yuzu-research`](https://crates.io/crates/yuzu-research) | Multi-run research over the engine: sweeps, grids, walk-forward, lookahead-bias detection. |
-| [`pomelo-data`](https://crates.io/crates/pomelo-data) | Native I/O: gzip CSV price/fundamental files → panels. |
+| [`pomelo-data`](https://crates.io/crates/pomelo-data) | Native I/O: gzip CSV (and read-only Parquet, behind the `parquet` feature) price/fundamental files → panels. |
 | [`pomelo-s3`](https://crates.io/crates/pomelo-s3) | S3-compatible `ObjectSource`/`ObjectSink` for `pomelo-data`. |
 | [`pomelo-audit`](https://crates.io/crates/pomelo-audit) | Read-only data-quality audit of a data-layout tree (`yuzu-cli data-audit`). |
 | [`pomelo-fmp`](https://crates.io/crates/pomelo-fmp) | Bring-your-own-key FMP data sync + snapshot-factor formulas; writes to local disk or S3/R2. |
