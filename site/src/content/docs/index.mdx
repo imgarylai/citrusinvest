@@ -35,7 +35,14 @@ import Playground from '../../components/Playground.astro';
   P/E derived from <a href="https://www.sec.gov/search-filings/edgar-application-programming-interfaces">SEC EDGAR</a> filings
   and visible only from each 10-K's <em>filing date</em> — no look-ahead.
   Why data ending in 2017? It's the newest daily dataset that's genuinely free
-  to redistribute — <a href="playground/#about-the-data">the fine print</a>.
+  to redistribute — <a href="/playground-about#about-the-data">the fine print</a>.
+</p>
+
+<p class="lp-badges not-content">
+  <a href="https://crates.io/crates/yuzu-core"><img src="https://img.shields.io/crates/v/yuzu-core?label=yuzu-core&color=b8860b" alt="yuzu-core on crates.io" /></a>
+  <a href="https://crates.io/crates/lemon-lang"><img src="https://img.shields.io/crates/v/lemon-lang?label=lemon-lang&color=b8860b" alt="lemon-lang on crates.io" /></a>
+  <a href="https://github.com/citrusquant/citrusquant/actions/workflows/ci.yml"><img src="https://github.com/citrusquant/citrusquant/actions/workflows/ci.yml/badge.svg" alt="CI status" /></a>
+  <a href="https://github.com/citrusquant/citrusquant/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license" /></a>
 </p>
 
 ## Try an idea
@@ -129,8 +136,10 @@ entry/exit rotation. [The whole spec fits on one page](reference/lemon).
     npm install @citrusquant/yuzu-wasm @citrusquant/lemon-wasm
     ```
 
-    The wasm-pack artifacts this very page runs on. They work in browsers and
-    Cloudflare Workers — see the <a href="reference/api">API reference</a>.
+    The wasm-pack artifacts this very page runs on
+    ([`@citrusquant/yuzu-wasm`](https://www.npmjs.com/package/@citrusquant/yuzu-wasm),
+    [`@citrusquant/lemon-wasm`](https://www.npmjs.com/package/@citrusquant/lemon-wasm)).
+    They work in browsers and Cloudflare Workers — see the <a href="/reference/api">API reference</a>.
   </TabItem>
 </Tabs>
 
@@ -164,4 +173,5 @@ entry/exit rotation. [The whole spec fits on one page](reference/lemon).
   <LinkCard title="Your first strategy" description="Build up a lemon strategy one operator at a time." href="start/first-strategy" />
   <LinkCard title="Reading a report" description="What every metric in a Report means — and what it doesn't." href="guides/reading-a-report" />
   <LinkCard title="Engine internals" description="NAV model, warm-ups, fees, stops — the full contract." href="reference/backtest-engine" />
+  <LinkCard title="Contribute" description="Issues, discussions, and how to build — good first issues welcome." href="https://github.com/citrusquant/citrusquant/blob/main/CONTRIBUTING.md" />
 </CardGrid>

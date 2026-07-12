@@ -80,7 +80,12 @@ export default defineConfig({
         },
         {
           label: 'Playground',
-          items: [{ label: 'Interactive backtest', slug: 'playground' }],
+          items: [
+            // The playground itself is a standalone app page (src/pages/playground.astro),
+            // deliberately outside the docs chrome — linked, not a content slug.
+            { label: 'Interactive backtest', link: '/playground', attrs: { target: '_self' } },
+            { label: 'Data & internals', slug: 'playground-about' },
+          ],
         },
         {
           label: 'Guides',

@@ -1,33 +1,15 @@
 ---
-title: Interactive backtest
-description: Edit a lemon strategy and run a real backtest in your browser — real engine, real data, no install, no server.
+title: Playground — data & internals
+description: Where the playground's sample data comes from, why it ends in 2017, and the exact pipeline each run goes through.
 ---
 
-import Playground from '../../components/Playground.astro';
+The [interactive playground](/playground) runs a **real backtest in your
+browser** — the yuzu engine and the lemon parser are compiled to WebAssembly,
+and every run is evaluated against real daily bars for 10 US large-caps
+(Nov 2014 – Nov 2017). Nothing is sent to a server.
 
-Everything below runs **locally in your browser**: the yuzu engine and the lemon
-parser are compiled to WebAssembly, and the backtest is evaluated against **real
-daily bars** for 10 US large-caps (Nov 2014 – Nov 2017). Nothing is sent to a
-server.
-
-Every run produces the engine's full `Report` — the tabs below the editor cover
-profit (equity curve vs benchmark, calendar returns), risk (drawdowns, tail
-stats), reward (risk-adjusted ratios, rolling windows, bootstrap confidence
-bands) and every individual trade. [Reading a report](guides/reading-a-report)
-explains what each number means — and what it doesn't.
-
-<Playground full />
-
-## Things to try
-
-- `is_largest(sma(close, 2), 1)` — concentrate into a single name.
-- `close > sma(close, 50)` — a pure trend filter across the whole universe.
-- `is_smallest(pe, 3) and (close > sma(close, 20))` — cheap **and** trending.
-- `is_largest(rsi(close, 14), 3)` — momentum by RSI. With NVDA's 2016–17 run in
-  the universe, momentum strategies have an unfair advantage — watch what they hold.
-
-New to the syntax? Start with [Your first strategy](start/first-strategy), or
-browse the [lemon reference](reference/lemon) for the complete operator set.
+This page is the fine print behind that demo: exactly what the data is, why it
+ends where it does, and the pipeline each run goes through.
 
 ## About the data
 
@@ -56,7 +38,7 @@ Why does the data end in 2017? Nearly every "free" market-data source (Yahoo,
 Stooq, FMP, Tiingo, …) forbids redistribution, which rules them out for a
 static site. This CC0 dataset is the newest daily OHLCV that is genuinely
 public domain. The engine itself doesn't care — it ships **no** data and runs
-on any panels you feed it: [Bring your own data](guides/bring-your-own-data).
+on any panels you feed it: [Bring your own data](/guides/bring-your-own-data).
 Everything is reproducible via
 [`fetch-sample-data.mjs`](https://github.com/citrusquant/citrusquant/blob/main/site/scripts/fetch-sample-data.mjs).
 
@@ -64,6 +46,12 @@ One honest caveat: bundled prices are dividend-adjusted while EPS is
 as-reported, so P/E early in the window is understated by a few percent for
 high-dividend names. Good enough to demo mechanics; bring your own data for
 research.
+
+:::caution[Not investment advice]
+The playground is a tool for reasoning about strategy mechanics on historical
+data. Past performance does not predict future results, and nothing here is a
+recommendation to buy or sell anything.
+:::
 
 ## How it works
 
@@ -73,8 +61,21 @@ research.
    `yuzu-wasm.run_backtest(...)`.
 3. The returned `Report` — equity, drawdown and rolling series, calendar
    returns, bootstrap confidence bands, the full trade list and ~40 metrics —
-   is rendered into the tabs above. The frontend only draws; every number is
-   computed by the engine (plus a few purely presentational reshapes).
+   is rendered into the tabs beside the editor. The frontend only draws; every
+   number is computed by the engine (plus a few purely presentational reshapes).
 
 That's the same pipeline the native engine runs — see
-[Reading a report](guides/reading-a-report) to decode the output.
+[Reading a report](/guides/reading-a-report) to decode the output.
+
+## Things to try
+
+Open the [playground](/playground) and paste any of these into the editor:
+
+- `is_largest(sma(close, 2), 1)` — concentrate into a single name.
+- `close > sma(close, 50)` — a pure trend filter across the whole universe.
+- `is_smallest(pe, 3) and (close > sma(close, 20))` — cheap **and** trending.
+- `is_largest(rsi(close, 14), 3)` — momentum by RSI. With NVDA's 2016–17 run in
+  the universe, momentum strategies have an unfair advantage — watch what they hold.
+
+New to the syntax? Start with [Your first strategy](/start/first-strategy), or
+browse the [lemon reference](/reference/lemon) for the complete operator set.

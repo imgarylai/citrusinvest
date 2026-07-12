@@ -6,7 +6,7 @@ description: Learn the lemon DSL by building a strategy one operator at a time �
 A lemon strategy is one expression that evaluates, every day, to a **position
 matrix**: which symbols you hold. The engine turns that into an equity curve.
 Let's build one up. Every snippet below runs as-is in the
-[playground](../playground) against the bundled sample data.
+[playground](/playground) against the bundled sample data.
 
 ## 1. A series
 
@@ -29,7 +29,7 @@ close > sma(close, 20)
 
 `sma(of, n)` is one of many rolling operators — `ema`, `std`, `rsi`,
 `rolling_max`, `pct_change`, … all take `(of, n)`. See the
-[full op reference](../reference/lemon).
+[full op reference](/reference/lemon).
 
 ## 3. Selecting a few names
 
@@ -58,7 +58,7 @@ above their 50-day average."*
 ## 5. Using fundamentals
 
 The sample dataset also carries a `pe` panel — real trailing P/E built from SEC
-EDGAR filings (see [about the data](../playground#about-the-data)). Prefer
+EDGAR filings (see [about the data](/playground-about#about-the-data)). Prefer
 cheaper names by ranking on it:
 
 ```text
@@ -66,22 +66,22 @@ is_smallest(pe, 3) and (close > sma(close, 20))
 ```
 
 *"Hold the 3 lowest-P/E names that are also trending up."* Note that P/E can be
-**missing**: AMZN's trailing EPS was negative through 2015, so its P/E is
-undefined there — and `is_smallest` simply never selects it. Missing data is a
-first-class case in the engine, not an error.
+**missing**: AMZN's last-reported (FY2014) EPS was negative, so its trailing P/E
+is undefined during 2015 — and `is_smallest` simply never selects it. Missing
+data is a first-class case in the engine, not an error.
 
 ## 6. Run it
 
-Paste any of the above into the [playground](../playground) and press **Run**
+Paste any of the above into the [playground](/playground) and press **Run**
 (or `Ctrl`/`Cmd`+`Enter`). You'll get an equity curve plus Sharpe, max drawdown,
 win rate, and more. To understand each number, read
-[Reading a report](../guides/reading-a-report).
+[Reading a report](/guides/reading-a-report).
 
 ## Where to go next
 
-- [Lemon language reference](../reference/lemon) — every operator, precedence,
+- [Lemon language reference](/reference/lemon) — every operator, precedence,
   `let` bindings, and gotchas.
-- [Bring your own data](../guides/bring-your-own-data) — swap the synthetic
+- [Bring your own data](/guides/bring-your-own-data) — swap the synthetic
   sample for real prices and fundamentals.
-- [Strategy envelope](../reference/strategy-envelope) — package a strategy as a
+- [Strategy envelope](/reference/strategy-envelope) — package a strategy as a
   shareable, versioned, validated document.

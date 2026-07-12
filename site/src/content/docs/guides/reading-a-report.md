@@ -13,7 +13,9 @@ draws it. This page decodes what you see.
 | `dates` | Trading dates as `YYYYMMDD` integers (e.g. `20240102`). |
 | `equity` | The NAV curve, **rebased to 1.0** at the first date. `1.35` means +35%. |
 | `benchmark` | Benchmark equity rebased to 1.0 and aligned to `dates` — only when a `benchmark_key` was configured. `NaN` before the benchmark's first point. |
-| `rolling_sharpe` / `rolling_vol` | 252-day rolling annualized figures, aligned to `dates`. |
+| `drawdown` | The underwater series: each day's decline from the running peak, aligned to `dates` (`0` at a new high). |
+| `rolling_sharpe` / `rolling_volatility` | 252-day rolling annualized figures, aligned to `dates`. |
+| `monthly_returns` / `yearly_returns` | Calendar-period return tables (period label + return), used for the monthly heatmap and calendar-year bars. |
 
 ## Headline metrics
 
@@ -29,6 +31,7 @@ Everything derivable from the equity curve. Returns are fractions (`0.20` = 20%)
 | `calmar` | CAGR ÷ max drawdown. |
 | `max_drawdown_duration` | Longest time underwater, in trading days. |
 | `ulcer_index` / `avg_drawdown` | Depth-and-duration shape of drawdowns. |
+| `recovery_factor` | Total return ÷ max drawdown — equity-derived, not from the trade list. |
 
 ## Trade-level metrics
 
@@ -44,7 +47,6 @@ Derived from the realized trade list.
 | `best_trade` / `worst_trade` | Extremes. |
 | `avg_holding_period` | Mean bars held per trade. |
 | `max_consecutive_losses` | Longest losing streak. |
-| `recovery_factor` | Total return ÷ max drawdown. |
 
 ## Exposure & distribution
 
@@ -65,6 +67,8 @@ Some fields appear only when applicable:
   `information_ratio` — present only when a benchmark was supplied.
 - A **live segment** block — metrics on the post-go-live slice of the curve,
   present only when `live_performance_start` was set.
+- A **`bootstrap`** block — block-bootstrap confidence bands for Sharpe, CAGR and
+  max drawdown, present only when `bootstrap_samples > 0` was configured.
 
 For the exact NAV model, metric conventions, and the full JSON contract, see the
-[backtest engine reference](../reference/backtest-engine).
+[backtest engine reference](/reference/backtest-engine).

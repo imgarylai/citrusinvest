@@ -138,6 +138,19 @@
   text-align: center;
 }
 
+.lp-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 1rem auto 0;
+}
+.lp-badges img {
+  height: 1.25rem;
+  vertical-align: middle;
+}
+
 /* --- example chips ---------------------------------------------------------- */
 
 .lp-chips {
