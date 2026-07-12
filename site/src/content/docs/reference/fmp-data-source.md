@@ -209,17 +209,42 @@ sync straight to R2/S3 without a local staging dir. Both write a **byte-identica
 `pomelo-s3`) share the same code path over an `ObjectSink`; only the destination
 differs.
 
-```bash
-export S3_ENDPOINT=https://<accountid>.r2.cloudflarestorage.com  # or your S3 endpoint
-export S3_ACCESS_KEY_ID=…  S3_SECRET_ACCESS_KEY=…  S3_REGION=auto  # region defaults to "auto"
-yuzu-cli fmp-sync --api-key "$FMP_API_KEY" --out s3://my-bucket/mirror/v1 \
-  --symbols AAPL,MSFT --include-fundamentals --include-snapshot-factors
-```
+Keys are written under the URL's optional `/prefix` (e.g. `s3://bucket/mirror/v1`
+→ `mirror/v1/prices/AAPL.csv.gz`).
 
-Keys are written under the URL's optional `/prefix` (e.g.
-`mirror/v1/prices/AAPL.csv.gz`). **`--index` currently requires a local `--out`**
-— the point-in-time membership panel is written in a post-sync pass that reads a
-local trading calendar; sync the index to a local tree (or omit `--index`).
+**Credentials** resolve from the environment, trying the `S3_*` variables first,
+then `AWS_*`. For the winning prefix `P` it reads `{P}ACCESS_KEY_ID`,
+`{P}SECRET_ACCESS_KEY`, optional `{P}SESSION_TOKEN`, `{P}ENDPOINT` (or
+`{P}ENDPOINT_URL`), and `{P}REGION` (default `auto`).
+
+- **Cloudflare R2** (static API token — R2 has no IAM roles):
+
+  ```bash
+  export S3_ENDPOINT=https://<accountid>.r2.cloudflarestorage.com   # EU jurisdiction: <accountid>.eu.r2…
+  export S3_ACCESS_KEY_ID=…  S3_SECRET_ACCESS_KEY=…                  # R2 → Manage R2 API Tokens (Object R/W)
+  # S3_REGION defaults to "auto"
+  yuzu-cli fmp-sync --api-key "$FMP_API_KEY" --out s3://my-bucket/mirror/v1 \
+    --symbols AAPL,MSFT --include-fundamentals --include-snapshot-factors
+  ```
+
+- **AWS S3 with an IAM role** (ECS task role / EKS IRSA / Lambda inject the
+  standard `AWS_*` vars, including the **session token** for temporary
+  credentials). Set a real region; the endpoint is derived from it if unset:
+
+  ```bash
+  # usually already present in the task/pod env:
+  #   AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY / AWS_SESSION_TOKEN / AWS_REGION
+  yuzu-cli fmp-sync --api-key "$FMP_API_KEY" --out s3://my-bucket/mirror/v1 --all-symbols
+  ```
+
+  A **bare EC2 instance profile** (credentials only in IMDS, not in env) is not
+  yet supported — export the role's credentials into the `AWS_*` vars first (or
+  use a container/IRSA setup that does). If your deployment uses a *different*
+  variable prefix, map it onto `S3_*` or `AWS_*` in the environment.
+
+**`--index` requires a local `--out`** — the point-in-time membership panel is
+written in a post-sync pass that reads a local trading calendar; sync the index
+to a local tree (or omit `--index`).
 
 | Output | Flag | FMP endpoint (stable) |
 |--------|------|-----------------------|

@@ -295,9 +295,10 @@ enum Cmd {
         #[arg(long)]
         api_key: Option<String>,
         /// Output data root — a local path, or an `s3://bucket[/prefix]` URL to
-        /// write directly to S3/R2 (credentials from $S3_ENDPOINT,
-        /// $S3_ACCESS_KEY_ID, $S3_SECRET_ACCESS_KEY, $S3_REGION). Both produce a
-        /// byte-identical `data-layout.md` tree. (`--index` needs a local path.)
+        /// write directly to S3/R2. Credentials resolve from the env, trying the
+        /// `S3_*` vars first (R2 / static keys) then `AWS_*` (AWS S3 + IAM role,
+        /// incl. `AWS_SESSION_TOKEN`) — see docs/fmp-data-source.md. Both targets
+        /// produce a byte-identical tree. (`--index` needs a local path.)
         #[arg(long)]
         out: String,
         /// Comma-separated tickers, e.g. AAPL,MSFT,GOOGL. Or use --symbols-file
@@ -434,6 +435,56 @@ fn emit(out: &Option<PathBuf>, json: String) -> std::io::Result<()> {
     }
 }
 
+/// Resolved S3/R2 connection details from the environment.
+#[cfg(feature = "fmp-sync")]
+struct S3Conn {
+    endpoint: String,
+    access_key: String,
+    secret_key: String,
+    /// `Some` for temporary (AWS STS / IAM role) credentials.
+    session_token: Option<String>,
+    region: String,
+}
+
+/// Resolve S3/R2 credentials + endpoint from the environment, trying the `S3_`
+/// prefix first (Cloudflare R2 / static keys) then `AWS_` (AWS S3, incl. IAM-role
+/// temporary credentials via `AWS_SESSION_TOKEN`). Per prefix `P` it reads
+/// `{P}ACCESS_KEY_ID`, `{P}SECRET_ACCESS_KEY`, optional `{P}SESSION_TOKEN`,
+/// `{P}ENDPOINT`/`{P}ENDPOINT_URL` (AWS: derived from `{P}REGION` if unset), and
+/// `{P}REGION` (default `auto`). `get` is injected so the chain is unit-testable.
+/// A different deployment prefix should be mapped onto `S3_*`/`AWS_*` in the env.
+#[cfg(feature = "fmp-sync")]
+fn resolve_s3_conn(get: impl Fn(&str) -> Option<String>) -> Result<S3Conn, String> {
+    for p in ["S3_", "AWS_"] {
+        let Some(access_key) = get(&format!("{p}ACCESS_KEY_ID")) else {
+            continue;
+        };
+        let secret_key = get(&format!("{p}SECRET_ACCESS_KEY")).ok_or_else(|| {
+            format!("{p}ACCESS_KEY_ID is set but {p}SECRET_ACCESS_KEY is missing")
+        })?;
+        let session_token = get(&format!("{p}SESSION_TOKEN"));
+        let region = get(&format!("{p}REGION")).unwrap_or_else(|| "auto".to_string());
+        let endpoint = get(&format!("{p}ENDPOINT"))
+            .or_else(|| get(&format!("{p}ENDPOINT_URL")))
+            .or_else(|| {
+                // AWS with a real region but no explicit endpoint → derive it.
+                (p == "AWS_" && region != "auto")
+                    .then(|| format!("https://s3.{region}.amazonaws.com"))
+            })
+            .ok_or_else(|| {
+                format!("set {p}ENDPOINT (R2: https://<acct>.r2.cloudflarestorage.com) or {p}REGION (AWS)")
+            })?;
+        return Ok(S3Conn {
+            endpoint,
+            access_key,
+            secret_key,
+            session_token,
+            region,
+        });
+    }
+    Err("no S3 credentials in env: set S3_ACCESS_KEY_ID + S3_SECRET_ACCESS_KEY (+ S3_ENDPOINT) for R2, or AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY (+ AWS_SESSION_TOKEN) for an AWS IAM role".into())
+}
+
 /// The destination for an `fmp-sync` run: a local path or an S3/R2 bucket. Both
 /// implement [`ObjectSink`]/[`ObjectSource`], so `sync_into` writes a
 /// byte-identical `data-layout.md` tree either way (the S3 variant prepends an
@@ -463,15 +514,14 @@ impl OutStore {
         if bucket.is_empty() {
             return Err("s3:// URL needs a bucket: s3://bucket[/prefix]".into());
         }
-        let env =
-            |k: &str| std::env::var(k).map_err(|_| format!("missing env {k} for s3:// output"));
-        let region = std::env::var("S3_REGION").unwrap_or_else(|_| "auto".to_string());
+        let conn = resolve_s3_conn(|k| std::env::var(k).ok())?;
         let src = pomelo_s3::S3Source::new(
-            &env("S3_ENDPOINT")?,
+            &conn.endpoint,
             bucket,
-            &env("S3_ACCESS_KEY_ID")?,
-            &env("S3_SECRET_ACCESS_KEY")?,
-            &region,
+            &conn.access_key,
+            &conn.secret_key,
+            conn.session_token.as_deref(),
+            &conn.region,
         )
         .map_err(|e| e.to_string())?;
         Ok(OutStore::S3 {
@@ -912,7 +962,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[cfg(test)]
 #[cfg(feature = "fmp-sync")]
 mod out_store_tests {
-    use super::OutStore;
+    use super::{resolve_s3_conn, OutStore};
 
     #[test]
     fn parse_local_vs_s3_and_key_prefixing() {
@@ -928,5 +978,49 @@ mod out_store_tests {
             OutStore::prefixed("mirror/v1", "panels/piotroski_score.csv.gz"),
             "mirror/v1/panels/piotroski_score.csv.gz"
         );
+    }
+
+    /// Build an env lookup over a fixed table (no real env — deterministic under
+    /// parallel tests).
+    fn env_of(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
+        let owned: Vec<(String, String)> = pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        move |k: &str| owned.iter().find(|(kk, _)| kk == k).map(|(_, v)| v.clone())
+    }
+
+    #[test]
+    fn resolve_s3_conn_prefers_s3_then_falls_back_to_aws() {
+        // S3_ wins when present (R2 static keys, explicit endpoint, no token).
+        let c = resolve_s3_conn(env_of(&[
+            ("S3_ENDPOINT", "https://acct.r2.cloudflarestorage.com"),
+            ("S3_ACCESS_KEY_ID", "r2ak"),
+            ("S3_SECRET_ACCESS_KEY", "r2sk"),
+            ("AWS_ACCESS_KEY_ID", "awsak"),
+            ("AWS_SECRET_ACCESS_KEY", "awssk"),
+        ]))
+        .unwrap();
+        assert_eq!(c.access_key, "r2ak");
+        assert_eq!(c.endpoint, "https://acct.r2.cloudflarestorage.com");
+        assert_eq!(c.region, "auto");
+        assert!(c.session_token.is_none());
+
+        // AWS_ fallback: IAM temp creds (session token) + endpoint derived from region.
+        let c = resolve_s3_conn(env_of(&[
+            ("AWS_ACCESS_KEY_ID", "ASIAEXAMPLE"),
+            ("AWS_SECRET_ACCESS_KEY", "sk"),
+            ("AWS_SESSION_TOKEN", "tok"),
+            ("AWS_REGION", "us-east-1"),
+        ]))
+        .unwrap();
+        assert_eq!(c.access_key, "ASIAEXAMPLE");
+        assert_eq!(c.session_token.as_deref(), Some("tok"));
+        assert_eq!(c.endpoint, "https://s3.us-east-1.amazonaws.com");
+
+        // Access key without its secret → a clear error.
+        assert!(resolve_s3_conn(env_of(&[("S3_ACCESS_KEY_ID", "x")])).is_err());
+        // Nothing set → error.
+        assert!(resolve_s3_conn(env_of(&[])).is_err());
     }
 }

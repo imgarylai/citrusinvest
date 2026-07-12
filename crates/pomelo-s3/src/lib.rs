@@ -24,11 +24,15 @@ impl S3Source {
     /// `endpoint` is the host root (no bucket), e.g.
     /// `https://<acct>.r2.cloudflarestorage.com`. Path-style addressing, so the
     /// bucket is appended to the path (works with custom endpoints).
+    /// `session_token` is `Some` for **temporary** credentials (AWS STS / IAM
+    /// role); it's signed into requests as `X-Amz-Security-Token`. R2 and other
+    /// static-key stores pass `None`.
     pub fn new(
         endpoint: &str,
         bucket: &str,
         access_key: &str,
         secret_key: &str,
+        session_token: Option<&str>,
         region: &str,
     ) -> Result<Self, DataError> {
         let url = endpoint
@@ -36,22 +40,26 @@ impl S3Source {
             .map_err(|e| DataError::Io(format!("bad S3 endpoint {endpoint:?}: {e}")))?;
         let bucket = Bucket::new(url, UrlStyle::Path, bucket.to_string(), region.to_string())
             .map_err(|e| DataError::Io(format!("bad S3 bucket: {e}")))?;
-        Ok(Self {
-            bucket,
-            creds: Credentials::new(access_key, secret_key),
-        })
+        let creds = match session_token {
+            Some(t) => Credentials::new_with_token(access_key, secret_key, t),
+            None => Credentials::new(access_key, secret_key),
+        };
+        Ok(Self { bucket, creds })
     }
 
     /// Build from `S3_ENDPOINT` / `S3_BUCKET` / `S3_ACCESS_KEY_ID` /
-    /// `S3_SECRET_ACCESS_KEY` (+ optional `S3_REGION`, default `auto`).
+    /// `S3_SECRET_ACCESS_KEY` (+ optional `S3_SESSION_TOKEN` for temporary
+    /// credentials, and `S3_REGION`, default `auto`).
     pub fn from_env() -> Result<Self, DataError> {
         let var = |k: &str| std::env::var(k).map_err(|_| DataError::Io(format!("missing env {k}")));
         let region = std::env::var("S3_REGION").unwrap_or_else(|_| "auto".to_string());
+        let token = std::env::var("S3_SESSION_TOKEN").ok();
         Self::new(
             &var("S3_ENDPOINT")?,
             &var("S3_BUCKET")?,
             &var("S3_ACCESS_KEY_ID")?,
             &var("S3_SECRET_ACCESS_KEY")?,
+            token.as_deref(),
             &region,
         )
     }
@@ -149,7 +157,7 @@ mod tests {
     #[test]
     fn get_returns_bytes_and_none_on_404() {
         let endpoint = spawn_stub(2);
-        let src = S3Source::new(&endpoint, "bucket", "ak", "sk", "auto").unwrap();
+        let src = S3Source::new(&endpoint, "bucket", "ak", "sk", None, "auto").unwrap();
         assert_eq!(src.get("prices/AAPL.csv.gz").unwrap(), Some(b"hi".to_vec()));
         assert_eq!(src.get("prices/missing.csv.gz").unwrap(), None);
     }
@@ -163,7 +171,7 @@ mod tests {
         let gz = enc.finish().unwrap();
 
         let endpoint = spawn_encoded_stub(gz.clone());
-        let src = S3Source::new(&endpoint, "bucket", "ak", "sk", "auto").unwrap();
+        let src = S3Source::new(&endpoint, "bucket", "ak", "sk", None, "auto").unwrap();
         let got = src.get("fundamentals/AAA.csv.gz").unwrap().unwrap();
         // Raw gzip bytes must come back verbatim (magic 0x1f 0x8b intact), NOT decompressed.
         assert_eq!(got, gz, "S3Source must return raw stored bytes");
@@ -173,13 +181,13 @@ mod tests {
     #[test]
     fn put_returns_ok_on_2xx() {
         let endpoint = spawn_stub(1); // existing stub: 200 for non-"missing" keys
-        let src = S3Source::new(&endpoint, "bucket", "ak", "sk", "auto").unwrap();
+        let src = S3Source::new(&endpoint, "bucket", "ak", "sk", None, "auto").unwrap();
         src.put("panels/close.csv.gz", b"gzip-bytes").unwrap();
     }
 
     #[test]
     fn new_rejects_a_malformed_endpoint() {
-        let err = match S3Source::new("not a url", "bucket", "ak", "sk", "auto") {
+        let err = match S3Source::new("not a url", "bucket", "ak", "sk", None, "auto") {
             Err(e) => e,
             Ok(_) => panic!("expected a malformed-endpoint error"),
         };
@@ -197,7 +205,7 @@ mod tests {
 
     #[test]
     fn get_and_put_surface_transport_errors() {
-        let src = S3Source::new(&dead_endpoint(), "bucket", "ak", "sk", "auto").unwrap();
+        let src = S3Source::new(&dead_endpoint(), "bucket", "ak", "sk", None, "auto").unwrap();
         assert!(matches!(
             src.get("prices/AAA.csv.gz"),
             Err(DataError::Io(_))
