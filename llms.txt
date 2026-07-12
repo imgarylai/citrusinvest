@@ -21,7 +21,7 @@
 
 - [yuzu-core](https://docs.rs/yuzu-core) — `run_backtest(spec_json, ctx, price_key, cfg) -> Report`.
 - [lemon-lang](https://docs.rs/lemon-lang) — `parse(src) -> Value`, `format(&value) -> String`.
-- [yuzu-data](https://docs.rs/yuzu-data) · [yuzu-source-s3](https://docs.rs/yuzu-source-s3)
+- [pomelo-data](https://docs.rs/pomelo-data) · [pomelo-s3](https://docs.rs/pomelo-s3)
 
 ## Machine-readable (for tool-use / structured output)
 
