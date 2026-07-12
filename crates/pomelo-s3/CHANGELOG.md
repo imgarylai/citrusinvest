@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1](https://github.com/citrusquant/citrusquant/compare/pomelo-s3-v0.7.0...pomelo-s3-v0.8.1) - 2026-07-12
+
+### Added
+
+- *(audit)* audit an S3/R2 tree via a storage-agnostic ObjectLister
+
+### Other
+
+- release v0.7.1
+
 ## [0.8.0](https://github.com/citrusquant/citrusquant/compare/pomelo-s3-v0.7.0...pomelo-s3-v0.8.0) - 2026-07-12
 
 ### Added
