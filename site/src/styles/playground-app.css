@@ -248,7 +248,157 @@ body {
   margin-bottom: 0;
 }
 .pgx-result-head {
-  margin-bottom: 0.6rem;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  margin-bottom: 0.5rem;
+}
+
+/* analysis-mode toggle (segmented control) */
+.pgx-modes {
+  display: inline-flex;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+.pgx-modes button {
+  font-family: var(--sl-font-mono);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.32rem 0.85rem;
+  background: transparent;
+  color: var(--sl-color-gray-3);
+  border: none;
+  border-right: 1px solid var(--sl-color-gray-5);
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+.pgx-modes button:last-child {
+  border-right: none;
+}
+.pgx-modes button:hover {
+  color: var(--sl-color-white);
+}
+.pgx-modes button[aria-selected='true'] {
+  background: var(--sl-color-accent);
+  color: #fff;
+}
+
+/* per-mode numeric controls */
+.pgx-mode-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+.pgx-mode-controls label {
+  font-family: var(--sl-font-mono);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--sl-color-gray-3);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.pgx-mode-controls input {
+  width: 3.4rem;
+  font-family: var(--sl-font-mono);
+  font-size: 0.8rem;
+  padding: 0.2rem 0.45rem;
+  background: var(--sl-color-black);
+  color: var(--sl-color-white);
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.35rem;
+}
+.pgx-mode-controls input:focus-visible {
+  outline: 2px solid var(--sl-color-accent);
+  outline-offset: 1px;
+}
+
+.pgx-mode-hint {
+  margin: 0 0 0.9rem;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--sl-color-gray-3);
+}
+
+.pgx-right .pg-research {
+  margin-top: 0.5rem;
+}
+
+/* factor: center-zero diverging quantile bars */
+.pg-qbars {
+  display: flex;
+  align-items: stretch;
+  gap: 0.6rem;
+  height: 168px;
+}
+.pg-qbar {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+}
+.pg-qbar-val {
+  font-family: var(--sl-font-mono);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--sl-color-gray-2);
+  margin-bottom: 0.2rem;
+}
+.pg-qbar-val.pos {
+  color: var(--pg-pos);
+}
+.pg-qbar-val.neg {
+  color: var(--pg-neg);
+}
+.pg-qbar-slot {
+  position: relative;
+  flex: 1;
+  width: 100%;
+}
+.pg-qbar-slot::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  background: var(--sl-color-gray-5);
+}
+.pg-qbar-slot i {
+  position: absolute;
+  left: 22%;
+  right: 22%;
+  border-radius: 2px;
+}
+.pg-qbar-slot i.pos {
+  bottom: 50%;
+  background: var(--pg-pos);
+}
+.pg-qbar-slot i.neg {
+  top: 50%;
+  background: var(--pg-neg);
+}
+.pg-qbar-lab {
+  font-family: var(--sl-font-mono);
+  font-size: 0.68rem;
+  color: var(--sl-color-gray-3);
+  margin-top: 0.3rem;
+}
+
+/* event: return-path canvas + highlighted day-0 row */
+.pg-event-canvas {
+  display: block;
+  width: 100%;
+}
+.pg-event-zero td {
+  background: var(--sl-color-gray-6);
+  font-weight: 600;
 }
 
 /* preset dropdown */

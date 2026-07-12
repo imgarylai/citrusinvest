@@ -12,9 +12,10 @@
 // to build the site (see vite-plugin-wasm in astro.config.mjs).
 
 import { createLemonEditor } from './lemon-editor.ts';
-import type { Report } from './report/types.ts';
+import type { EventStudy, FactorReport, Report } from './report/types.ts';
 import { equalWeightCurve } from './report/derive.ts';
 import { renderReport } from './report/render.ts';
+import { renderEvent, renderFactor } from './report/research.ts';
 
 interface SampleData {
   dates: number[];
@@ -41,7 +42,11 @@ interface LemonMod {
   lint(src: string, seriesJson: string): string;
 }
 let lemonMod: LemonMod | null = null;
-let yuzuMod: { run_backtest(input: string): string } | null = null;
+let yuzuMod: {
+  run_backtest(input: string): string;
+  run_factor(input: string): string;
+  run_event(input: string): string;
+} | null = null;
 
 async function loadLemon(): Promise<LemonMod> {
   if (lemonMod) return lemonMod;
@@ -233,79 +238,129 @@ export function initPlayground(root: HTMLElement): void {
     })
     .catch(() => {});
 
+  // --- mode wiring (playground page only; the compact landing widget has no
+  // mode toggle / research mount, so `mode` stays 'backtest' there) ------------
+  const researchEl = root.querySelector<HTMLElement>('.pg-research');
+  const modeButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('[data-pg-mode]'));
+  let mode: 'backtest' | 'factor' | 'event' = 'backtest';
+
+  const fmtMs = (ms: number) => (ms < 10 ? ms.toFixed(1) : String(Math.round(ms)));
+
+  /** A positive integer control value, falling back to `dflt`. */
+  const paramVal = (name: string, dflt: number): number => {
+    const el = root.querySelector<HTMLInputElement>(`[data-pg-param="${name}"]`);
+    const v = el ? parseInt(el.value, 10) : NaN;
+    return Number.isFinite(v) && v > 0 ? v : dflt;
+  };
+
+  const basePanels = (s: SampleData) => ({
+    close: panelRequest(s, 'close'),
+    open: panelRequest(s, 'open'),
+    high: panelRequest(s, 'high'),
+    low: panelRequest(s, 'low'),
+    volume: panelRequest(s, 'volume'),
+    pe: panelRequest(s, 'pe'),
+  });
+
+  /** Show the backtest surface for 'backtest', the research surface otherwise. */
+  const setSurface = () => {
+    const research = mode !== 'backtest';
+    canvas.style.display = research ? 'none' : '';
+    metricsEl.style.display = research ? 'none' : '';
+    if (reportEl && research) reportEl.hidden = true;
+    if (researchEl) researchEl.hidden = !research;
+  };
+
+  async function runBacktest(s: SampleData, spec: unknown) {
+    metricsEl.innerHTML = '';
+    // Benchmark: the real index series when the sample data ships one,
+    // otherwise a daily-rebalanced equal-weight basket of the same universe.
+    const benchLabel = s.benchmark?.symbol ?? 'EW universe';
+    const benchClose = s.benchmark?.close ?? equalWeightCurve(s.panels.close);
+    const input = {
+      spec,
+      price_key: 'close',
+      industry: s.industry,
+      panels: {
+        ...basePanels(s),
+        benchmark: { dates: s.dates, symbols: [benchLabel], data: benchClose.map((v) => [v]) },
+      },
+      config: { fee_ratio: 0.001, benchmark_key: 'benchmark', bootstrap_samples: 200 },
+    };
+    setStatus(status, 'Running backtest…', 'info');
+    const t0 = performance.now();
+    const report = JSON.parse(yuzuMod!.run_backtest(JSON.stringify(input))) as Report;
+    const ms = performance.now() - t0;
+
+    drawEquity(canvas, report, firstDraw);
+    firstDraw = false;
+    if (reportEl) {
+      reportEl.hidden = false;
+      renderReport(reportEl, report, { benchmarkLabel: benchLabel });
+    } else {
+      const metricValues = report.metrics as unknown as Record<string, number | null>;
+      metricsEl.innerHTML = METRIC_TILES.map(
+        ([k, label]) =>
+          `<div class="pg-metric"><div class="k">${label}</div><div class="v">${fmt(k, metricValues[k])}</div></div>`,
+      ).join('');
+    }
+    const first = report.dates[0];
+    const lastD = report.dates[report.dates.length - 1];
+    setStatus(
+      status,
+      `Done in ${fmtMs(ms)} ms — ${report.dates.length} trading days (${first} → ${lastD}), in your browser.`,
+      'info',
+    );
+  }
+
+  async function runFactor(s: SampleData, spec: unknown) {
+    const horizon = paramVal('horizon', 1);
+    const input = { spec, panels: basePanels(s), industry: s.industry, horizon, quantiles: paramVal('quantiles', 5) };
+    setStatus(status, 'Running factor analysis…', 'info');
+    const t0 = performance.now();
+    const report = JSON.parse(yuzuMod!.run_factor(JSON.stringify(input))) as FactorReport;
+    const ms = performance.now() - t0;
+    renderFactor(researchEl!, report, { horizon });
+    setStatus(
+      status,
+      `Done in ${fmtMs(ms)} ms — factor over ${report.dates.length} dates, ${report.quantiles} quantiles, in your browser.`,
+      'info',
+    );
+  }
+
+  async function runEvent(s: SampleData, spec: unknown) {
+    const input = { spec, panels: basePanels(s), industry: s.industry, pre: paramVal('pre', 5), post: paramVal('post', 5) };
+    setStatus(status, 'Running event study…', 'info');
+    const t0 = performance.now();
+    const study = JSON.parse(yuzuMod!.run_event(JSON.stringify(input))) as EventStudy;
+    const ms = performance.now() - t0;
+    renderEvent(researchEl!, study);
+    setStatus(
+      status,
+      `Done in ${fmtMs(ms)} ms — ${study.event_count} events, −${study.pre}/+${study.post} window, in your browser.`,
+      'info',
+    );
+  }
+
   async function run() {
     runBtn.disabled = true;
-    metricsEl.innerHTML = '';
     try {
       setStatus(status, 'Loading engine + data…', 'info');
       const [s] = await Promise.all([loadSample(), loadWasm()]);
-
       const parsed = JSON.parse(lemonMod!.parse(editor.getValue()));
       if (!parsed.ok) {
         const e = parsed.error;
         setStatus(status, `Syntax error (line ${e.line}, col ${e.col}): ${e.message}`, 'error');
         return;
       }
-
-      // Benchmark: the real index series when the sample data ships one,
-      // otherwise a daily-rebalanced equal-weight basket of the same universe
-      // (the natural "do nothing clever" alternative for a fixed universe).
-      const benchLabel = s.benchmark?.symbol ?? 'EW universe';
-      const benchClose = s.benchmark?.close ?? equalWeightCurve(s.panels.close);
-
-      const input = {
-        spec: parsed.value,
-        price_key: 'close',
-        industry: s.industry,
-        panels: {
-          close: panelRequest(s, 'close'),
-          open: panelRequest(s, 'open'),
-          high: panelRequest(s, 'high'),
-          low: panelRequest(s, 'low'),
-          volume: panelRequest(s, 'volume'),
-          pe: panelRequest(s, 'pe'),
-          benchmark: { dates: s.dates, symbols: [benchLabel], data: benchClose.map((v) => [v]) },
-        },
-        config: { fee_ratio: 0.001, benchmark_key: 'benchmark', bootstrap_samples: 200 },
-      };
-
-      setStatus(status, 'Running backtest…', 'info');
-      const t0 = performance.now();
-      const report = JSON.parse(yuzuMod!.run_backtest(JSON.stringify(input))) as Report;
-      const ms = performance.now() - t0;
-
-      drawEquity(canvas, report, firstDraw);
-      firstDraw = false;
-      if (reportEl) {
-        // Full mode: the tabbed report below carries all the numbers — the
-        // compact tile strip would just repeat its headline.
-        reportEl.hidden = false;
-        renderReport(reportEl, report, { benchmarkLabel: benchLabel });
-      } else {
-        const metricValues = report.metrics as unknown as Record<string, number | null>;
-        metricsEl.innerHTML = METRIC_TILES.map(
-          ([k, label]) =>
-            `<div class="pg-metric"><div class="k">${label}</div><div class="v">${fmt(
-              k,
-              metricValues[k],
-            )}</div></div>`,
-        ).join('');
-      }
-      const first = report.dates[0];
-      const lastD = report.dates[report.dates.length - 1];
-      setStatus(
-        status,
-        `Done in ${ms < 10 ? ms.toFixed(1) : Math.round(ms)} ms — ${report.dates.length} trading days (${first} → ${lastD}), in your browser.`,
-        'info',
-      );
+      setSurface();
+      if (mode === 'factor' && researchEl) await runFactor(s, parsed.value);
+      else if (mode === 'event' && researchEl) await runEvent(s, parsed.value);
+      else await runBacktest(s, parsed.value);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (/wasm|import|fetch|\.js/i.test(msg)) {
-        setStatus(
-          status,
-          'Could not load the backtest engine (WASM). Try reloading the page.',
-          'error',
-        );
+        setStatus(status, 'Could not load the backtest engine (WASM). Try reloading the page.', 'error');
       } else {
         setStatus(status, msg, 'error');
       }
@@ -315,6 +370,30 @@ export function initPlayground(root: HTMLElement): void {
   }
 
   runBtn.addEventListener('click', run);
+
+  // Mode toggle (Backtest / Factor / Event): switch what the same expression is
+  // run through, then re-run. Each button carries data-pg-mode + optional
+  // data-run-label; controls for a mode live in [data-mode-controls="<mode>"].
+  for (const btn of modeButtons) {
+    btn.addEventListener('click', () => {
+      const m = btn.dataset.pgMode as 'backtest' | 'factor' | 'event';
+      if (!m || m === mode) return;
+      mode = m;
+      for (const b of modeButtons) b.setAttribute('aria-selected', String(b === btn));
+      for (const c of root.querySelectorAll<HTMLElement>('[data-mode-controls]')) {
+        c.hidden = c.dataset.modeControls !== m;
+      }
+      if (btn.dataset.runLabel) runBtn.textContent = btn.dataset.runLabel;
+      const hint = root.querySelector<HTMLElement>('[data-pg-mode-hint]');
+      if (hint) hint.textContent = btn.dataset.modeHint ?? '';
+      run();
+    });
+  }
+
+  // Re-run when a mode control (horizon / quantiles / pre / post) changes.
+  for (const inp of root.querySelectorAll<HTMLInputElement>('[data-pg-param]')) {
+    inp.addEventListener('change', () => run());
+  }
 
   // Example chips: any element with data-pg-example anywhere on the page loads
   // its strategy into the editor and runs it.

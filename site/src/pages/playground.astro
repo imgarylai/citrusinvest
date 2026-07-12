@@ -189,14 +189,56 @@ const initial = presets[0].src;
           </noscript>
         </section>
 
-        <!-- RIGHT: live equity curve + full tabbed report -->
+        <!-- RIGHT: analysis mode toggle + results -->
         <section class="pgx-right">
           <div class="pgx-result-head">
-            <span class="pg-label">Result</span>
+            <div class="pgx-modes" role="tablist" aria-label="Analysis mode">
+              <button
+                type="button"
+                role="tab"
+                data-pg-mode="backtest"
+                aria-selected="true"
+                data-run-label="▶ Run backtest"
+                data-mode-hint="Runs the expression as a portfolio — equity curve, drawdowns, and every trade."
+              >Backtest</button>
+              <button
+                type="button"
+                role="tab"
+                data-pg-mode="factor"
+                aria-selected="false"
+                data-run-label="▶ Run factor"
+                data-mode-hint="Treats the expression as a continuous factor — mean forward return by quantile, and rank IC over time."
+              >Factor</button>
+              <button
+                type="button"
+                role="tab"
+                data-pg-mode="event"
+                aria-selected="false"
+                data-run-label="▶ Run event"
+                data-mode-hint="Treats the expression as a 0/1 signal — the average forward-return path around each crossing."
+              >Event</button>
+            </div>
+
+            <div class="pgx-mode-controls" data-mode-controls="factor" hidden>
+              <label>horizon <input type="number" min="1" max="63" value="5" data-pg-param="horizon" /></label>
+              <label>quantiles <input type="number" min="2" max="10" value="5" data-pg-param="quantiles" /></label>
+            </div>
+            <div class="pgx-mode-controls" data-mode-controls="event" hidden>
+              <label>pre <input type="number" min="0" max="30" value="5" data-pg-param="pre" /></label>
+              <label>post <input type="number" min="1" max="60" value="10" data-pg-param="post" /></label>
+            </div>
           </div>
+
+          <p class="pgx-mode-hint" data-pg-mode-hint>
+            Runs the expression as a portfolio — equity curve, drawdowns, and every trade.
+          </p>
+
+          <!-- backtest surface -->
           <canvas class="pg-chart" aria-label="Equity curve"></canvas>
           <div class="pg-metrics"></div>
           <div class="pg-report" hidden></div>
+          <!-- factor / event surface -->
+          <div class="pg-research" hidden></div>
         </section>
       </main>
     </div>
