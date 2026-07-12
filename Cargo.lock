@@ -2173,6 +2173,7 @@ dependencies = [
  "flate2",
  "pomelo-data",
  "pomelo-fmp",
+ "pomelo-s3",
  "rayon",
  "serde",
  "serde_json",

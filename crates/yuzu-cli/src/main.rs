@@ -294,9 +294,12 @@ enum Cmd {
         /// FMP API key (kept local). Falls back to $FMP_API_KEY if unset.
         #[arg(long)]
         api_key: Option<String>,
-        /// Output data root: writes prices/ (+ fundamentals/, tracked/ if asked).
+        /// Output data root — a local path, or an `s3://bucket[/prefix]` URL to
+        /// write directly to S3/R2 (credentials from $S3_ENDPOINT,
+        /// $S3_ACCESS_KEY_ID, $S3_SECRET_ACCESS_KEY, $S3_REGION). Both produce a
+        /// byte-identical `data-layout.md` tree. (`--index` needs a local path.)
         #[arg(long)]
-        out: PathBuf,
+        out: String,
         /// Comma-separated tickers, e.g. AAPL,MSFT,GOOGL. Or use --symbols-file
         /// to sync a prebuilt list, or --all-symbols for the whole universe.
         #[arg(long, value_delimiter = ',')]
@@ -428,6 +431,107 @@ fn emit(out: &Option<PathBuf>, json: String) -> std::io::Result<()> {
             println!("{json}");
             Ok(())
         }
+    }
+}
+
+/// The destination for an `fmp-sync` run: a local path or an S3/R2 bucket. Both
+/// implement [`ObjectSink`]/[`ObjectSource`], so `sync_into` writes a
+/// byte-identical `data-layout.md` tree either way (the S3 variant prepends an
+/// optional key prefix from the URL path).
+#[cfg(feature = "fmp-sync")]
+enum OutStore {
+    Local(pomelo_data::LocalSource),
+    S3 {
+        src: pomelo_s3::S3Source,
+        prefix: String,
+    },
+}
+
+#[cfg(feature = "fmp-sync")]
+impl OutStore {
+    /// Parse `--out`: an `s3://bucket[/prefix]` URL builds an [`pomelo_s3::S3Source`]
+    /// from the standard `$S3_*` env credentials; anything else is a local path.
+    fn parse(out: &str) -> Result<Self, String> {
+        let Some(rest) = out.strip_prefix("s3://") else {
+            return Ok(OutStore::Local(pomelo_data::LocalSource::new(out)));
+        };
+        let (bucket, prefix) = match rest.split_once('/') {
+            Some((b, p)) => (b, p.trim_matches('/')),
+            None => (rest, ""),
+        };
+        if bucket.is_empty() {
+            return Err("s3:// URL needs a bucket: s3://bucket[/prefix]".into());
+        }
+        let env =
+            |k: &str| std::env::var(k).map_err(|_| format!("missing env {k} for s3:// output"));
+        let region = std::env::var("S3_REGION").unwrap_or_else(|_| "auto".to_string());
+        let src = pomelo_s3::S3Source::new(
+            &env("S3_ENDPOINT")?,
+            bucket,
+            &env("S3_ACCESS_KEY_ID")?,
+            &env("S3_SECRET_ACCESS_KEY")?,
+            &region,
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(OutStore::S3 {
+            src,
+            prefix: prefix.to_string(),
+        })
+    }
+
+    fn is_s3(&self) -> bool {
+        matches!(self, OutStore::S3 { .. })
+    }
+
+    /// Prepend the S3 key prefix (if any) to a data-layout key.
+    fn prefixed(prefix: &str, key: &str) -> String {
+        if prefix.is_empty() {
+            key.to_string()
+        } else {
+            format!("{prefix}/{key}")
+        }
+    }
+}
+
+#[cfg(feature = "fmp-sync")]
+impl pomelo_data::ObjectSource for OutStore {
+    fn get(&self, key: &str) -> Result<Option<Vec<u8>>, pomelo_data::error::DataError> {
+        match self {
+            OutStore::Local(l) => l.get(key),
+            OutStore::S3 { src, prefix } => src.get(&OutStore::prefixed(prefix, key)),
+        }
+    }
+}
+
+#[cfg(feature = "fmp-sync")]
+impl pomelo_data::ObjectSink for OutStore {
+    fn put(&self, key: &str, bytes: &[u8]) -> Result<(), pomelo_data::error::DataError> {
+        match self {
+            OutStore::Local(l) => l.put(key, bytes),
+            OutStore::S3 { src, prefix } => src.put(&OutStore::prefixed(prefix, key), bytes),
+        }
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "fmp-sync")]
+mod out_store_tests {
+    use super::OutStore;
+
+    #[test]
+    fn parse_local_vs_s3_and_key_prefixing() {
+        // Non-s3 → local path (no env needed).
+        assert!(!OutStore::parse("./mydata").unwrap().is_s3());
+        assert!(!OutStore::parse("/tmp/x").unwrap().is_s3());
+        // Key prefixing: empty prefix is a passthrough; a prefix joins with '/'.
+        assert_eq!(
+            OutStore::prefixed("", "prices/AAPL.csv.gz"),
+            "prices/AAPL.csv.gz"
+        );
+        assert_eq!(
+            OutStore::prefixed("mirror/v1", "panels/piotroski_score.csv.gz"),
+            "mirror/v1/panels/piotroski_score.csv.gz"
+        );
     }
 }
 
@@ -733,7 +837,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 eprintln!("delisted: +{} names unioned in", symbols.len() - before);
             }
-            let summary = yuzu_cli::fmp::sync(&client, &api_key, &symbols, &out, &cfg)?;
+            let out_store = OutStore::parse(&out)?;
+            if membership.is_some() && out_store.is_s3() {
+                return Err("--index requires a local --out (the membership panel write reads a local trading calendar); sync to a local path, or omit --index".into());
+            }
+            let summary = yuzu_cli::fmp::sync_into(&client, &api_key, &symbols, &out_store, &cfg)?;
             eprintln!(
                 "done: {} written, {} skipped, {} filtered, {} price rows, {} fundamentals, {} failures",
                 summary.symbols_written,
@@ -752,7 +860,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Now that prices exist (a trading calendar), write the PIT
             // membership panel over exactly those days.
             if let Some(m) = &membership {
-                let (days, cols) = yuzu_cli::write_index_membership(&out, m, from, to)?;
+                // Guarded above: reaching here means `out` is a local path.
+                let (days, cols) =
+                    yuzu_cli::write_index_membership(std::path::Path::new(&out), m, from, to)?;
                 eprintln!(
                     "wrote panels/{}.csv.gz: {days} days × {cols} symbols (mask with mask(signal, {}))",
                     m.series_name(),
