@@ -20,4 +20,11 @@ flate2 = { workspace = true }
 [dev-dependencies]
 # Proves run_data_audit is genuinely storage-agnostic (#149): one test drives it
 # against a stub S3 endpoint instead of LocalSource.
-pomelo-s3 = { path = "../pomelo-s3", version = "0.8.1" }
+#
+# Path-only (no `version`) on purpose: cargo strips version-less dev-dependencies
+# from the published manifest, so crates.io never sees pomelo-audit -> pomelo-s3.
+# With a version here, release-plz (which orders publishes by normal deps only,
+# ignoring dev-deps) publishes pomelo-audit before pomelo-s3, and crates.io then
+# rejects it because the required pomelo-s3 version isn't on the index yet. Do
+# NOT add a `version` back — it re-creates that release-plz publish deadlock.
+pomelo-s3 = { path = "../pomelo-s3" }
