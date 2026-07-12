@@ -97,7 +97,7 @@ export default defineConfig({
         {
           label: 'Reference',
           items: [
-            { label: 'Lemon language', slug: 'reference/lemon' },
+            { label: 'lemon language', slug: 'reference/lemon' },
             { label: 'Backtest engine', slug: 'reference/backtest-engine' },
             { label: 'Data layout', slug: 'reference/data-layout' },
             { label: 'FMP data source', slug: 'reference/fmp-data-source' },

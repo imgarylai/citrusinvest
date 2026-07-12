@@ -17,7 +17,7 @@ mkdirSync(outDir, { recursive: true });
 // source file -> { slug, title-fallback }. Titles are taken from the H1 when
 // present; the fallback is used only if a doc has no H1.
 const DOCS = [
-  ['docs/lemon.md', 'lemon', 'Lemon language'],
+  ['docs/lemon.md', 'lemon', 'lemon language'],
   ['docs/backtest-engine.md', 'backtest-engine', 'Backtest engine'],
   ['docs/data-layout.md', 'data-layout', 'Data layout'],
   ['docs/fmp-data-source.md', 'fmp-data-source', 'FMP data source'],

@@ -7,9 +7,9 @@
 
 ## Docs
 
-- [Lemon language reference](docs/lemon.md): complete syntax — lexical elements, operators and
+- [lemon language reference](docs/lemon.md): complete syntax — lexical elements, operators and
   precedence, grammar (incl. `let`), the full op reference, worked examples, and gotchas.
-- [Lemon prompt card](docs/lemon-prompt.md): a compact, prompt-ready cheat sheet for generating lemon.
+- [lemon prompt card](docs/lemon-prompt.md): a compact, prompt-ready cheat sheet for generating lemon.
 - [Engine architecture](docs/backtest-engine.md): panels, NAV model, metrics, the `Report` JSON contract.
 - [Input data layout](docs/data-layout.md): bring-your-own prices/fundamentals/panels tree, series names, PIT notes.
 - [FMP Starter gaps vs features](docs/fmp-data-source.md): which ops/backtests need which panels when data is short/coarse.
@@ -26,8 +26,8 @@
 
 ## Machine-readable (for tool-use / structured output)
 
-- [Lemon op catalog (JSON)](schema/op-catalog.json): every op, its arguments, types, and defaults.
-- [Lemon spec JSON Schema](schema/lemon-spec.schema.json): schema for the tagged `Expr` tree.
+- [lemon op catalog (JSON)](schema/op-catalog.json): every op, its arguments, types, and defaults.
+- [lemon spec JSON Schema](schema/lemon-spec.schema.json): schema for the tagged `Expr` tree.
 
 ## Examples
 

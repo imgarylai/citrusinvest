@@ -1,11 +1,11 @@
 ---
-title: "Lemon language"
+title: "lemon language"
 editUrl: false
 sourceFile: docs/lemon.md
 ---
 
 <!-- Imported from docs/lemon.md by site/scripts/import-reference-docs.mjs — edit the source, then re-run `npm run import:docs`. -->
-Lemon is the small text language you write trading strategies in. A strategy
+lemon is the small text language you write trading strategies in. A strategy
 such as
 
 ```text
@@ -18,7 +18,7 @@ produce a position matrix. The same JSON runs identically in the browser/Worker
 (WASM) and in the native batch runner, so what you write here is exactly what
 gets backtested.
 
-Lemon does no math itself. It is a **surface syntax over the `Expr` AST**: the
+lemon does no math itself. It is a **surface syntax over the `Expr` AST**: the
 parser turns text into JSON, and the engine (documented in
 [`backtest-engine.md`](../reference/backtest-engine)) supplies all the semantics.
 

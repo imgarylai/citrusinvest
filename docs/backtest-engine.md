@@ -1,6 +1,6 @@
 # citrusquant — Rust strategy DSL + backtest engine
 
-A Rust workspace for **US stocks**: build a strategy in the **Lemon** DSL,
+A Rust workspace for **US stocks**: build a strategy in the **lemon** DSL,
 evaluate it over price/fundamental data, and backtest it. This is the engine
 behind citrusquant — the repo root is the Cargo workspace.
 
@@ -14,7 +14,7 @@ behind citrusquant — the repo root is the Cargo workspace.
 
 ```
 Cargo.toml                 # workspace (members = crates/*)
-crates/lemon-lang/         # the Lemon DSL — human-writable text ⇄ JSON Expr tree
+crates/lemon-lang/         # the lemon DSL — human-writable text ⇄ JSON Expr tree
   src/
     spec.rs                # Expr AST (serde-deserializable strategy tree)
     dsl/
@@ -22,7 +22,7 @@ crates/lemon-lang/         # the Lemon DSL — human-writable text ⇄ JSON Expr
       parse.rs             # text → JSON Expr (Pratt; `let` = parse-time inlining)
       print.rs             # JSON Expr → text (flat; lossy — no let/comment reconstruction)
       ops.rs               # op vocabulary: DSL names ⇄ Expr tags + field layout
-crates/lemon-wasm/         # Lemon parse/format over WASM (powers the web editor)
+crates/lemon-wasm/         # lemon parse/format over WASM (powers the web editor)
 crates/yuzu-core/          # pure, I/O-free evaluator — re-exports `lemon::spec`
   src/
     panel.rs               # Panel type (dates × symbols f64 matrix) + shift
@@ -214,7 +214,7 @@ author-facing table in `lemon.md`.
 
 A strategy is a **serializable JSON tree** (`spec.rs`, in the `lemon` crate), so the
 WASM (browser/Worker) path and the native batch runner produce the same artifact.
-It is what **Lemon** text
+It is what **lemon** text
 compiles to — authors write `close > sma(close, 2)`, the parser lowers it to this
 tree. The evaluator (`yuzu-core/eval.rs`) walks the tree against an `EvalContext`
 (numeric `panels: HashMap<String, Panel>` keyed by series name, e.g. `"close"`,
