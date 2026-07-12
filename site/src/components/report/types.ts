@@ -100,6 +100,37 @@ export interface Metrics {
   information_ratio?: number | null;
 }
 
+/** Factor diagnostics — mirror of yuzu_core::research::FactorReport. */
+export interface FactorReport {
+  /** Dates with a defined cross-sectional IC (≥2 jointly-valid cells). */
+  dates: number[];
+  /** Per-date Spearman rank IC between the factor and forward returns. */
+  ic: (number | null)[];
+  mean_ic: number | null;
+  ic_std: number | null;
+  icir: number | null;
+  quantiles: number;
+  /** Mean forward return per quantile bucket (index 0 = lowest factor). */
+  quantile_returns: (number | null)[];
+  /** Top-minus-bottom quantile spread. */
+  long_short: number | null;
+  /** Membership turnover of the top bucket. */
+  top_quantile_turnover: number | null;
+}
+
+/** Event-aligned average return path — mirror of yuzu_core::research::EventStudy. */
+export interface EventStudy {
+  pre: number;
+  post: number;
+  /** Lags from -pre to +post inclusive. */
+  lags: number[];
+  /** Mean return across events at each lag. */
+  avg_return: (number | null)[];
+  /** Cumulative sum of avg_return from -pre. */
+  cumulative: (number | null)[];
+  event_count: number;
+}
+
 export interface Report {
   /** YYYYMMDD, one per trading day. */
   dates: number[];
