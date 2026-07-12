@@ -327,6 +327,21 @@ export function initPlayground(root: HTMLElement): void {
     run();
   });
 
+  // Preset dropdown: a <select data-pg-presets> whose <option>s carry the
+  // strategy source in data-src and a one-line description in data-explain.
+  // Choosing one loads it, updates any [data-pg-explain] blurb, and runs.
+  document.addEventListener('change', (ev) => {
+    const sel = ev.target as HTMLSelectElement;
+    if (!sel.matches?.('[data-pg-presets]')) return;
+    const opt = sel.selectedOptions[0];
+    const src = opt?.dataset.src;
+    if (src == null) return;
+    editor.setValue(src);
+    const explain = document.querySelector<HTMLElement>('[data-pg-explain]');
+    if (explain) explain.textContent = opt.dataset.explain ?? '';
+    run();
+  });
+
   // Landing-page embeds auto-run once so the hero is alive without a click.
   if (root.dataset.autorun !== undefined) {
     const kick = () => run();
