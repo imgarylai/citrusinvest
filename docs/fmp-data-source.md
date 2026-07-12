@@ -289,6 +289,36 @@ backtests — richer history needs daily snapshot accumulation over time (a serv
 concern). Each factor costs extra FMP requests per symbol; pair with
 `--rate-limit`. On `--resume`, panels cover only the symbols processed this run.
 
+### Auditing a synced tree (`data-audit`)
+
+`fmp-sync` builds a tree; **`yuzu-cli data-audit`** measures whether it's clean
+enough to trust a backtest — turning "high-quality data" from a claim into a
+report. It's read-only (no network, no engine run), reuses the same loaders the
+backtests use, and doubles as the verification tool for filing-date visibility
+(#131) and snapshot-factor coverage (#132).
+
+```bash
+yuzu-cli data-audit --data ./mydata                 # human table (default)
+yuzu-cli data-audit --data ./mydata --json           # machine-readable report
+yuzu-cli data-audit --data ./mydata --from 20200101 --to 20241231
+```
+
+Each check reports `OK` / `WARN` / `FAIL`; **any `FAIL` exits non-zero** so it can
+gate CI or a nightly job.
+
+| Check | What it flags |
+|-------|---------------|
+| `coverage` | symbols priced vs `tracked/universe.csv.gz` — names in the universe with no prices (and vice versa); FAIL if `prices/` is empty |
+| `calendar_gaps` | interior trading-day holes (a day the symbol lacks but the union calendar has), distinct from a legitimately-ended delisted tail |
+| `adjustment` | overnight \|return\| > 50% — a candidate un-adjusted split or bad tick |
+| `survivorship` | whether *any* symbol ends before the last trading day; a tree where nothing ends early is likely survivors-only (biases every backtest) |
+| `nan_density` | fundamental fields the plan never populated, and snapshot-factor panels that are missing or entirely NaN (the #132 all-NaN smell) |
+| `pit_lag` | fraction of `report_event` (filing) days landing on a calendar month-end — every fiscal period-end is a month-end, so a high fraction is the #131 lookahead smell (healthy filings lag the period-end by ~30–90 days) |
+| `index_membership` | for any `panels/in_*.csv.gz`, the member count over time (sanity vs a known index size) |
+
+`data-audit` reports only — it never repairs. Treat a `WARN` as "look here", a
+`FAIL` as "don't backtest this yet".
+
 ### Establishing the symbol list first
 
 For a whole-market backtest, build the sync universe as a reviewable artifact

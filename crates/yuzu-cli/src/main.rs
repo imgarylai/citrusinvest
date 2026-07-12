@@ -279,6 +279,28 @@ enum Cmd {
         #[arg(long, value_enum, default_value_t = SortArg::Sharpe)]
         sort: SortArg,
     },
+    /// Read-only data-quality audit of a synced data-layout tree.
+    ///
+    /// Walks `prices/` / `fundamentals/` / `panels/` / `tracked/` and reports
+    /// per-check OK / WARN / FAIL (coverage, calendar gaps, adjustment sanity,
+    /// survivorship, NaN density, filing-date lag, index membership). No network,
+    /// no engine run. Human table by default; `--json` for machine consumption.
+    /// Exits non-zero when any check FAILs, so it can gate CI or a nightly job.
+    DataAudit {
+        /// Data root to audit (mirrors the `--data` tree the backtests read).
+        #[arg(long)]
+        data: PathBuf,
+        #[arg(long, default_value_t = 20000101)]
+        from: i32,
+        #[arg(long, default_value_t = 99991231)]
+        to: i32,
+        /// Emit the full report as JSON instead of the human table.
+        #[arg(long)]
+        json: bool,
+        /// Output file (default: stdout).
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
     /// Sync FMP data with YOUR OWN API key into a local `data-layout.md` tree.
     ///
     /// Direct HTTP (no third-party FMP SDK); the key stays on this machine and
@@ -733,6 +755,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 &cfg,
             )?;
             emit(&common.out, serde_json::to_string_pretty(&report)?)?;
+        }
+        Cmd::DataAudit {
+            data,
+            from,
+            to,
+            json,
+            out,
+        } => {
+            let report = yuzu_cli::run_data_audit(&data, from, to)?;
+            let overall = report.overall;
+            let body = if json {
+                serde_json::to_string_pretty(&report)?
+            } else {
+                yuzu_cli::render_table(&report)
+            };
+            emit(&out, body)?;
+            // Non-zero exit on a FAIL so the audit can gate CI / a nightly job.
+            if overall == yuzu_cli::data_audit::Status::Fail {
+                std::process::exit(2);
+            }
         }
         #[cfg(feature = "fmp-sync")]
         Cmd::FmpSync {
