@@ -43,15 +43,16 @@ crates/yuzu-core/          # pure, I/O-free evaluator — re-exports `lemon::spe
     golden_ops.rs          # per-op golden tests
     strategy_e2e.rs        # full spec → position matrix golden
     strategy_backtest_e2e.rs  # full spec → backtest report golden
-crates/pomelo-data/          # native I/O layer: OHLCV + fundamentals loaders (see below)
-crates/pomelo-s3/     # generic S3 ObjectSource for pomelo-data
+crates/pomelo-data/        # native I/O layer: OHLCV + fundamentals loaders (see below)
+crates/pomelo-s3/          # generic S3 ObjectSource for pomelo-data
 crates/yuzu-wasm/          # browser/Worker bindings (run_backtest_json)
 crates/yuzu-server/        # native backtest server core (source-agnostic handle_backtest)
 crates/yuzu-cli/           # native batch binary
 ```
 
-**Two families.** `lemon-*` is the **language** (text ⇄ Expr tree); `yuzu-*` is the
-**engine** (evaluate → backtest, plus data loading, server, and CLI). `spec.rs` (the
+**Three families.** `lemon-*` is the **language** (text ⇄ Expr tree); `yuzu-*` is the
+**engine** and the product apps around it (evaluate → backtest, wasm, server, CLI);
+`pomelo-*` is **data engineering** (native I/O, storage backends, data sync). `spec.rs` (the
 `Expr` AST) lives in `lemon` and is re-exported by `yuzu-core` (`pub use lemon::spec`),
 so both the parser and the evaluator agree on one tree shape.
 

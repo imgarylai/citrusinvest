@@ -3,9 +3,9 @@
 [![CI](https://github.com/citrusquant/citrusquant/actions/workflows/ci.yml/badge.svg)](https://github.com/citrusquant/citrusquant/actions/workflows/ci.yml) [![docs](https://img.shields.io/badge/docs-pages-blue)](https://citrusquant.com/) [![yuzu-core](https://img.shields.io/crates/v/yuzu-core?label=yuzu-core)](https://crates.io/crates/yuzu-core) [![lemon-lang](https://img.shields.io/crates/v/lemon-lang?label=lemon-lang)](https://crates.io/crates/lemon-lang) ![license](https://img.shields.io/badge/license-MIT-blue)
 
 The open-source Rust backtest + strategy engine behind **citrusquant** — the
-**yuzu** backtest core plus the **lemon** strategy DSL. Pure, I/O-free math:
-`(strategy spec JSON, data panels) -> Report`. It compiles to both native
-(batch backtests via Rayon) and WASM (browser/Worker).
+**yuzu** backtest core, the **pomelo** data-engineering layer, and the **lemon**
+strategy DSL. Pure, I/O-free math: `(strategy spec JSON, data panels) -> Report`.
+It compiles to both native (batch backtests via Rayon) and WASM (browser/Worker).
 
 Top-level entry (in the `yuzu-core` crate):
 
@@ -20,6 +20,19 @@ contract live in [`docs/backtest-engine.md`](docs/backtest-engine.md).
 [`docs/data-layout.md`](docs/data-layout.md).
 **FMP Starter-tier gaps** (which features need which panels):
 [`docs/fmp-data-source.md`](docs/fmp-data-source.md).
+
+## Crate families
+
+The workspace is organized into three crate families:
+
+- **yuzu** — the backtest engine and the product apps around it (CLI/server/wasm/py).
+- **pomelo** — data engineering: native I/O, storage backends, data sync.
+- **lemon** — the strategy language and its tooling.
+
+The library crates are published so you can link them from your own service — e.g.
+`pomelo-fmp::sync_into` + `pomelo-s3` for a data-sync service, or `yuzu-core` +
+`pomelo-data` for a backtest service (`yuzu-server` is the reference implementation).
+It's a layered stack — `pomelo-*` → `yuzu-core` → `lemon` — not parallel silos.
 
 ## Published crates
 

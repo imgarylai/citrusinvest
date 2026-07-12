@@ -4,7 +4,18 @@ Guidance for AI coding agents working in this repository.
 
 ## What this is
 
-citrusquant is a Rust backtest engine (a Cargo workspace):
+citrusquant is a Rust backtest engine (a Cargo workspace). Crates fall into three
+families by prefix:
+
+- **`yuzu-*`** — the backtest engine **and the product apps around it** (CLI, server,
+  wasm, Python). Rule of thumb: **apps live under the `yuzu` name**, even
+  data-engineering ones — e.g. `yuzu-cli fmp-sync` is a `yuzu` binary that wraps the
+  `pomelo-*` crates.
+- **`pomelo-*`** — data-engineering **libraries**: native I/O, storage backends, vendor
+  data sync (produce the panels the engine consumes).
+- **`lemon-*`** — the strategy **language** and its tooling.
+
+It's a layered stack, not parallel silos: `pomelo-*` → `yuzu-core` → `lemon`.
 
 - `yuzu-core` — pure, I/O-free backtest engine core (`run_backtest`).
 - `pomelo-data` — native data loading (reads gzip CSV price/fundamental files into panels).
