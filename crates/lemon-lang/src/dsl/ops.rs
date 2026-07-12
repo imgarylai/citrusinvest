@@ -117,7 +117,7 @@ static ROWS: &[Row] = &[
             tag: "Rise",
             fields: &[Expr("of"), Num("n")],
         },
-        desc: "1 where `of` rose for `n` consecutive days, else 0.",
+        desc: "1 where `of` is above its value `n` days ago, else 0.",
     },
     Row {
         names: &["fall"],
@@ -125,7 +125,7 @@ static ROWS: &[Row] = &[
             tag: "Fall",
             fields: &[Expr("of"), Num("n")],
         },
-        desc: "1 where `of` fell for `n` consecutive days, else 0.",
+        desc: "1 where `of` is below its value `n` days ago, else 0.",
     },
     Row {
         names: &["shift"],
