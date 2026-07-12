@@ -441,8 +441,9 @@ fn emit(out: &Option<PathBuf>, json: String) -> std::io::Result<()> {
 #[cfg(feature = "fmp-sync")]
 enum OutStore {
     Local(pomelo_data::LocalSource),
+    // Box the S3 client: it's much larger than the Local variant (clippy::large_enum_variant).
     S3 {
-        src: pomelo_s3::S3Source,
+        src: Box<pomelo_s3::S3Source>,
         prefix: String,
     },
 }
@@ -474,7 +475,7 @@ impl OutStore {
         )
         .map_err(|e| e.to_string())?;
         Ok(OutStore::S3 {
-            src,
+            src: Box::new(src),
             prefix: prefix.to_string(),
         })
     }
@@ -510,28 +511,6 @@ impl pomelo_data::ObjectSink for OutStore {
             OutStore::Local(l) => l.put(key, bytes),
             OutStore::S3 { src, prefix } => src.put(&OutStore::prefixed(prefix, key), bytes),
         }
-    }
-}
-
-#[cfg(test)]
-#[cfg(feature = "fmp-sync")]
-mod out_store_tests {
-    use super::OutStore;
-
-    #[test]
-    fn parse_local_vs_s3_and_key_prefixing() {
-        // Non-s3 → local path (no env needed).
-        assert!(!OutStore::parse("./mydata").unwrap().is_s3());
-        assert!(!OutStore::parse("/tmp/x").unwrap().is_s3());
-        // Key prefixing: empty prefix is a passthrough; a prefix joins with '/'.
-        assert_eq!(
-            OutStore::prefixed("", "prices/AAPL.csv.gz"),
-            "prices/AAPL.csv.gz"
-        );
-        assert_eq!(
-            OutStore::prefixed("mirror/v1", "panels/piotroski_score.csv.gz"),
-            "mirror/v1/panels/piotroski_score.csv.gz"
-        );
     }
 }
 
@@ -928,4 +907,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+#[cfg(feature = "fmp-sync")]
+mod out_store_tests {
+    use super::OutStore;
+
+    #[test]
+    fn parse_local_vs_s3_and_key_prefixing() {
+        // Non-s3 → local path (no env needed).
+        assert!(!OutStore::parse("./mydata").unwrap().is_s3());
+        assert!(!OutStore::parse("/tmp/x").unwrap().is_s3());
+        // Key prefixing: empty prefix is a passthrough; a prefix joins with '/'.
+        assert_eq!(
+            OutStore::prefixed("", "prices/AAPL.csv.gz"),
+            "prices/AAPL.csv.gz"
+        );
+        assert_eq!(
+            OutStore::prefixed("mirror/v1", "panels/piotroski_score.csv.gz"),
+            "mirror/v1/panels/piotroski_score.csv.gz"
+        );
+    }
 }
