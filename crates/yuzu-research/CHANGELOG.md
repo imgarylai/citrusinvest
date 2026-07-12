@@ -7,19 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.7.0](https://github.com/citrusquant/citrusquant/compare/pomelo-fmp-v0.6.0...pomelo-fmp-v0.7.0) - 2026-07-12
-
-### Added
-
-- *(fmp-sync)* pe_industry_pctile snapshot factor (cross-sectional)
-
-### Other
-
-- *(yuzu-research)* extract multi-run research orchestration from the CLI
-- relocate library-grade logic from yuzu-cli to pomelo crates
-- *(audit)* move data-audit into a pomelo-audit crate; CLI just calls it
-
-## [0.6.0](https://github.com/citrusquant/citrusquant/compare/pomelo-fmp-v0.5.1...pomelo-fmp-v0.6.0) - 2026-07-12
+## [0.7.0](https://github.com/citrusquant/citrusquant/compare/yuzu-research-v0.6.0...yuzu-research-v0.7.0) - 2026-07-12
 
 ### Added
 
@@ -28,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Other
 
+- *(yuzu-research)* extract multi-run research orchestration from the CLI
+- *(audit)* move data-audit into a pomelo-audit crate; CLI just calls it
 - address #139 review — three-family docs + restore CHANGELOG tags
 - *(data)* [**breaking**] rename yuzu-data → pomelo-data, yuzu-source-s3 → pomelo-s3
 - *(data)* extract pomelo-fmp crate (FMP sync + factor formulas)
