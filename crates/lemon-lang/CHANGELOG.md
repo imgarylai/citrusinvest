@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0](https://github.com/citrusquant/citrusquant/compare/lemon-lang-v0.5.1...lemon-lang-v0.6.0) - 2026-07-12
+
+### Other
+
+- address #139 review — three-family docs + restore CHANGELOG tags
+- *(data)* [**breaking**] rename yuzu-data → pomelo-data, yuzu-source-s3 → pomelo-s3
+- *(data)* extract pomelo-fmp crate (FMP sync + factor formulas)
+
 ## [0.5.1](https://github.com/citrusquant/citrusquant/compare/lemon-lang-v0.5.0...lemon-lang-v0.5.1) - 2026-07-10
 
 ### Added
