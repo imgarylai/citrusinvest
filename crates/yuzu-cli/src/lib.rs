@@ -6,6 +6,10 @@
 /// (and the CLI binary) are unchanged after the extraction.
 pub use pomelo_fmp as fmp;
 
+/// Read-only data-quality audit of a data-layout tree (`yuzu-cli data-audit`).
+pub mod data_audit;
+pub use data_audit::{render_table, run_data_audit, DataAuditReport};
+
 use std::collections::HashMap;
 use std::path::Path;
 
