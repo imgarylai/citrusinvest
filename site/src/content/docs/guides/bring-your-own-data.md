@@ -25,10 +25,10 @@ An `EvalContext` is a map of series name → panel (`close`, `open`, `high`,
 `low`, `volume`, `pe`, …), plus an optional symbol → industry map for the
 sector operators.
 
-## Option 1 — native files (`yuzu-data`)
+## Option 1 — native files (`pomelo-data`)
 
 Lay prices and fundamentals out on disk (gzip CSV, plain CSV, or Parquet) under a
-data root and let `yuzu-data` load them into panels. The on-disk tree, series
+data root and let `pomelo-data` load them into panels. The on-disk tree, series
 names, and point-in-time notes are the canonical contract in
 [Data layout](../reference/data-layout). This is what `yuzu-cli` and
 `yuzu-server` read.

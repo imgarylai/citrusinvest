@@ -7,12 +7,12 @@ sourceFile: docs/data-layout.md
 <!-- Imported from docs/data-layout.md by site/scripts/import-reference-docs.mjs — edit the source, then re-run `npm run import:docs`. -->
 This is the **canonical contract** for data you feed into citrusquant.
 The engine does **not** ship market data. You bring your own files (or any
-[`ObjectSource`](https://github.com/citrusquant/citrusquant/blob/main/crates/yuzu-data/src/source.rs) that serves the same keys).
+[`ObjectSource`](https://github.com/citrusquant/citrusquant/blob/main/crates/pomelo-data/src/source.rs) that serves the same keys).
 
 `yuzu-core` only sees in-memory [`Panel`](../reference/backtest-engine#the-data-model-panel)
-values. The on-disk layout below is what **`yuzu-data`** reads and what
+values. The on-disk layout below is what **`pomelo-data`** reads and what
 **`yuzu-cli`** / **`yuzu-server`** expect under a data root (local directory or
-S3-compatible object store via `yuzu-source-s3`).
+S3-compatible object store via `pomelo-s3`).
 
 For NAV / metrics / strategy semantics, see [`backtest-engine.md`](../reference/backtest-engine).
 For strategy syntax, see [`lemon.md`](../reference/lemon).
@@ -82,7 +82,7 @@ Loaders detect format from **content**, not only the extension:
 |--------|---------------|--------------------|
 | gzip CSV | `1f 8b` | `.csv.gz` (default write format) |
 | plain CSV | UTF-8 text | `.csv` |
-| Apache Parquet | `PAR1` | `.parquet` (read-only; needs `yuzu-data` `parquet` feature) |
+| Apache Parquet | `PAR1` | `.parquet` (read-only; needs `pomelo-data` `parquet` feature) |
 
 Probe order per object: `.csv.gz` → `.parquet` (if feature enabled) → `.csv`.
 
@@ -208,7 +208,7 @@ Example row:
 
 Same date and NaN conventions as prices. Column order must match
 `FUNDAMENTAL_FIELDS` + trailing `report_event` in
-[`crates/yuzu-data/src/fundamentals.rs`](https://github.com/citrusquant/citrusquant/blob/main/crates/yuzu-data/src/fundamentals.rs).
+[`crates/pomelo-data/src/fundamentals.rs`](https://github.com/citrusquant/citrusquant/blob/main/crates/pomelo-data/src/fundamentals.rs).
 
 ---
 
@@ -240,7 +240,7 @@ object is **absent**, fall back to per-symbol `prices/` or `fundamentals/`.
 A symbol missing from an **existing** combined file is NaN until you rebuild —
 the server does not merge per-symbol rows into a partial combined file.
 
-Rebuild helper (native): `rebuild_combined_panels` in `yuzu-data` (also exposed
+Rebuild helper (native): `rebuild_combined_panels` in `pomelo-data` (also exposed
 as the server rebuild path) writes gzip CSV under `panels/` from per-symbol
 archives. Snapshot factor names listed above are **not** produced by that
 rebuild; supply those panels yourself.
@@ -252,7 +252,7 @@ rebuild; supply those panels yourself.
 Industry ops (`neutralize_industry`, `industry_rank`, `groupby_category`) need
 `EvalContext.industry`: `symbol → sector` string.
 
-Helper: `yuzu_data::parse_industry_csv` accepts CSV text shaped like:
+Helper: `pomelo_data::parse_industry_csv` accepts CSV text shaped like:
 
 ```csv
 symbol,sector,market_cap
@@ -265,7 +265,7 @@ XOM,Energy,470000000000
 - Extra columns after `sector` (e.g. `market_cap`) are allowed; only the first
   two fields are used for the map.
 
-**Wiring:** the parser is in `yuzu-data`; **`yuzu-cli` currently leaves
+**Wiring:** the parser is in `pomelo-data`; **`yuzu-cli` currently leaves
 `industry` empty.** Pass the map when calling the library/server integration
 yourself, or load a snapshot from e.g. `tracked/*.csv.gz` in your product code.
 
@@ -298,9 +298,10 @@ The engine does **not** maintain historical index constituents.
 auto-loads `in_sp500` / `in_nasdaq` / `in_dowjones` from `panels/` when present,
 so `mask(signal, in_sp500)` works without hand-building the context. The library
 path can insert any such panel directly; `yuzu-server` does **not** auto-load
-custom series. `yuzu-cli fmp-sync --index sp500` produces both the panel and the
-ever-member price universe. Reconstruction is index-scoped and **degrades for
-very old dates** (the vendor change log thins out).
+custom series (see §"Custom series"). `yuzu-cli fmp-sync --index sp500` produces
+both the panel and the ever-member price universe (see
+[`fmp-data-source.md`](../reference/fmp-data-source) §6). Reconstruction is index-scoped
+and **degrades for very old dates** (the vendor change log thins out).
 
 Delisted names: keep `prices/{SYM}.*` files that **end** on the last trading
 day. Pair with `BacktestConfig.delist_after` / `delist_haircut` so the NAV loop
@@ -375,7 +376,7 @@ JSON tree to `yuzu-cli` or `run_backtest`.
 Library sketch (no server):
 
 ```rust
-// load panels with yuzu_data::load_panel / load_fundamental_panel,
+// load panels with pomelo_data::load_panel / load_fundamental_panel,
 // insert into EvalContext, then:
 yuzu_core::run_backtest(&spec_json, &ctx, "close", &BacktestConfig::default())?;
 ```
@@ -391,14 +392,14 @@ optionally `fundamentals/`, `panels/`).
 
 | Contract | Location |
 |----------|----------|
-| Price columns / `Field` | `crates/yuzu-data/src/csv_io.rs` |
-| Fundamental column list | `crates/yuzu-data/src/fundamentals.rs` → `FUNDAMENTAL_FIELDS`, `REPORT_EVENT_FIELD`, `FACTOR_PANEL_FIELDS` |
-| Combined wide panels | `crates/yuzu-data/src/combined.rs` |
-| Industry CSV parse | `crates/yuzu-data/src/industry.rs` |
-| Format probe | `crates/yuzu-data/src/format.rs` |
+| Price columns / `Field` | `crates/pomelo-data/src/csv_io.rs` |
+| Fundamental column list | `crates/pomelo-data/src/fundamentals.rs` → `FUNDAMENTAL_FIELDS`, `REPORT_EVENT_FIELD`, `FACTOR_PANEL_FIELDS` |
+| Combined wide panels | `crates/pomelo-data/src/combined.rs` |
+| Industry CSV parse | `crates/pomelo-data/src/industry.rs` |
+| Format probe | `crates/pomelo-data/src/format.rs` |
 | Server series routing | `crates/yuzu-server/src/lib.rs` → `price_field`, `handle_backtest` |
 | CLI price discovery | `crates/yuzu-cli/src/lib.rs` → `list_symbols`, `load_ctx` |
-| FMP builder (writes this tree) | `crates/yuzu-cli/src/fmp.rs` → `yuzu-cli fmp-sync` |
+| FMP builder (writes this tree) | `crates/pomelo-fmp/` → `yuzu-cli fmp-sync` |
 
 If this doc and the code disagree, **trust the code** and update this file.
 
@@ -408,5 +409,5 @@ If this doc and the code disagree, **trust the code** and update this file.
 
 - [`backtest-engine.md`](../reference/backtest-engine) — panels, backtest, Report JSON  
 - [`lemon.md`](../reference/lemon) — strategy language  
-- [`crates/yuzu-data/README.md`](https://github.com/citrusquant/citrusquant/blob/main/crates/yuzu-data/README.md) — crate feature flags  
+- [`crates/pomelo-data/README.md`](https://github.com/citrusquant/citrusquant/blob/main/crates/pomelo-data/README.md) — crate feature flags  
 
