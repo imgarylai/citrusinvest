@@ -19,6 +19,9 @@ path = "src/main.rs"
 [dependencies]
 yuzu-core = { path = "../yuzu-core", version = "0.6.0" }
 pomelo-data = { path = "../pomelo-data", version = "0.6.0" }
+# Multi-run research orchestration (sweep/grid/walk-forward/lookahead), re-exported
+# so the run_* handlers live in the library layer, not the binary.
+yuzu-research = { path = "../yuzu-research", version = "0.6.0" }
 # Read-only data-quality audit (yuzu-cli data-audit) — the logic lives in the
 # data-engineering layer; the CLI is a thin caller.
 pomelo-audit = { path = "../pomelo-audit", version = "0.6.0" }

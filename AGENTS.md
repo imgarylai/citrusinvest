@@ -18,6 +18,7 @@ families by prefix:
 It's a layered stack, not parallel silos: `pomelo-*` → `yuzu-core` → `lemon`.
 
 - `yuzu-core` — pure, I/O-free backtest engine core (`run_backtest`).
+- `yuzu-research` — multi-run research over the engine: sweeps, grids, walk-forward, lookahead-bias detection (`run_sweep`/`run_walkforward`/…). Composes `yuzu-core::research` primitives; the CLI re-exports it.
 - `pomelo-data` — native data loading (reads gzip CSV price/fundamental files into panels).
 - `pomelo-s3` — an S3-backed data source (an `ObjectSource`/`ObjectSink` impl; `LocalSource` reads/writes local files).
 - `pomelo-fmp` — bring-your-own-key FMP data sync + snapshot-factor formulas. `sync_into` writes a data-layout tree to any `ObjectSink` (local or S3/R2); the CLI is a thin wrapper. FMP stays out of `yuzu-core`/`pomelo-data`/WASM.
@@ -67,6 +68,6 @@ additionally flags unknown series names (typos become silent `Data` leaves) and 
 - **Conventional Commits** — release-plz derives versions/changelog from them. `feat:`→minor,
   `fix:`/`perf:`→patch; `docs`/`chore`/`refactor`/`test`/`ci` don't release.
 - Don't hand-edit crate `version` fields — release-plz owns them.
-- Published library crates: `yuzu-core`, `pomelo-data`, `pomelo-s3`, `pomelo-fmp`,
-  `pomelo-audit`, `lemon-lang` (the `lemon` crate is imported as `lemon`). The
-  wasm/CLI/server crates are `publish = false`.
+- Published library crates: `yuzu-core`, `yuzu-research`, `pomelo-data`, `pomelo-s3`,
+  `pomelo-fmp`, `pomelo-audit`, `lemon-lang` (the `lemon` crate is imported as
+  `lemon`). The wasm/CLI/server crates are `publish = false`.
