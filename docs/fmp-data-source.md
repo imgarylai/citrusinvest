@@ -306,6 +306,25 @@ yuzu-cli data-audit --data ./mydata --from 20200101 --to 20241231
 Each check reports `OK` / `WARN` / `FAIL`; **any `FAIL` exits non-zero** so it can
 gate CI or a nightly job.
 
+**`--data` also accepts `s3://bucket[/prefix]`**, auditing an R2/S3 tree
+directly (#149) — same `S3_*`/`AWS_*` credential chain as `fmp-sync --out`
+above:
+
+```bash
+export S3_ENDPOINT=https://<accountid>.r2.cloudflarestorage.com
+export S3_ACCESS_KEY_ID=…  S3_SECRET_ACCESS_KEY=…
+yuzu-cli data-audit --data s3://my-bucket/mirror/v1 --json
+```
+
+**Cost differs by check.** Discovery (which symbols / fundamentals files /
+`panels/in_*` exist) is a handful of `ListObjectsV2` calls — cheap for a whole
+universe. The content checks (`calendar_gaps`, `adjustment`, `survivorship`,
+`nan_density`, `pit_lag`) read every object to compute their verdict, so a deep
+audit of a remote tree makes roughly as many GETs as syncing it locally would.
+For a large universe, prefer syncing to local disk first and auditing that
+(`data-audit --data ./mydata`) unless you specifically need to validate the
+remote tree in place.
+
 | Check | What it flags |
 |-------|---------------|
 | `coverage` | symbols priced vs `tracked/universe.csv.gz` — names in the universe with no prices (and vice versa); FAIL if `prices/` is empty |

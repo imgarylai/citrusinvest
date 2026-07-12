@@ -1,25 +1,35 @@
 //! Read-only data-quality audit of a pomelo data-layout tree (#133).
 //!
-//! Given a synced `prices/` / `fundamentals/` / `panels/` / `tracked/` tree on
-//! local disk, [`run_data_audit`] answers *"is this clean enough to trust a
-//! backtest?"* — turning "high-quality data" from a claim into a measurement. It
-//! also doubles as the verification tool for #131 (filing-date lag) and #132
+//! Given a synced `prices/` / `fundamentals/` / `panels/` / `tracked/` tree,
+//! [`run_data_audit`] answers *"is this clean enough to trust a backtest?"* —
+//! turning "high-quality data" from a claim into a measurement. It also
+//! doubles as the verification tool for #131 (filing-date lag) and #132
 //! (snapshot-factor coverage).
 //!
-//! This is the data-engineering side of the audit: no network, no engine run.
-//! It reuses the [`pomelo_data`] loaders and returns a serializable
-//! [`DataAuditReport`] of per-check `OK` / `WARN` / `FAIL` verdicts, so any
-//! front end — `yuzu-cli data-audit`, a nightly job, or a backend service — can
-//! call the same logic. The CLI is a thin shim that renders/emits the report and
-//! maps a `FAIL` to a non-zero exit.
+//! Storage-agnostic (#149): `run_data_audit` takes any [`ObjectSource`] +
+//! [`ObjectLister`], so it audits a local tree or an S3/R2 tree identically —
+//! `yuzu-cli data-audit --data s3://…` builds a `pomelo_s3::OutStore` and
+//! passes it straight in. Discovery (which symbols / fundamentals files /
+//! membership panels exist) goes through `ObjectLister::list`; reads go
+//! through `ObjectSource::get`. Over S3 this means shallow checks (coverage,
+//! membership) cost a handful of `ListObjectsV2` calls, while deep checks
+//! (gaps / jumps / NaN / lookahead) GET every object — auditing a full R2 tree
+//! deeply is therefore comparable in cost to downloading it (see
+//! `docs/fmp-data-source.md`).
+//!
+//! No network beyond the source's own reads, no engine run. It reuses the
+//! [`pomelo_data`] loaders and returns a serializable [`DataAuditReport`] of
+//! per-check `OK` / `WARN` / `FAIL` verdicts, so any front end —
+//! `yuzu-cli data-audit`, a nightly job, or a backend service — can call the
+//! same logic. The CLI is a thin shim that renders/emits the report and maps a
+//! `FAIL` to a non-zero exit.
 
 use std::collections::BTreeSet;
-use std::path::Path;
 
 use pomelo_data::industry::parse_industry_csv;
 use pomelo_data::{
-    list_symbols, load_combined_panel, load_panel, Field, LocalSource, ObjectSource,
-    FACTOR_PANEL_FIELDS, FUNDAMENTALS_DIR, FUNDAMENTAL_FIELDS, PANELS_DIR, PRICES_DIR,
+    load_combined_panel, load_panel, Field, ObjectLister, ObjectSource, FACTOR_PANEL_FIELDS,
+    FUNDAMENTALS_DIR, FUNDAMENTAL_FIELDS, PANELS_DIR, PRICES_DIR,
 };
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -72,11 +82,17 @@ pub struct DataAuditReport {
     pub checks: Vec<Check>,
 }
 
-/// Run every check over the data-layout tree at `root`, windowed to `[from, to]`.
+/// Run every check over the data-layout tree served by `src`, windowed to
+/// `[from, to]`. `data_dir` is a display label only (a local path or an
+/// `s3://…` URL) — it never drives I/O; all discovery goes through `src`.
 /// Fail-soft: a missing directory or file downgrades a check, never panics.
-pub fn run_data_audit(root: &Path, from: i32, to: i32) -> Result<DataAuditReport, String> {
-    let src = LocalSource::new(root);
-    let symbols = list_symbols(root).unwrap_or_default();
+pub fn run_data_audit<S: ObjectSource + ObjectLister + Sync>(
+    src: &S,
+    data_dir: &str,
+    from: i32,
+    to: i32,
+) -> Result<DataAuditReport, String> {
+    let symbols = list_price_symbols(src);
 
     // One adj-close Panel (union calendar × symbols, NaN where absent) backs the
     // coverage / gaps / delist / jump checks.
@@ -84,27 +100,27 @@ pub fn run_data_audit(root: &Path, from: i32, to: i32) -> Result<DataAuditReport
         None
     } else {
         Some(
-            load_panel(&src, &symbols, Field::AdjClose, from, to, PRICES_DIR)
+            load_panel(src, &symbols, Field::AdjClose, from, to, PRICES_DIR)
                 .map_err(|e| format!("loading price panel: {e}"))?,
         )
     };
 
     // Fundamentals are parsed once (per-field coverage + filing-event days).
-    let fund = scan_fundamentals(root, &src, from, to);
+    let fund = scan_fundamentals(src, from, to);
 
     let checks = vec![
-        check_coverage(&src, &symbols, closes.as_ref()),
+        check_coverage(src, &symbols, closes.as_ref()),
         check_calendar_gaps(&symbols, closes.as_ref()),
         check_adjustment(&symbols, closes.as_ref()),
         check_survivorship(&symbols, closes.as_ref()),
-        check_nan_density(&src, &symbols, &fund, from, to),
+        check_nan_density(src, &symbols, &fund, from, to),
         check_pit_lag(&fund),
-        check_index_membership(root, &src, &symbols, from, to),
+        check_index_membership(src, &symbols, from, to),
     ];
 
     let overall = checks.iter().map(|c| c.status).max().unwrap_or(Status::Ok);
     Ok(DataAuditReport {
-        data_dir: root.display().to_string(),
+        data_dir: data_dir.to_string(),
         from,
         to,
         symbol_count: symbols.len(),
@@ -132,8 +148,8 @@ fn symbol_points(panel: &yuzu_core::panel::Panel, col: usize) -> Vec<(i32, f64)>
 
 /// Coverage: symbols with price files vs the `tracked/universe.csv.gz` map —
 /// names in the universe but missing prices (and vice versa).
-fn check_coverage(
-    src: &LocalSource,
+fn check_coverage<S: ObjectSource>(
+    src: &S,
     symbols: &[String],
     closes: Option<&yuzu_core::panel::Panel>,
 ) -> Check {
@@ -343,8 +359,8 @@ fn check_survivorship(symbols: &[String], closes: Option<&yuzu_core::panel::Pane
 
 /// NaN density: fundamental fields the plan never populated, and snapshot-factor
 /// panels that are missing or entirely NaN (the #132 all-NaN smell).
-fn check_nan_density(
-    src: &LocalSource,
+fn check_nan_density<S: ObjectSource>(
+    src: &S,
     symbols: &[String],
     fund: &FundScan,
     from: i32,
@@ -452,14 +468,13 @@ fn check_pit_lag(fund: &FundScan) -> Check {
 
 /// Index membership: for any `panels/in_*.csv.gz`, the count of members over time
 /// (sanity vs a known index size). Informational unless a panel is all-empty.
-fn check_index_membership(
-    root: &Path,
-    src: &LocalSource,
+fn check_index_membership<S: ObjectSource + ObjectLister>(
+    src: &S,
     symbols: &[String],
     from: i32,
     to: i32,
 ) -> Check {
-    let names = list_membership_panels(root);
+    let names = list_membership_panels(src);
     if names.is_empty() {
         return Check::new(
             "index_membership",
@@ -522,13 +537,13 @@ struct FundScan {
 
 /// Parse every `fundamentals/{SYM}.csv.gz` once: which fields are ever populated
 /// and every filing (`report_event`) day. Fail-soft per file.
-fn scan_fundamentals(root: &Path, src: &LocalSource, from: i32, to: i32) -> FundScan {
+fn scan_fundamentals<S: ObjectSource + ObjectLister>(src: &S, from: i32, to: i32) -> FundScan {
     let mut scan = FundScan {
         fields_seen: BTreeSet::new(),
         report_event_days: Vec::new(),
         file_count: 0,
     };
-    for sym in list_stems(&root.join(FUNDAMENTALS_DIR), &[".csv.gz", ".csv"]) {
+    for sym in list_stems(src, FUNDAMENTALS_DIR, &[".csv.gz", ".csv"]) {
         let bytes = match try_get(src, &format!("{FUNDAMENTALS_DIR}/{sym}")) {
             Some(b) => b,
             None => continue,
@@ -570,15 +585,23 @@ fn scan_fundamentals(root: &Path, src: &LocalSource, from: i32, to: i32) -> Fund
 
 // ── small I/O + parsing helpers ──────────────────────────────────────────────
 
+/// Symbols with a per-symbol price file under `prices/` (`.csv.gz` /
+/// `.parquet` / `.csv`), sorted and de-duplicated.
+fn list_price_symbols<S: ObjectLister>(src: &S) -> Vec<String> {
+    list_stems(src, PRICES_DIR, &[".csv.gz", ".parquet", ".csv"])
+}
+
 /// Load and decode `tracked/universe.csv.gz` into a `symbol → sector` map.
-fn load_industry_map(src: &LocalSource) -> Option<std::collections::HashMap<String, String>> {
+fn load_industry_map<S: ObjectSource>(
+    src: &S,
+) -> Option<std::collections::HashMap<String, String>> {
     let bytes = try_get(src, "tracked/universe")?;
     let map = parse_industry_csv(&decode_text(&bytes));
     (!map.is_empty()).then_some(map)
 }
 
 /// `src.get` for `key` trying `.csv.gz` then `.csv` (the formats the sync writes).
-fn try_get(src: &LocalSource, key_stem: &str) -> Option<Vec<u8>> {
+fn try_get<S: ObjectSource>(src: &S, key_stem: &str) -> Option<Vec<u8>> {
     for ext in [".csv.gz", ".csv"] {
         if let Ok(Some(bytes)) = src.get(&format!("{key_stem}{ext}")) {
             return Some(bytes);
@@ -587,28 +610,24 @@ fn try_get(src: &LocalSource, key_stem: &str) -> Option<Vec<u8>> {
     None
 }
 
-/// File stems under `dir` with any of `exts` stripped, sorted + de-duplicated.
-/// `exts` must be ordered longest-first so `.csv.gz` isn't mis-stripped to `.csv`.
-fn list_stems(dir: &Path, exts: &[&str]) -> Vec<String> {
+/// File stems under `prefix` (via [`ObjectLister::list`]) with any of `exts`
+/// stripped, sorted + de-duplicated. `exts` must be ordered longest-first so
+/// `.csv.gz` isn't mis-stripped to `.csv`. Fail-soft: an unreadable/absent
+/// prefix (local dir missing, or a listing error) yields no stems.
+fn list_stems<S: ObjectLister>(src: &S, prefix: &str, exts: &[&str]) -> Vec<String> {
     let mut out = BTreeSet::new();
-    let Ok(rd) = std::fs::read_dir(dir) else {
-        return Vec::new();
-    };
-    for entry in rd.flatten() {
-        if entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
-            if let Some(name) = entry.file_name().to_str() {
-                if let Some(stem) = exts.iter().find_map(|e| name.strip_suffix(e)) {
-                    out.insert(stem.to_string());
-                }
-            }
+    for key in src.list(prefix).unwrap_or_default() {
+        let name = key.rsplit('/').next().unwrap_or(&key);
+        if let Some(stem) = exts.iter().find_map(|e| name.strip_suffix(e)) {
+            out.insert(stem.to_string());
         }
     }
     out.into_iter().collect()
 }
 
 /// Series names of `panels/in_*.{csv.gz,csv}` (index membership panels).
-fn list_membership_panels(root: &Path) -> Vec<String> {
-    list_stems(&root.join(PANELS_DIR), &[".csv.gz", ".csv"])
+fn list_membership_panels<S: ObjectLister>(src: &S) -> Vec<String> {
+    list_stems(src, PANELS_DIR, &[".csv.gz", ".csv"])
         .into_iter()
         .filter(|s| s.starts_with("in_"))
         .collect()
@@ -706,8 +725,15 @@ mod tests {
     use super::*;
     use pomelo_data::csv_io::{write_series, OhlcvRow};
     use pomelo_data::fundamentals::{write_fundamentals, FundamentalRow};
+    use pomelo_data::LocalSource;
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
+
+    /// Run the audit over a local tree, matching the CLI's local-path path.
+    fn run_local(dir: &Path, from: i32, to: i32) -> DataAuditReport {
+        let src = LocalSource::new(dir);
+        run_data_audit(&src, &dir.display().to_string(), from, to).unwrap()
+    }
 
     fn tmp(tag: &str) -> PathBuf {
         let d = std::env::temp_dir().join(format!("pomelo_audit_ut_{tag}"));
@@ -801,7 +827,7 @@ mod tests {
     #[test]
     fn rich_tree_flags_each_check() {
         let dir = build_rich_tree("rich");
-        let r = run_data_audit(&dir, 20000101, 99991231).unwrap();
+        let r = run_local(&dir, 20000101, 99991231);
         assert_eq!(r.symbol_count, 4);
         assert_eq!(r.overall, Status::Warn);
 
@@ -845,7 +871,7 @@ mod tests {
     #[test]
     fn empty_tree_fails_and_takes_no_price_arms() {
         let d = tmp("empty");
-        let r = run_data_audit(&d, 20000101, 99991231).unwrap();
+        let r = run_local(&d, 20000101, 99991231);
         assert_eq!(r.overall, Status::Fail);
         assert_eq!(r.symbol_count, 0);
         assert_eq!(find(&r, "coverage").status, Status::Fail);
@@ -868,7 +894,7 @@ mod tests {
             "AAA",
             &[(20240102, 10.0), (20240103, 10.0), (20240104, 10.0)],
         );
-        let r = run_data_audit(&d, 20000101, 99991231).unwrap();
+        let r = run_local(&d, 20000101, 99991231);
         assert_eq!(r.overall, Status::Ok);
         let cov = find(&r, "coverage");
         assert_eq!(cov.status, Status::Ok);
@@ -894,7 +920,7 @@ mod tests {
             "day,AAA,BBB\n2024-01-02,1,\n2024-01-03,1,1\n",
         )
         .unwrap();
-        let r = run_data_audit(&d, 20000101, 99991231).unwrap();
+        let r = run_local(&d, 20000101, 99991231);
         let idx = find(&r, "index_membership");
         assert_eq!(idx.status, Status::Ok);
         let p0 = &idx.details["panels"][0];
@@ -913,13 +939,107 @@ mod tests {
         fs::create_dir_all(&pan).unwrap();
         fs::write(pan.join("in_empty.csv"), "day,ONE,ZERO\n2024-01-02,,\n").unwrap();
 
-        let r = run_data_audit(&d, 20000101, 99991231).unwrap();
+        let r = run_local(&d, 20000101, 99991231);
         // The 0 → 10 step is skipped by the c0 <= 0 guard, so nothing is flagged.
         assert_eq!(find(&r, "adjustment").details["flagged"], 0);
         assert_eq!(find(&r, "survivorship").status, Status::Ok);
         let idx = find(&r, "index_membership");
         assert_eq!(idx.status, Status::Warn);
         assert_eq!(idx.details["panels"][0]["max_members"], 0);
+    }
+
+    /// #149: `run_data_audit` is storage-agnostic — this drives it against a
+    /// stub S3 endpoint (routing `ListObjectsV2` + `GET` requests by hand,
+    /// mirroring `pomelo-s3`'s own stub-server tests) instead of `LocalSource`,
+    /// proving discovery (via `ObjectLister::list`) and reads (via
+    /// `ObjectSource::get`) both work over S3/R2.
+    #[test]
+    fn run_data_audit_over_a_stub_s3_source() {
+        use pomelo_s3::S3Source;
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        fn list_xml(keys: &[&str]) -> String {
+            let contents: String = keys
+                .iter()
+                .map(|k| {
+                    format!(
+                        "<Contents><Key>{k}</Key><LastModified>2020-01-01T00:00:00.000Z</LastModified>\
+                         <ETag>\"e\"</ETag><Size>1</Size><StorageClass>STANDARD</StorageClass></Contents>"
+                    )
+                })
+                .collect();
+            format!(
+                "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\
+                 <ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">\
+                 <Name>bucket</Name><KeyCount>{}</KeyCount><MaxKeys>1000</MaxKeys>\
+                 <IsTruncated>false</IsTruncated>{contents}<EncodingType>url</EncodingType>\
+                 </ListBucketResult>",
+                keys.len()
+            )
+        }
+        fn http_ok_bytes(body: &[u8]) -> Vec<u8> {
+            let mut resp = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len()
+            )
+            .into_bytes();
+            resp.extend_from_slice(body);
+            resp
+        }
+        const NOT_FOUND: &[u8] =
+            b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+
+        let aapl = write_series(&[bar(20240102, 10.0), bar(20240103, 11.0)]).unwrap();
+        let msft = write_series(&[bar(20240102, 20.0), bar(20240103, 21.0)]).unwrap();
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut sock) = stream else { break };
+                let mut buf = [0u8; 4096];
+                let read = sock.read(&mut buf).unwrap_or(0);
+                let req = String::from_utf8_lossy(&buf[..read]).to_string();
+                let first_line = req.lines().next().unwrap_or("");
+                let resp = if first_line.contains("prefix=prices") {
+                    http_ok_bytes(
+                        list_xml(&["prices/AAPL.csv.gz", "prices/MSFT.csv.gz"]).as_bytes(),
+                    )
+                } else if first_line.contains("prices/AAPL.csv.gz") {
+                    http_ok_bytes(&aapl)
+                } else if first_line.contains("prices/MSFT.csv.gz") {
+                    http_ok_bytes(&msft)
+                } else if first_line.contains("prefix=fundamentals")
+                    || first_line.contains("prefix=panels")
+                {
+                    http_ok_bytes(list_xml(&[]).as_bytes())
+                } else {
+                    // Every other lookup (universe map, snapshot-factor panels) is
+                    // "not present" — a bare synced tree, same as the local
+                    // `prices_without_universe_or_fundamentals_are_ok` case.
+                    NOT_FOUND.to_vec()
+                };
+                let _ = sock.write_all(&resp);
+            }
+        });
+
+        let src = S3Source::new(
+            &format!("http://{addr}"),
+            "bucket",
+            "ak",
+            "sk",
+            None,
+            "auto",
+        )
+        .unwrap();
+        let r = run_data_audit(&src, "s3://bucket", 20000101, 99991231).unwrap();
+        assert_eq!(r.data_dir, "s3://bucket");
+        assert_eq!(r.symbol_count, 2);
+        assert_eq!(find(&r, "coverage").status, Status::Ok);
+        assert_eq!(find(&r, "coverage").details["symbols_with_prices"], 2);
+        assert_eq!(find(&r, "nan_density").status, Status::Ok);
+        assert_eq!(find(&r, "index_membership").status, Status::Ok);
     }
 
     #[test]

@@ -45,6 +45,43 @@ impl ObjectSink for LocalSource {
     }
 }
 
+/// Discovery side of an [`ObjectSource`]: which keys exist under a prefix.
+/// Kept separate so pure-read consumers that never need discovery (only
+/// `get`) aren't forced to implement it. Returned keys are full keys (the
+/// `prefix` joined with each entry's name), matching what [`ObjectSource::get`]
+/// expects — never bare file names.
+pub trait ObjectLister {
+    fn list(&self, prefix: &str) -> Result<Vec<String>, DataError>;
+}
+
+impl ObjectLister for LocalSource {
+    fn list(&self, prefix: &str) -> Result<Vec<String>, DataError> {
+        let trimmed = prefix.trim_end_matches('/');
+        let rd = match fs::read_dir(self.root.join(trimmed)) {
+            Ok(rd) => rd,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(e) => return Err(DataError::Io(e.to_string())),
+        };
+        let mut out = Vec::new();
+        for entry in rd {
+            let entry = entry.map_err(|e| DataError::Io(e.to_string()))?;
+            if !entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
+                continue;
+            }
+            let Some(name) = entry.file_name().to_str().map(str::to_string) else {
+                continue;
+            };
+            out.push(if trimmed.is_empty() {
+                name
+            } else {
+                format!("{trimmed}/{name}")
+            });
+        }
+        out.sort();
+        Ok(out)
+    }
+}
+
 /// Symbols with a per-symbol price file under `root/prices`, sorted and
 /// de-duplicated. Recognizes `.csv.gz`, `.parquet`, and `.csv`; the loaders
 /// detect the actual format from content.
@@ -97,6 +134,35 @@ mod tests {
             src.get("panels/close.csv.gz").unwrap(),
             Some(b"data".to_vec())
         );
+    }
+
+    #[test]
+    fn local_source_list_returns_full_keys_sorted() {
+        let dir = std::env::temp_dir().join("pomelo_data_list_test");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("prices")).unwrap();
+        fs::write(dir.join("prices/MSFT.csv.gz"), b"x").unwrap();
+        fs::write(dir.join("prices/AAPL.csv.gz"), b"x").unwrap();
+        fs::create_dir_all(dir.join("prices/nested")).unwrap(); // dirs are skipped
+        let src = LocalSource::new(&dir);
+        assert_eq!(
+            src.list("prices").unwrap(),
+            vec![
+                "prices/AAPL.csv.gz".to_string(),
+                "prices/MSFT.csv.gz".to_string(),
+            ]
+        );
+        // Trailing slash is equivalent.
+        assert_eq!(src.list("prices/").unwrap().len(), 2);
+    }
+
+    #[test]
+    fn local_source_list_missing_dir_is_empty() {
+        let dir = std::env::temp_dir().join("pomelo_data_list_missing_test");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let src = LocalSource::new(&dir);
+        assert_eq!(src.list("nope").unwrap(), Vec::<String>::new());
     }
 
     #[test]
