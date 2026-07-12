@@ -393,7 +393,7 @@ optionally `fundamentals/`, `panels/`).
 | Industry CSV parse | `crates/pomelo-data/src/industry.rs` |
 | Format probe | `crates/pomelo-data/src/format.rs` |
 | Server series routing | `crates/yuzu-server/src/lib.rs` → `price_field`, `handle_backtest` |
-| CLI price discovery | `crates/yuzu-cli/src/lib.rs` → `list_symbols`, `load_ctx` |
+| Price discovery | `crates/pomelo-data/src/source.rs` → `list_symbols`; `crates/yuzu-cli/src/lib.rs` → `load_ctx` |
 | FMP builder (writes this tree) | `crates/pomelo-fmp/` → `yuzu-cli fmp-sync` |
 | Tree auditor (reads this tree) | `crates/pomelo-audit/` → `pomelo_audit::run_data_audit` (exposed as `yuzu-cli data-audit`) |
 

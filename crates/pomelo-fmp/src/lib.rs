@@ -71,7 +71,7 @@ pub use delisted::{fetch_delisted, DelistedSymbol};
 #[cfg(feature = "fmp-sync")]
 pub use http::UreqClient;
 pub use http::{HttpClient, HttpError};
-pub use index::{Index, IndexMembership, MEMBERSHIP_SERIES};
+pub use index::{write_index_membership, Index, IndexMembership, MEMBERSHIP_SERIES};
 pub use sync::{sync, sync_into};
 pub use universe::{
     build_symbol_list, parse_market_cap, parse_symbols_list, SymbolFilter, US_EXCHANGES,

@@ -25,7 +25,12 @@
 //! universe has no clean FMP endpoint and is out of scope (#53).
 
 use std::collections::BTreeSet;
+use std::path::Path;
 
+use pomelo_data::{
+    list_symbols, load_panel, write_combined_panel, Field, LocalSource, ObjectSink, PANELS_DIR,
+    PRICES_DIR,
+};
 use serde_json::Value;
 use yuzu_core::panel::Panel;
 
@@ -251,6 +256,47 @@ impl IndexMembership {
         }
         Panel::from_rows(calendar.to_vec(), columns.to_vec(), rows).map_err(|e| e.to_string())
     }
+}
+
+/// The trading calendar of a synced tree: the ascending, unique dates of the
+/// `close` panel over `[from, to]`. Used to place an index membership panel on
+/// exactly the days prices exist for.
+fn trading_calendar(root: &Path, from: i32, to: i32) -> Result<Vec<i32>, String> {
+    let syms = list_symbols(root).map_err(|e| e.to_string())?;
+    if syms.is_empty() {
+        return Err("no synced prices to derive a trading calendar from".to_string());
+    }
+    let close = load_panel(
+        &LocalSource::new(root),
+        &syms,
+        Field::AdjClose,
+        from,
+        to,
+        PRICES_DIR,
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(close.dates)
+}
+
+/// Reconstruct and write an index membership panel (`panels/in_sp500.csv.gz`,
+/// etc.) over the synced tree's trading calendar. Columns are the index's
+/// `ever_members(from, to)` — the same universe you should have synced. Returns
+/// `(days, symbols)` in the written panel.
+pub fn write_index_membership(
+    root: &Path,
+    membership: &IndexMembership,
+    from: i32,
+    to: i32,
+) -> Result<(usize, usize), String> {
+    let calendar = trading_calendar(root, from, to)?;
+    let columns = membership.ever_members(from, to);
+    let panel = membership.membership_panel(&calendar, &columns)?;
+    let bytes = write_combined_panel(&panel).map_err(|e| e.to_string())?;
+    let key = format!("{PANELS_DIR}/{}.csv.gz", membership.series_name());
+    LocalSource::new(root)
+        .put(&key, &bytes)
+        .map_err(|e| e.to_string())?;
+    Ok((calendar.len(), columns.len()))
 }
 
 #[cfg(test)]
