@@ -1,4 +1,4 @@
-# Lemon prompt card
+# lemon prompt card
 
 A compact, prompt-ready reference for generating **lemon** strategies. Drop it into a system
 prompt. Full reference: `docs/lemon.md`.

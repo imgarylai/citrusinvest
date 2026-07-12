@@ -78,4 +78,4 @@ by the engine; the frontend only renders it.
 
 - [Your first strategy](/start/first-strategy) — learn lemon by building one up.
 - [Reading a report](/guides/reading-a-report) — decode every metric.
-- [Lemon language reference](/reference/lemon) — the complete DSL.
+- [lemon language reference](/reference/lemon) — the complete DSL.

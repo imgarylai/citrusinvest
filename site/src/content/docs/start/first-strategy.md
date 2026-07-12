@@ -79,7 +79,7 @@ win rate, and more. To understand each number, read
 
 ## Where to go next
 
-- [Lemon language reference](/reference/lemon) — every operator, precedence,
+- [lemon language reference](/reference/lemon) — every operator, precedence,
   `let` bindings, and gotchas.
 - [Bring your own data](/guides/bring-your-own-data) — swap the synthetic
   sample for real prices and fundamentals.

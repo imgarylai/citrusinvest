@@ -29,7 +29,7 @@ Python bindings (`yuzu-py`) aren't on crates.io either, but ship as the
 For tool-use and structured generation, two artifacts in the repo describe the
 language precisely:
 
-- [Lemon op catalog (JSON)](https://github.com/citrusquant/citrusquant/blob/main/schema/op-catalog.json)
+- [lemon op catalog (JSON)](https://github.com/citrusquant/citrusquant/blob/main/schema/op-catalog.json)
   — every operator, its arguments, types, and defaults.
-- [Lemon spec JSON Schema](https://github.com/citrusquant/citrusquant/blob/main/schema/lemon-spec.schema.json)
+- [lemon spec JSON Schema](https://github.com/citrusquant/citrusquant/blob/main/schema/lemon-spec.schema.json)
   — schema for the tagged `Expr` tree.

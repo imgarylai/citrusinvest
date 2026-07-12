@@ -1,6 +1,6 @@
-# Lemon — the strategy DSL
+# lemon — the strategy DSL
 
-Lemon is the small text language you write trading strategies in. A strategy
+lemon is the small text language you write trading strategies in. A strategy
 such as
 
 ```text
@@ -13,7 +13,7 @@ produce a position matrix. The same JSON runs identically in the browser/Worker
 (WASM) and in the native batch runner, so what you write here is exactly what
 gets backtested.
 
-Lemon does no math itself. It is a **surface syntax over the `Expr` AST**: the
+lemon does no math itself. It is a **surface syntax over the `Expr` AST**: the
 parser turns text into JSON, and the engine (documented in
 [`backtest-engine.md`](./backtest-engine.md)) supplies all the semantics.
 
