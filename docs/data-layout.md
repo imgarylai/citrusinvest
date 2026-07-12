@@ -25,7 +25,7 @@ comparison table.
 | Prices, fundamentals, optional membership panels | **You** (or your pipeline) |
 | Symbol list for a run (`symbols` / CLI universe) | **You** (request or files present under `prices/`) |
 | Point-in-time index membership (e.g. “in S&P 500 that day”) | **You** — supply a 0/1 series or filter `symbols` yourself |
-| Sector map for industry ops | **You** — optional CSV (see [Industry map](#6-industry-map)) |
+| Sector map for industry ops | **You** — optional CSV (see [Industry map](#7-industry-map)) |
 | Evaluating lemon → positions → NAV | Engine |
 
 ---

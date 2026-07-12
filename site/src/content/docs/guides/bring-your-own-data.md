@@ -3,9 +3,10 @@ title: Bring your own data
 description: The engine ships no market data — how to feed your own prices and fundamentals.
 ---
 
-The playground runs on a synthetic sample. To backtest **real** markets you
-supply the data. The engine is pure and I/O-free: it only ever sees in-memory
-`Panel` values keyed by series name. There are three ways to get your data in.
+The playground runs on a small bundled sample (10 US large-caps, 2014–2017). To
+backtest **your** markets — more names, other assets, longer history — you supply
+the data. The engine is pure and I/O-free: it only ever sees in-memory `Panel`
+values keyed by series name. There are three ways to get your data in.
 
 ## What a panel is
 
@@ -30,14 +31,26 @@ sector operators.
 Lay prices and fundamentals out on disk (gzip CSV, plain CSV, or Parquet) under a
 data root and let `pomelo-data` load them into panels. The on-disk tree, series
 names, and point-in-time notes are the canonical contract in
-[Data layout](../reference/data-layout). This is what `yuzu-cli` and
+[Data layout](/reference/data-layout). This is what `yuzu-cli` and
 `yuzu-server` read.
 
 ## Option 2 — build panels in code
 
 If your data lives somewhere else, build `Panel` values yourself and assemble an
-`EvalContext`. This is exactly what the `basic_backtest` example does — see the
-[Quickstart](../start/quickstart).
+`EvalContext`:
+
+```rust
+let close = Panel::from_rows(dates, symbols, close_rows)?;
+let mut panels = HashMap::new();
+panels.insert("close".to_string(), close);
+let ctx = EvalContext::new(panels);
+
+let spec_json = serde_json::to_string(&lemon::parse("close > sma(close, 20)")?)?;
+let report = yuzu_core::run_backtest(&spec_json, &ctx, "close", &BacktestConfig::default())?;
+```
+
+This is exactly what the `basic_backtest` example does end to end — see the
+[Quickstart](/start/quickstart).
 
 ## Option 3 — the JSON / WASM boundary
 
@@ -63,12 +76,12 @@ That's how you'd wire a "bring your own FMP key" mode into a web app.
 If you load from an **FMP Starter**-class key, some features need panels that
 tier doesn't provide. Which ops and backtests are honestly runnable (and which
 are blocked by missing series) is documented in the
-[FMP data source](../reference/fmp-data-source) reference — feature/series gaps,
+[FMP data source](/reference/fmp-data-source) reference — feature/series gaps,
 not a plan-comparison table.
 
 ## Licensing reminder
 
 Most market-data vendors forbid redistribution, so don't commit vendor prices
-into a public repo. The sample dataset here is fully synthetic precisely to stay
-shareable; keep real data on the user's side (native files or a bring-your-own-key
-flow).
+into a public repo. The bundled sample is public-domain (CC0) data precisely to
+stay shareable; keep licensed data on the user's side (native files or a
+bring-your-own-key flow).

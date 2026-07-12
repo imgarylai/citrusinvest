@@ -1,0 +1,193 @@
+---
+// Standalone, app-like playground — a two-pane IDE, deliberately *outside* the
+// Starlight docs chrome so the editor and the results each get a clean column
+// of their own. Left: the lemon editor + Run. Right: the live equity curve and
+// the full tabbed Report. All the provenance / "how it works" prose that used
+// to sit under the widget now lives behind the "About & data" popover (and the
+// dedicated /playground-about page), so nothing competes with the results.
+//
+// The heavy lifting is unchanged: this page mounts the same `.pg-*` markup that
+// initPlayground() drives, so components/playground.ts, the lemon editor and the
+// report renderer are reused verbatim — only the layout around them is new.
+import '../styles/custom.css';
+import '../styles/playground-app.css';
+
+const BASE = import.meta.env.BASE_URL;
+const initial = `# Hold the 3 names with the highest 2-day average close.
+# Edit this and press Run (or Ctrl/Cmd+Enter).
+is_largest(sma(close, 2), 3)`;
+
+// Example strategies for the chip row (loaded + run on click by playground.ts).
+const examples: { label: string; src: string }[] = [
+  { label: 'Momentum', src: `# 3-month momentum: hold the 3 strongest names.\nis_largest(pct_change(close, 63), 3)` },
+  { label: 'Value + trend', src: `# Cheap AND trending: lowest P/E, above the 20-day average.\nis_smallest(pe, 3) and (close > sma(close, 20))` },
+  { label: 'Trend + RSI', src: `# Trend filter across the universe, skip the overbought.\nclose > sma(close, 50) and rsi(close, 14) < 70` },
+  { label: 'Monthly rebalance', src: `# Same momentum idea, rebalanced monthly instead of daily.\nrebalance(is_largest(pct_change(close, 63), 3), freq="ME")` },
+];
+---
+
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Playground — citrusquant</title>
+    <meta
+      name="description"
+      content="Write a lemon strategy and run a real yuzu backtest in your browser — real engine, real data, no install, no server."
+    />
+    <link rel="icon" href={`${BASE}favicon.svg`} type="image/svg+xml" />
+    <meta name="robots" content="index,follow" />
+    <!-- Set the theme before first paint (no flash). Shares Starlight's
+         localStorage key so a theme picked in the docs carries over here. -->
+    <script is:inline>
+      (() => {
+        const stored = localStorage.getItem('starlight-theme');
+        const theme =
+          stored === 'light' || stored === 'dark'
+            ? stored
+            : matchMedia('(prefers-color-scheme: light)').matches
+              ? 'light'
+              : 'dark';
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
+  </head>
+  <body>
+    <div class="pgx" data-playground data-autorun>
+      <header class="pgx-top">
+        <a class="pgx-brand" href={BASE}>
+          <span class="pgx-dot" aria-hidden="true"></span>citrusquant
+        </a>
+        <span class="pgx-sep" aria-hidden="true">/</span>
+        <span class="pgx-here">playground</span>
+
+        <nav class="pgx-nav">
+          <a href={`${BASE}reference/lemon`}>lemon reference</a>
+          <a href={`${BASE}start/first-strategy`}>tutorial</a>
+          <a href="https://github.com/citrusquant/citrusquant" rel="noopener">GitHub ↗</a>
+        </nav>
+
+        <div class="pgx-actions">
+          <div class="pgx-pop">
+            <button
+              type="button"
+              class="pgx-iconbtn pgx-about-btn"
+              aria-expanded="false"
+              aria-controls="pgx-about"
+              title="About the data & disclaimer"
+            >
+              <span aria-hidden="true">ⓘ</span> About &amp; data
+            </button>
+            <div class="pgx-about" id="pgx-about" role="dialog" aria-label="About the playground" hidden>
+              <p>
+                Everything here runs <strong>locally in your browser</strong> — the yuzu engine and
+                the lemon parser are compiled to WebAssembly. <strong>Nothing is sent to a server.</strong>
+              </p>
+              <p>
+                <strong>Real data.</strong> Daily bars for 10 US large-caps (AAPL, MSFT, NVDA, AMZN,
+                WMT, JPM, GS, XOM, JNJ, PFE), Nov 2014 – Nov 2017, from a
+                <a href="https://www.kaggle.com/datasets/borismarjanovic/price-volume-data-for-all-us-stocks-etfs" rel="noopener">CC0 public-domain dataset</a>.
+                P/E is derived from <a href="https://www.sec.gov/search-filings/edgar-application-programming-interfaces" rel="noopener">SEC EDGAR</a>
+                filings and only becomes visible on each 10-K's <em>filing date</em> — no look-ahead.
+              </p>
+              <p>
+                Data ends in 2017 because it's the newest daily OHLCV that is genuinely free to
+                redistribute. The engine ships no data of its own —
+                <a href={`${BASE}guides/bring-your-own-data`}>bring your own</a>.
+              </p>
+              <p class="pgx-disclaimer">
+                Not investment advice. Past performance does not predict future results — this is a
+                tool for reasoning about mechanics, not a recommendation.
+              </p>
+              <p class="pgx-about-more">
+                <a href={`${BASE}playground-about`}>Full data notes &amp; how it works →</a>
+              </p>
+            </div>
+          </div>
+
+          <button type="button" class="pgx-iconbtn pgx-theme-btn" title="Toggle light / dark" aria-label="Toggle theme">
+            <span class="pgx-theme-ico" aria-hidden="true">◐</span>
+          </button>
+        </div>
+      </header>
+
+      <main class="pgx-body">
+        <!-- LEFT: editor + run + examples -->
+        <section class="pgx-left">
+          <div class="pgx-pane-head">
+            <span class="pg-label">Strategy · lemon DSL</span>
+            <div class="pgx-examples" aria-label="Example strategies">
+              {examples.map((ex) => (
+                <button type="button" data-pg-example={ex.src}>{ex.label}</button>
+              ))}
+            </div>
+          </div>
+
+          <div class="pg-editor pgx-editor" data-initial={initial}></div>
+
+          <div class="pgx-run-row">
+            <button class="pg-run" type="button">▶ Run backtest</button>
+            <kbd class="pgx-kbd">⌘/Ctrl + ↵</kbd>
+          </div>
+
+          <p class="pg-status" data-kind="info">Ready — runs in your browser on real data.</p>
+          <noscript>
+            <p class="pg-status" data-kind="error">
+              The playground needs JavaScript (it runs the engine as WebAssembly in your browser).
+            </p>
+          </noscript>
+        </section>
+
+        <!-- RIGHT: live equity curve + full tabbed report -->
+        <section class="pgx-right">
+          <div class="pgx-result-head">
+            <span class="pg-label">Result</span>
+          </div>
+          <canvas class="pg-chart" aria-label="Equity curve"></canvas>
+          <div class="pg-metrics"></div>
+          <div class="pg-report" hidden></div>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      import { initPlayground } from '../components/playground.ts';
+      document
+        .querySelectorAll<HTMLElement>('[data-playground]')
+        .forEach((el) => initPlayground(el));
+
+      // About / disclaimer popover.
+      const aboutBtn = document.querySelector<HTMLButtonElement>('.pgx-about-btn');
+      const about = document.querySelector<HTMLElement>('.pgx-about');
+      if (aboutBtn && about) {
+        const setOpen = (open: boolean) => {
+          about.hidden = !open;
+          aboutBtn.setAttribute('aria-expanded', String(open));
+        };
+        aboutBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          setOpen(about.hidden);
+        });
+        document.addEventListener('click', (e) => {
+          if (!about.hidden && !about.contains(e.target as Node) && e.target !== aboutBtn) setOpen(false);
+        });
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape') setOpen(false);
+        });
+      }
+
+      // Theme toggle (persisted under Starlight's key so docs + playground agree).
+      const themeBtn = document.querySelector<HTMLButtonElement>('.pgx-theme-btn');
+      themeBtn?.addEventListener('click', () => {
+        const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+        document.documentElement.dataset.theme = next;
+        try {
+          localStorage.setItem('starlight-theme', next);
+        } catch {
+          /* ignore */
+        }
+      });
+    </script>
+  </body>
+</html>

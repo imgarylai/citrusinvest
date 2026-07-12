@@ -493,5 +493,5 @@ callers as `lemon::lint(src, known_series)`.
 - [`backtest-engine.md`](./backtest-engine.md) — engine semantics: the `Panel`
   data model, NaN handling, alignment rules, and per-op numerical behavior.
 - Source of truth for this reference:
-  `crates/lemon/src/dsl/{lex,parse,ops,print}.rs` and
-  `crates/lemon/src/spec.rs`.
+  `crates/lemon-lang/src/dsl/{lex,parse,ops,print}.rs` and
+  `crates/lemon-lang/src/spec.rs`.

@@ -1,0 +1,326 @@
+/* ---------------------------------------------------------------------------
+   Standalone playground app-shell.
+   Imported ONLY by src/pages/playground.astro, so it never reaches the Starlight
+   docs pages — which means it is free to define the base --sl-color-* tokens the
+   docs get from Starlight itself. Those tokens back the shared .pg-* component
+   styles in custom.css; the .pgx-* rules below are the two-pane chrome around
+   them (top bar, editor column, results column, About popover).
+--------------------------------------------------------------------------- */
+
+/* Base palette — mirrors Starlight's default scale so the app reads as the same
+   product as the docs. Dark is the default; [data-theme='light'] flips it. */
+:root {
+  --sl-color-white: #ffffff;
+  --sl-color-gray-1: #eceef2;
+  --sl-color-gray-2: #c0c2c7;
+  --sl-color-gray-3: #939aa3;
+  --sl-color-gray-4: #545861;
+  --sl-color-gray-5: #353841;
+  --sl-color-gray-6: #24272f;
+  --sl-color-black: #17181c;
+  --sl-color-bg: #101014;
+  --sl-color-bg-nav: #16171c;
+  --sl-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+:root[data-theme='light'] {
+  --sl-color-white: #17181c;
+  --sl-color-gray-1: #24272f;
+  --sl-color-gray-2: #353841;
+  --sl-color-gray-3: #585d68;
+  --sl-color-gray-4: #858b98;
+  --sl-color-gray-5: #c7c9d3;
+  --sl-color-gray-6: #eceef2;
+  --sl-color-black: #ffffff;
+  --sl-color-bg: #ffffff;
+  --sl-color-bg-nav: #f6f6f9;
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  height: 100%;
+}
+body {
+  margin: 0;
+  background: var(--sl-color-bg);
+  color: var(--sl-color-gray-2);
+  font-family: var(--sl-font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.pgx {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  /* chart palette — playground.ts and report/charts.ts read these at draw time.
+     custom.css defines them on .pg-wrap (the docs embed); the standalone app has
+     no .pg-wrap, so it carries its own copy here. */
+  --pg-line: #ffcf40;
+  --pg-line-2: #6ea8fe;
+  --pg-pos: #3fb27f;
+  --pg-neg: #f26d78;
+  --pg-grid: rgba(255, 255, 255, 0.15);
+}
+:root[data-theme='light'] .pgx {
+  --pg-line: #a06a00;
+  --pg-line-2: #2f6bd8;
+  --pg-pos: #157347;
+  --pg-neg: #c92a2a;
+  --pg-grid: rgba(0, 0, 0, 0.12);
+}
+@media (min-width: 60rem) {
+  .pgx {
+    height: 100vh;
+    overflow: hidden;
+  }
+}
+
+/* --- top bar ---------------------------------------------------------------- */
+.pgx-top {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  padding: 0.55rem 1.1rem;
+  background: var(--sl-color-bg-nav);
+  border-bottom: 1px solid var(--sl-color-gray-5);
+}
+.pgx-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--sl-font-mono);
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--sl-color-white);
+  text-decoration: none;
+}
+.pgx-dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 999px;
+  background: var(--sl-color-accent);
+  box-shadow: 0 0 0.5rem var(--sl-color-accent);
+}
+.pgx-sep {
+  color: var(--sl-color-gray-4);
+}
+.pgx-here {
+  font-family: var(--sl-font-mono);
+  font-size: 0.9rem;
+  color: var(--sl-color-gray-3);
+}
+.pgx-nav {
+  display: flex;
+  gap: 1.1rem;
+  margin-left: 1.2rem;
+}
+.pgx-nav a {
+  font-family: var(--sl-font-mono);
+  font-size: 0.8rem;
+  color: var(--sl-color-gray-3);
+  text-decoration: none;
+}
+.pgx-nav a:hover {
+  color: var(--sl-color-accent);
+}
+.pgx-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+.pgx-iconbtn {
+  font-family: var(--sl-font-mono);
+  font-size: 0.78rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.45rem;
+  background: transparent;
+  color: var(--sl-color-gray-2);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    border-color 0.15s,
+    color 0.15s;
+}
+.pgx-iconbtn:hover {
+  border-color: var(--sl-color-accent);
+  color: var(--sl-color-white);
+}
+.pgx-theme-btn {
+  padding: 0.35rem 0.6rem;
+}
+@media (max-width: 34rem) {
+  .pgx-nav {
+    display: none;
+  }
+}
+
+/* --- About popover ---------------------------------------------------------- */
+.pgx-pop {
+  position: relative;
+}
+.pgx-about {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 30;
+  width: min(30rem, 88vw);
+  padding: 1rem 1.15rem;
+  background: var(--sl-color-black);
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.6rem;
+  box-shadow: 0 1rem 2.5rem rgba(0, 0, 0, 0.45);
+  font-size: 0.84rem;
+  line-height: 1.55;
+  color: var(--sl-color-gray-2);
+}
+.pgx-about p {
+  margin: 0 0 0.7rem;
+}
+.pgx-about p:last-child {
+  margin-bottom: 0;
+}
+.pgx-about a {
+  color: var(--sl-color-accent);
+}
+.pgx-about strong {
+  color: var(--sl-color-white);
+}
+.pgx-disclaimer {
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--sl-color-gray-5);
+  color: var(--sl-color-gray-3);
+  font-size: 0.8rem;
+}
+.pgx-about-more {
+  font-family: var(--sl-font-mono);
+  font-size: 0.8rem;
+}
+
+/* --- two-pane body ---------------------------------------------------------- */
+.pgx-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 60rem) {
+  .pgx-body {
+    grid-template-columns: minmax(0, 30rem) minmax(0, 1fr);
+  }
+}
+
+.pgx-left,
+.pgx-right {
+  padding: 1.1rem 1.25rem 1.5rem;
+  min-width: 0;
+}
+.pgx-left {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--sl-color-gray-5);
+}
+@media (min-width: 60rem) {
+  .pgx-left {
+    border-bottom: none;
+    border-right: 1px solid var(--sl-color-gray-5);
+    overflow: hidden;
+  }
+  .pgx-right {
+    overflow-y: auto;
+  }
+}
+
+.pgx-pane-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.6rem;
+}
+.pgx-pane-head .pg-label,
+.pgx-result-head .pg-label {
+  margin-bottom: 0;
+}
+.pgx-result-head {
+  margin-bottom: 0.6rem;
+}
+
+/* example chips (compact, right-aligned in the pane head) */
+.pgx-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.pgx-examples button {
+  font-family: var(--sl-font-mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--sl-color-gray-2);
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    color 0.15s;
+}
+.pgx-examples button:hover {
+  border-color: var(--sl-color-accent);
+  color: var(--sl-color-white);
+}
+
+/* editor fills the left column on desktop */
+.pgx-editor {
+  margin: 0;
+}
+@media (min-width: 60rem) {
+  .pgx-editor {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+  }
+  .pgx-editor .cm-editor {
+    height: 100%;
+    width: 100%;
+  }
+}
+
+.pgx-run-row {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-top: 0.85rem;
+}
+.pgx-run-row .pg-run {
+  margin-top: 0;
+}
+.pgx-kbd {
+  font-family: var(--sl-font-mono);
+  font-size: 0.72rem;
+  color: var(--sl-color-gray-3);
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.35rem;
+  padding: 0.15rem 0.45rem;
+}
+
+/* results column: the shared .pg-chart / .pg-metrics / .pg-report already carry
+   their own styling from custom.css; just give the report room to breathe. */
+.pgx-right .pg-chart {
+  margin-top: 0;
+}
+.pgx-right .pg-report {
+  grid-column: auto;
+  border-top: none;
+  margin-top: 1rem;
+  padding-top: 0;
+}
+.pgx-right .pg-metrics:empty {
+  display: none;
+}

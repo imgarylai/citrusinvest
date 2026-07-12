@@ -19,7 +19,7 @@ behind citrusquant — the repo root is the Cargo workspace.
 
 ```
 Cargo.toml                 # workspace (members = crates/*)
-crates/lemon/              # the Lemon DSL — human-writable text ⇄ JSON Expr tree
+crates/lemon-lang/         # the Lemon DSL — human-writable text ⇄ JSON Expr tree
   src/
     spec.rs                # Expr AST (serde-deserializable strategy tree)
     dsl/
@@ -176,7 +176,7 @@ Element-wise conventions:
 
 Semantics are pinned by golden fixtures (committed expected outputs). The table
 below names ops by their engine behavior; the DSL surface names map through
-`lemon/src/dsl/ops.rs` (e.g. the `Average` op is written `sma` / `average`; the
+`lemon-lang/src/dsl/ops.rs` (e.g. the `Average` op is written `sma` / `average`; the
 `Rank` op is written `rank`).
 
 | Op                                 | Meaning                                                                                                               |
@@ -210,7 +210,7 @@ lemon-callable).
 OHLCV technical indicators (`atr`, `natr`, `cci`, `aroon`, `stoch`, `adx`/`±di`,
 `obv`, `mfi`, `willr`, and `vwap` = rolling-`n` `Σ(tp·vol)/Σvol` over typical
 price `(H+L+C)/3`) live in `ops/ta.rs`; the per-op reference is the pairing of
-`lemon/src/spec.rs` (Expr fields) with `lemon/src/dsl/ops.rs` (DSL names), and the
+`lemon-lang/src/spec.rs` (Expr fields) with `lemon-lang/src/dsl/ops.rs` (DSL names), and the
 author-facing table in `lemon.md`.
 
 ---
@@ -720,6 +720,6 @@ the `mae`/`mfe` trade fields above and `ops/neutralize.rs`. `cap_industry(w,
 max_weight=0.3)` bounds each industry's **gross** weight (Σ|w|) per row, scaling
 the over-cap industry's names down proportionally (sign-preserving) and leaving
 the freed weight as cash — the NAV loop's row-normalize takes the book from
-there. Symbols with no industry share the single "其他" bucket, so an empty
+there. Symbols with no industry share the single `"其他"` ("other") bucket, so an empty
 industry map caps total gross exposure; `max_weight <= 0` is a no-op.
 
