@@ -24,9 +24,11 @@ pub struct SyncConfig {
     pub include_fundamentals: bool,
     /// Also fetch company sector → `tracked/universe.csv.gz`.
     pub include_industry: bool,
-    /// Also compute the snapshot-factor panels (`piotroski_score`, `altman_z`,
-    /// `fcf_yield`, `analyst_upside_pct`, `consensus_rating`) → `panels/{name}.csv.gz`.
-    /// Current-snapshot factors for universe screening (see [`super::snapshot`]).
+    /// Also compute the six snapshot-factor panels (`piotroski_score`,
+    /// `altman_z`, `fcf_yield`, `pe_industry_pctile`, `analyst_upside_pct`,
+    /// `consensus_rating`) → `panels/{name}.csv.gz`. Current-snapshot factors
+    /// for universe screening (see [`super::snapshot`]); `pe_industry_pctile`
+    /// ranks P/E within an industry cohort drawn from this run's symbols.
     pub include_snapshot_factors: bool,
     /// Skip ETFs / mutual & closed-end funds (default on) — keep only individual
     /// stocks. Classified from the profile endpoint's `isEtf` / `isFund`.
