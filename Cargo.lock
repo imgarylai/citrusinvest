@@ -1283,6 +1283,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
 
 [[package]]
+name = "pomelo-audit"
+version = "0.6.0"
+dependencies = [
+ "flate2",
+ "pomelo-data",
+ "serde",
+ "serde_json",
+ "yuzu-core",
+]
+
+[[package]]
 name = "pomelo-data"
 version = "0.6.0"
 dependencies = [
@@ -2171,6 +2182,7 @@ version = "0.6.0"
 dependencies = [
  "clap",
  "flate2",
+ "pomelo-audit",
  "pomelo-data",
  "pomelo-fmp",
  "pomelo-s3",

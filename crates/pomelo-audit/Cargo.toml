@@ -1,0 +1,18 @@
+[package]
+name = "pomelo-audit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+rust-version.workspace = true
+description = "Read-only data-quality audit of a pomelo data-layout tree: coverage, calendar gaps, adjustment sanity, survivorship, NaN density, filing-date lag, index membership."
+keywords = ["backtesting", "finance", "market-data", "data-quality"]
+categories = ["finance"]
+
+[dependencies]
+pomelo-data = { path = "../pomelo-data", version = "0.6.0" }
+yuzu-core = { path = "../yuzu-core", version = "0.6.0" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+flate2 = { workspace = true }

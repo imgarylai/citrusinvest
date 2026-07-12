@@ -763,16 +763,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             json,
             out,
         } => {
-            let report = yuzu_cli::run_data_audit(&data, from, to)?;
+            let report = pomelo_audit::run_data_audit(&data, from, to)?;
             let overall = report.overall;
             let body = if json {
                 serde_json::to_string_pretty(&report)?
             } else {
-                yuzu_cli::render_table(&report)
+                pomelo_audit::render_table(&report)
             };
             emit(&out, body)?;
             // Non-zero exit on a FAIL so the audit can gate CI / a nightly job.
-            if overall == yuzu_cli::data_audit::Status::Fail {
+            if overall == pomelo_audit::Status::Fail {
                 std::process::exit(2);
             }
         }

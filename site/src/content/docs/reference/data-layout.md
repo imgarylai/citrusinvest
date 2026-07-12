@@ -400,7 +400,7 @@ optionally `fundamentals/`, `panels/`).
 | Server series routing | `crates/yuzu-server/src/lib.rs` → `price_field`, `handle_backtest` |
 | CLI price discovery | `crates/yuzu-cli/src/lib.rs` → `list_symbols`, `load_ctx` |
 | FMP builder (writes this tree) | `crates/pomelo-fmp/` → `yuzu-cli fmp-sync` |
-| Tree auditor (reads this tree) | `crates/yuzu-cli/src/data_audit.rs` → `yuzu-cli data-audit` |
+| Tree auditor (reads this tree) | `crates/pomelo-audit/` → `pomelo_audit::run_data_audit` (exposed as `yuzu-cli data-audit`) |
 
 If this doc and the code disagree, **trust the code** and update this file.
 
