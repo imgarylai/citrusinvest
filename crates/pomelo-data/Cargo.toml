@@ -11,7 +11,7 @@ keywords = ["backtesting", "finance", "market-data", "parquet", "trading"]
 categories = ["finance"]
 
 [dependencies]
-yuzu-core = { path = "../yuzu-core", version = "0.5.1" }
+yuzu-core = { path = "../yuzu-core", version = "0.6.0" }
 ndarray.workspace = true
 flate2.workspace = true
 rayon.workspace = true

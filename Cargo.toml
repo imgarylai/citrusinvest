@@ -6,7 +6,7 @@ members = ["crates/yuzu-core", "crates/pomelo-data", "crates/yuzu-wasm", "crates
 exclude = ["crates/yuzu-py"]
 
 [workspace.package]
-version = "0.5.1"
+version = "0.6.0"
 edition = "2021"
 rust-version = "1.86"
 license = "MIT"
