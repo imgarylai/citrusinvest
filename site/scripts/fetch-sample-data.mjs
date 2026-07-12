@@ -69,6 +69,12 @@ const UNIVERSE = [
   { sym: 'PFE', industry: 'Health', cik: '0000078003' },
 ];
 
+// Benchmark series for the report's relative metrics (alpha/beta/excess…).
+// SPY lives in the same CC0 archive, under ETFs/ rather than Stocks/. When the
+// bundled sample.json has no `benchmark` block (older generations), the
+// playground falls back to an equal-weight basket of the universe.
+const BENCHMARK = { sym: 'SPY', member: 'ETFs/spy.us.txt' };
+
 // --- minimal zip-over-HTTP reader ------------------------------------------
 // Reads specific members out of a (possibly remote) zip archive. Supports the
 // classic (non-zip64) central directory, which covers this <4 GB archive, and
@@ -226,13 +232,14 @@ const industry = Object.fromEntries(UNIVERSE.map((u) => [u.sym, u.industry]));
 
 console.log('reading prices from the CC0 Kaggle archive…');
 const source = await openByteSource();
-const members = await readZipMembers(
-  source,
-  symbols.map((s) => `Stocks/${s.toLowerCase()}.us.txt`),
-);
+const members = await readZipMembers(source, [
+  ...symbols.map((s) => `Stocks/${s.toLowerCase()}.us.txt`),
+  BENCHMARK.member,
+]);
 const barsBySym = new Map(
   symbols.map((s) => [s, parseBars(members.get(`Stocks/${s.toLowerCase()}.us.txt`).toString())]),
 );
+const benchBars = parseBars(members.get(BENCHMARK.member).toString());
 
 // Trading calendar = dates where every symbol has a bar (all ten are NYSE/
 // NASDAQ megacaps, so this is just the exchange calendar).
@@ -259,6 +266,7 @@ const out = {
       'Huge Stock Market Dataset (Boris Marjanovic, Kaggle, CC0 public domain); daily bars adjusted for splits and dividends.',
     fundamentals:
       'pe = adjusted close / last reported fiscal-year diluted EPS (SEC EDGAR XBRL, public domain), visible from each 10-K filing date.',
+    benchmark: `${BENCHMARK.sym} adjusted close, same CC0 dataset (${BENCHMARK.member}).`,
     days: dates.length,
     start: Number(dates[0].replaceAll('-', '')),
     end: Number(dates[dates.length - 1].replaceAll('-', '')),
@@ -267,6 +275,10 @@ const out = {
   dates: dates.map((d) => Number(d.replaceAll('-', ''))),
   symbols,
   industry,
+  benchmark: {
+    symbol: BENCHMARK.sym,
+    close: dates.map((d) => (benchBars.has(d) ? round2(benchBars.get(d).c) : null)),
+  },
   panels: {
     close: panel((b) => round2(b.c)),
     open: panel((b) => round2(b.o)),

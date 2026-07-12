@@ -2,7 +2,9 @@
 //
 // Flow: sample panels JSON  ->  lemon-wasm.parse(src) -> spec (Expr tree)
 //       -> yuzu-wasm.run_backtest({spec, panels, industry, price_key, config})
-//       -> Report {dates, equity, metrics}  -> canvas equity curve + metric tiles
+//       -> Report  -> canvas equity curve + metric tiles
+//                  -> full tabbed report (report/render.ts) when the widget
+//                     has a `.pg-report` mount (`<Playground full />`)
 //
 // The two WASM packages are the published npm artifacts (@citrusquant/*-wasm,
 // wasm-pack `bundler` target), so Vite bundles them at build time — the same
@@ -10,18 +12,18 @@
 // to build the site (see vite-plugin-wasm in astro.config.mjs).
 
 import { createLemonEditor } from './lemon-editor.ts';
+import type { Report } from './report/types.ts';
+import { equalWeightCurve } from './report/derive.ts';
+import { renderReport } from './report/render.ts';
 
 interface SampleData {
   dates: number[];
   symbols: string[];
   industry: Record<string, string>;
   panels: Record<string, (number | null)[][]>;
-}
-
-interface Report {
-  dates: number[];
-  equity: number[];
-  metrics: Record<string, number | null>;
+  /** Optional real index series (SPY) — regenerate sample.json to add it; the
+   *  playground falls back to an equal-weight basket of the universe. */
+  benchmark?: { symbol: string; close: (number | null)[] };
 }
 
 const BASE: string = (import.meta as { env: { BASE_URL: string } }).env.BASE_URL;
@@ -193,6 +195,8 @@ export function initPlayground(root: HTMLElement): void {
   const status = root.querySelector<HTMLElement>('.pg-status')!;
   const metricsEl = root.querySelector<HTMLElement>('.pg-metrics')!;
   const canvas = root.querySelector<HTMLCanvasElement>('.pg-chart')!;
+  // Present only on <Playground full /> — mounts the tabbed report.
+  const reportEl = root.querySelector<HTMLElement>('.pg-report');
   let firstDraw = true;
 
   const editor = createLemonEditor(
@@ -222,6 +226,12 @@ export function initPlayground(root: HTMLElement): void {
         return;
       }
 
+      // Benchmark: the real index series when the sample data ships one,
+      // otherwise a daily-rebalanced equal-weight basket of the same universe
+      // (the natural "do nothing clever" alternative for a fixed universe).
+      const benchLabel = s.benchmark?.symbol ?? 'EW universe';
+      const benchClose = s.benchmark?.close ?? equalWeightCurve(s.panels.close);
+
       const input = {
         spec: parsed.value,
         price_key: 'close',
@@ -233,8 +243,9 @@ export function initPlayground(root: HTMLElement): void {
           low: panelRequest(s, 'low'),
           volume: panelRequest(s, 'volume'),
           pe: panelRequest(s, 'pe'),
+          benchmark: { dates: s.dates, symbols: [benchLabel], data: benchClose.map((v) => [v]) },
         },
-        config: { fee_ratio: 0.001 },
+        config: { fee_ratio: 0.001, benchmark_key: 'benchmark', bootstrap_samples: 200 },
       };
 
       setStatus(status, 'Running backtest…', 'info');
@@ -244,13 +255,21 @@ export function initPlayground(root: HTMLElement): void {
 
       drawEquity(canvas, report, firstDraw);
       firstDraw = false;
-      metricsEl.innerHTML = METRIC_TILES.map(
-        ([k, label]) =>
-          `<div class="pg-metric"><div class="k">${label}</div><div class="v">${fmt(
-            k,
-            report.metrics[k] as number,
-          )}</div></div>`,
-      ).join('');
+      if (reportEl) {
+        // Full mode: the tabbed report below carries all the numbers — the
+        // compact tile strip would just repeat its headline.
+        reportEl.hidden = false;
+        renderReport(reportEl, report, { benchmarkLabel: benchLabel });
+      } else {
+        const metricValues = report.metrics as unknown as Record<string, number | null>;
+        metricsEl.innerHTML = METRIC_TILES.map(
+          ([k, label]) =>
+            `<div class="pg-metric"><div class="k">${label}</div><div class="v">${fmt(
+              k,
+              metricValues[k],
+            )}</div></div>`,
+        ).join('');
+      }
       const first = report.dates[0];
       const lastD = report.dates[report.dates.length - 1];
       setStatus(

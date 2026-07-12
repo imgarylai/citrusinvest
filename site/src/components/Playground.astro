@@ -3,10 +3,15 @@
 // run, chart) lives in ./playground.ts, loaded client-side only.
 // `autorun` makes the widget run once on page load (used by the landing page
 // so the hero shows a live result without a click).
+// `full` renders the complete tabbed report (Profit / Risk / Reward / Trades)
+// below the widget after each run (used by the playground page); without it
+// the widget stays compact: equity curve + a strip of headline tiles.
 interface Props {
   autorun?: boolean;
+  full?: boolean;
 }
-const { autorun = false } = Astro.props;
+const { autorun = false, full = false } = Astro.props;
+const playgroundUrl = `${import.meta.env.BASE_URL}playground/`;
 const initial = `# Hold whichever names have the highest 2-day average close.
 # Edit this and press Run (or Ctrl/Cmd+Enter).
 is_largest(sma(close, 2), 3)`;
@@ -25,7 +30,9 @@ is_largest(sma(close, 2), 3)`;
   <div>
     <canvas class="pg-chart" aria-label="Equity curve"></canvas>
     <div class="pg-metrics"></div>
+    {!full && <a class="pg-more" href={playgroundUrl}>Full report — drawdowns, calendar returns, every trade →</a>}
   </div>
+  {full && <div class="pg-report" hidden></div>}
 </div>
 
 <script>

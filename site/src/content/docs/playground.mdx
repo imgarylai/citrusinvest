@@ -10,7 +10,13 @@ parser are compiled to WebAssembly, and the backtest is evaluated against **real
 daily bars** for 10 US large-caps (Nov 2014 – Nov 2017). Nothing is sent to a
 server.
 
-<Playground />
+Every run produces the engine's full `Report` — the tabs below the editor cover
+profit (equity curve vs benchmark, calendar returns), risk (drawdowns, tail
+stats), reward (risk-adjusted ratios, rolling windows, bootstrap confidence
+bands) and every individual trade. [Reading a report](guides/reading-a-report)
+explains what each number means — and what it doesn't.
+
+<Playground full />
 
 ## Things to try
 
@@ -38,6 +44,13 @@ repo without a license fight:
   visible **on its filing date** — not the fiscal-period end — so there is no
   look-ahead. Try `is_smallest(pe, 3)` and note that AMZN's P/E goes *missing*
   during 2015: its FY2014 EPS was negative, so trailing P/E is undefined.
+- **Benchmark** — every run is compared against a benchmark series (the engine's
+  `benchmark_key` config). When the bundled data ships an index series it is
+  used directly; otherwise the playground builds a **daily-rebalanced
+  equal-weight basket of the same 10 names**. For a stock-picking strategy on a
+  fixed universe that's the honest yardstick anyway: it answers "did picking
+  *these* names beat just holding *all* of them?" — alpha, beta, excess return
+  and the relative tabs all measure against it.
 
 Why does the data end in 2017? Nearly every "free" market-data source (Yahoo,
 Stooq, FMP, Tiingo, …) forbids redistribution, which rules them out for a
@@ -55,9 +68,13 @@ research.
 ## How it works
 
 1. Your source is parsed by `lemon-wasm` into a JSON `Expr` tree (the *spec*).
-2. The spec, the sample panels, and a config are handed to
+2. The spec, the sample panels, a benchmark series and a config
+   (`fee_ratio`, `benchmark_key`, `bootstrap_samples`) are handed to
    `yuzu-wasm.run_backtest(...)`.
-3. The returned `Report` (equity curve + metrics) is drawn above.
+3. The returned `Report` — equity, drawdown and rolling series, calendar
+   returns, bootstrap confidence bands, the full trade list and ~40 metrics —
+   is rendered into the tabs above. The frontend only draws; every number is
+   computed by the engine (plus a few purely presentational reshapes).
 
 That's the same pipeline the native engine runs — see
 [Reading a report](guides/reading-a-report) to decode the output.

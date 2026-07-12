@@ -271,6 +271,20 @@
   gap: 1rem;
   grid-template-columns: 1fr;
   margin-top: 1.5rem;
+  /* chart palette — playground.ts and report/charts.ts read these at draw
+     time (custom properties inherit into every canvas below) */
+  --pg-line: #ffcf40;
+  --pg-line-2: #6ea8fe;
+  --pg-pos: #3fb27f;
+  --pg-neg: #f26d78;
+  --pg-grid: rgba(255, 255, 255, 0.15);
+}
+:root[data-theme='light'] .pg-wrap {
+  --pg-line: #a06a00;
+  --pg-line-2: #2f6bd8;
+  --pg-pos: #157347;
+  --pg-neg: #c92a2a;
+  --pg-grid: rgba(0, 0, 0, 0.12);
 }
 @media (min-width: 60rem) {
   .pg-wrap {
@@ -371,11 +385,381 @@
   border: 1px solid var(--sl-color-gray-5);
   border-radius: 0.5rem;
   background: var(--sl-color-black);
-  /* playground.ts reads these at draw time so the canvas follows the theme */
-  --pg-line: #ffcf40;
-  --pg-grid: rgba(255, 255, 255, 0.15);
 }
-:root[data-theme='light'] .pg-chart {
-  --pg-line: #a06a00;
-  --pg-grid: rgba(0, 0, 0, 0.12);
+
+/* --- full report (playground page: <Playground full />) ---------------------- */
+
+.pg-more {
+  display: inline-block;
+  margin-top: 0.75rem;
+  font-family: var(--sl-font-mono);
+  font-size: 0.78rem;
+  color: var(--sl-color-accent);
+  text-decoration: none;
+}
+.pg-more:hover {
+  text-decoration: underline;
+}
+
+.pg-report {
+  grid-column: 1 / -1;
+  margin-top: 1rem;
+  border-top: 1px solid var(--sl-color-gray-5);
+  padding-top: 1rem;
+}
+
+.pg-metric .s {
+  font-family: var(--sl-font-mono);
+  font-size: 0.68rem;
+  color: var(--sl-color-gray-3);
+  margin-top: 0.1rem;
+}
+.pg-report .pos,
+.pg-metric .v.pos {
+  color: var(--pg-pos);
+}
+.pg-report .neg,
+.pg-metric .v.neg {
+  color: var(--pg-neg);
+}
+
+/* tab bar */
+.pg-tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin-top: 1.25rem;
+  border-bottom: 1px solid var(--sl-color-gray-5);
+}
+.pg-tabs button {
+  font-family: var(--sl-font-mono);
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.45rem 0.9rem;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--sl-color-gray-3);
+  cursor: pointer;
+}
+.pg-tabs button:hover {
+  color: var(--sl-color-white);
+}
+.pg-tabs button[aria-selected='true'] {
+  color: var(--sl-color-accent);
+  border-bottom-color: var(--sl-color-accent);
+}
+.pg-tabpanel {
+  padding-top: 0.5rem;
+}
+
+.pg-section {
+  margin-top: 1.5rem;
+}
+.pg-section-title {
+  font-family: var(--sl-font-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+  margin: 0 0 0.5rem;
+}
+.pg-note {
+  font-size: 0.8rem;
+  color: var(--sl-color-gray-3);
+  margin: 0.5rem 0 0;
+}
+
+/* chart boxes (report/charts.ts) */
+.pg-chartbox {
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.5rem;
+  background: var(--sl-color-black);
+  padding: 0.5rem 0.6rem 0.4rem;
+}
+.pg-chart-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  min-height: 1.1rem;
+}
+.pg-chart-title {
+  font-family: var(--sl-font-mono);
+  font-size: 0.72rem;
+  color: var(--sl-color-gray-3);
+}
+.pg-legend {
+  display: flex;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+}
+.pg-legend-item {
+  font-family: var(--sl-font-mono);
+  font-size: 0.72rem;
+  color: var(--sl-color-gray-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.pg-legend-item i {
+  width: 0.9rem;
+  height: 3px;
+  border-radius: 2px;
+  display: inline-block;
+}
+.pg-report-canvas {
+  display: block;
+  width: 100%;
+  color: var(--sl-color-gray-3); /* axis/tick text color, read at draw time */
+  font-family: var(--sl-font-mono);
+}
+.pg-readout {
+  font-family: var(--sl-font-mono);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--sl-color-gray-3);
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+  padding-top: 0.2rem;
+}
+
+/* tables */
+.pg-scroll {
+  overflow-x: auto;
+}
+.pg-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--sl-font-mono);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+}
+.pg-table th {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--sl-color-gray-3);
+  font-weight: 600;
+  text-align: left;
+  padding: 0.35rem 0.6rem;
+  border-bottom: 1px solid var(--sl-color-gray-5);
+}
+.pg-table td {
+  padding: 0.32rem 0.6rem;
+  border-bottom: 1px solid var(--sl-color-gray-6, rgba(128, 128, 128, 0.15));
+  white-space: nowrap;
+}
+.pg-open {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  color: var(--sl-color-accent);
+}
+.pg-pager {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.6rem;
+  font-family: var(--sl-font-mono);
+  font-size: 0.75rem;
+  color: var(--sl-color-gray-3);
+}
+.pg-pager button {
+  font-family: var(--sl-font-mono);
+  font-size: 0.75rem;
+  padding: 0.25rem 0.7rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.4rem;
+  background: transparent;
+  color: var(--sl-color-white);
+  cursor: pointer;
+}
+.pg-pager button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* monthly heatmap */
+.pg-heatmap {
+  border-collapse: collapse;
+  font-family: var(--sl-font-mono);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+}
+.pg-heatmap th {
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+  font-weight: 600;
+  padding: 0.25rem 0.3rem;
+  text-align: center;
+}
+.pg-heatmap td {
+  padding: 0.3rem 0.35rem;
+  text-align: right;
+  min-width: 3.1em;
+  border: 1px solid var(--sl-color-gray-6, rgba(128, 128, 128, 0.12));
+}
+.pg-heatmap .pg-heat-total {
+  font-weight: 600;
+  border-left: 2px solid var(--sl-color-gray-5);
+}
+
+/* calendar-year comparison bars */
+.pg-annual {
+  display: grid;
+  gap: 0.45rem;
+}
+.pg-annual-row {
+  display: grid;
+  grid-template-columns: 3.2rem minmax(0, 1fr) minmax(11rem, auto);
+  align-items: center;
+  gap: 0.8rem;
+  font-family: var(--sl-font-mono);
+  font-size: 0.78rem;
+}
+.pg-annual-year {
+  color: var(--sl-color-gray-3);
+}
+.pg-annual-bars {
+  position: relative;
+  height: 1.15rem;
+  background: var(--sl-color-gray-6, rgba(128, 128, 128, 0.08));
+  border-radius: 0.25rem;
+  overflow: hidden;
+}
+.pg-abar {
+  position: absolute;
+  height: 42%;
+  border-radius: 1px;
+}
+.pg-abar.strat {
+  top: 6%;
+  background: var(--pg-line);
+}
+.pg-abar.bench {
+  bottom: 6%;
+  background: var(--pg-line-2);
+  opacity: 0.75;
+}
+.pg-annual-zero {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--sl-color-gray-4);
+}
+.pg-annual-vals {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pg-annual-vals span {
+  color: var(--sl-color-gray-3);
+}
+.pg-annual-vals em {
+  font-style: normal;
+}
+
+/* trade-return histogram */
+.pg-hist {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 120px;
+  border-bottom: 1px solid var(--sl-color-gray-5);
+  padding: 0 0.25rem;
+}
+.pg-hist-col {
+  flex: 1 1 0;
+  display: flex;
+  align-items: flex-end;
+  height: 100%;
+}
+.pg-hist-col i {
+  display: block;
+  width: 100%;
+  min-height: 1px;
+  border-radius: 1px 1px 0 0;
+}
+.pg-hist-col i.pos {
+  background: var(--pg-pos);
+}
+.pg-hist-col i.neg {
+  background: var(--pg-neg);
+}
+.pg-hist-axis {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--sl-font-mono);
+  font-size: 0.68rem;
+  color: var(--sl-color-gray-3);
+  padding-top: 0.25rem;
+}
+
+/* bootstrap confidence bands */
+.pg-boot {
+  display: grid;
+  gap: 0.55rem;
+}
+.pg-boot-row {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr) minmax(13rem, auto);
+  align-items: center;
+  gap: 0.8rem;
+  font-family: var(--sl-font-mono);
+  font-size: 0.78rem;
+}
+.pg-boot-label {
+  color: var(--sl-color-gray-3);
+}
+.pg-boot-band {
+  position: relative;
+  height: 0.9rem;
+  background: var(--sl-color-gray-6, rgba(128, 128, 128, 0.08));
+  border-radius: 999px;
+  overflow: hidden;
+}
+.pg-boot-range {
+  position: absolute;
+  top: 20%;
+  height: 60%;
+  background: var(--sl-color-accent);
+  opacity: 0.45;
+  border-radius: 999px;
+}
+.pg-boot-med {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--sl-color-accent);
+}
+.pg-boot-zero {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--sl-color-gray-4);
+}
+.pg-boot-vals {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--sl-color-gray-2);
+}
+
+@media (max-width: 40rem) {
+  .pg-annual-row,
+  .pg-boot-row {
+    grid-template-columns: 3rem minmax(0, 1fr);
+  }
+  .pg-annual-vals,
+  .pg-boot-vals {
+    grid-column: 2;
+  }
+  .pg-boot-row .pg-boot-label {
+    grid-column: 1 / -1;
+  }
 }
