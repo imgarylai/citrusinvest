@@ -697,3 +697,183 @@ fn status_str(s: Status) -> &'static str {
         Status::Fail => "FAIL",
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use pomelo_data::csv_io::{write_series, OhlcvRow};
+    use std::fs;
+    use std::path::PathBuf;
+
+    fn tmp(tag: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("yuzu_audit_ut_{tag}"));
+        let _ = fs::remove_dir_all(&d);
+        fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    fn write_prices(dir: &Path, sym: &str, days: &[i32]) {
+        let p = dir.join("prices");
+        fs::create_dir_all(&p).unwrap();
+        let rows: Vec<OhlcvRow> = days
+            .iter()
+            .map(|&day| OhlcvRow {
+                day,
+                adj_open: 10.0,
+                adj_high: 10.0,
+                adj_low: 10.0,
+                adj_close: 10.0,
+                volume: 0.0,
+            })
+            .collect();
+        fs::write(
+            p.join(format!("{sym}.csv.gz")),
+            write_series(&rows).unwrap(),
+        )
+        .unwrap();
+    }
+
+    fn find<'a>(r: &'a DataAuditReport, name: &str) -> &'a Check {
+        r.checks.iter().find(|c| c.name == name).unwrap()
+    }
+
+    #[test]
+    fn empty_tree_fails_and_takes_no_price_arms() {
+        let d = tmp("empty");
+        let r = run_data_audit(&d, 20000101, 99991231).unwrap();
+        assert_eq!(r.overall, Status::Fail);
+        assert_eq!(r.symbol_count, 0);
+        assert_eq!(find(&r, "coverage").status, Status::Fail);
+        // Every price-dependent check takes its "no prices" arm → OK.
+        for name in ["calendar_gaps", "adjustment", "survivorship"] {
+            assert_eq!(find(&r, name).status, Status::Ok);
+        }
+        // render_table + all three status strings.
+        let table = render_table(&r);
+        assert!(table.contains("FAIL"));
+        assert!(table.contains("coverage"));
+        assert_eq!(status_str(Status::Ok), "OK");
+        assert_eq!(status_str(Status::Warn), "WARN");
+        assert_eq!(status_str(Status::Fail), "FAIL");
+    }
+
+    #[test]
+    fn prices_without_universe_or_fundamentals_are_ok() {
+        let d = tmp("bare");
+        write_prices(&d, "AAA", &[20240102, 20240103, 20240104]);
+        let r = run_data_audit(&d, 20000101, 99991231).unwrap();
+        assert_eq!(r.overall, Status::Ok);
+        // No universe → coverage takes the "no universe to cross-check" arm.
+        let cov = find(&r, "coverage");
+        assert_eq!(cov.status, Status::Ok);
+        assert!(cov.summary.contains("no tracked/universe"));
+        assert!(cov.details["date_range"]["first_day"] == 20240102);
+        // Single symbol → survivorship can't judge survivors-only (len == 1).
+        assert_eq!(find(&r, "survivorship").status, Status::Ok);
+        // No fundamentals + no factor panels → nan_density / pit_lag both OK.
+        assert_eq!(find(&r, "nan_density").status, Status::Ok);
+        assert!(find(&r, "nan_density")
+            .summary
+            .contains("no fundamentals or factor panels"));
+        assert_eq!(find(&r, "pit_lag").status, Status::Ok);
+    }
+
+    #[test]
+    fn index_membership_panel_is_summarized() {
+        let d = tmp("index");
+        write_prices(&d, "AAA", &[20240102, 20240103]);
+        write_prices(&d, "BBB", &[20240102, 20240103]);
+        let pan = d.join("panels");
+        fs::create_dir_all(&pan).unwrap();
+        // AAA a member on both days; BBB only on the second.
+        fs::write(
+            pan.join("in_sp500.csv"),
+            "day,AAA,BBB\n2024-01-02,1,\n2024-01-03,1,1\n",
+        )
+        .unwrap();
+        let r = run_data_audit(&d, 20000101, 99991231).unwrap();
+        let idx = find(&r, "index_membership");
+        assert_eq!(idx.status, Status::Ok);
+        let p0 = &idx.details["panels"][0];
+        assert_eq!(p0["panel"], "in_sp500");
+        assert_eq!(p0["min_members"], 1);
+        assert_eq!(p0["max_members"], 2);
+        assert_eq!(p0["last_members"], 2);
+    }
+
+    #[test]
+    fn month_end_and_days_in_month() {
+        assert!(is_month_end(20240229)); // leap February
+        assert!(is_month_end(20230228)); // non-leap February
+        assert!(!is_month_end(20240228)); // 28th is not month-end in a leap year
+        assert!(is_month_end(20240131));
+        assert!(is_month_end(20240430));
+        assert!(!is_month_end(20240415));
+        assert_eq!(days_in_month(2024, 2), 29);
+        assert_eq!(days_in_month(2023, 2), 28);
+        assert_eq!(days_in_month(2000, 2), 29); // divisible by 400
+        assert_eq!(days_in_month(1900, 2), 28); // divisible by 100, not 400
+        assert_eq!(days_in_month(2024, 4), 30);
+        assert_eq!(days_in_month(2024, 7), 31);
+        assert_eq!(days_in_month(2024, 13), 0);
+    }
+
+    #[test]
+    fn parse_and_format_helpers() {
+        assert_eq!(parse_day("2024-01-02"), Some(20240102));
+        assert_eq!(parse_day("20240102"), Some(20240102));
+        assert_eq!(parse_day("garbage"), None);
+        assert_eq!(parse_finite("1.5"), Some(1.5));
+        assert_eq!(parse_finite(""), None);
+        assert_eq!(parse_finite("  "), None);
+        assert!(parse_finite("nan").is_none()); // NaN is filtered
+        assert!(parse_finite("inf").is_none()); // infinity is filtered
+        assert_eq!(sample(&["a", "b"]), vec!["a".to_string(), "b".to_string()]);
+        assert!(range_or_null(i32::MAX, i32::MIN).is_null());
+        assert!(!range_or_null(20240101, 20240102).is_null());
+        assert_eq!(decode_text(b"plain,text"), "plain,text");
+    }
+
+    #[test]
+    fn edge_arms_single_point_zero_close_and_empty_membership() {
+        let d = tmp("edge");
+        // A single-bar symbol (skipped by the <2-point gap/jump guards) and one
+        // whose first close is 0 (the c0 <= 0 adjustment guard).
+        write_prices(&d, "ONE", &[20240102]);
+        let p = d.join("prices");
+        let zero = vec![
+            OhlcvRow {
+                day: 20240102,
+                adj_open: 0.0,
+                adj_high: 0.0,
+                adj_low: 0.0,
+                adj_close: 0.0,
+                volume: 0.0,
+            },
+            OhlcvRow {
+                day: 20240103,
+                adj_open: 10.0,
+                adj_high: 10.0,
+                adj_low: 10.0,
+                adj_close: 10.0,
+                volume: 0.0,
+            },
+        ];
+        fs::write(p.join("ZERO.csv.gz"), write_series(&zero).unwrap()).unwrap();
+
+        // An all-empty membership panel → the "no members" WARN arm.
+        let pan = d.join("panels");
+        fs::create_dir_all(&pan).unwrap();
+        fs::write(pan.join("in_empty.csv"), "day,ONE,ZERO\n2024-01-02,,\n").unwrap();
+
+        let r = run_data_audit(&d, 20000101, 99991231).unwrap();
+        // The 0 → 10 step is skipped by the c0 <= 0 guard, so nothing is flagged.
+        assert_eq!(find(&r, "adjustment").details["flagged"], 0);
+        // ONE ends before the last day → a delisted tail (survivorship OK).
+        assert_eq!(find(&r, "survivorship").status, Status::Ok);
+        // No members anywhere → WARN.
+        let idx = find(&r, "index_membership");
+        assert_eq!(idx.status, Status::Warn);
+        assert_eq!(idx.details["panels"][0]["max_members"], 0);
+    }
+}
