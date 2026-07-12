@@ -1,12 +1,17 @@
-//! Read-only data-quality audit of a data-layout tree (#133).
+//! Read-only data-quality audit of a pomelo data-layout tree (#133).
 //!
-//! `yuzu-cli data-audit` walks a synced `prices/` / `fundamentals/` / `panels/`
-//! / `tracked/` tree and answers *"is this clean enough to trust a backtest?"* —
-//! turning "high-quality data" from a claim into a measurement. It also doubles
-//! as the verification tool for #131 (filing-date lag) and #132 (snapshot-factor
-//! coverage). No network, no engine run: it reuses the `pomelo-data` loaders and
-//! reports per-check `OK` / `WARN` / `FAIL` with counts. Any `FAIL` makes the CLI
-//! exit non-zero so it can gate CI or a nightly job.
+//! Given a synced `prices/` / `fundamentals/` / `panels/` / `tracked/` tree on
+//! local disk, [`run_data_audit`] answers *"is this clean enough to trust a
+//! backtest?"* — turning "high-quality data" from a claim into a measurement. It
+//! also doubles as the verification tool for #131 (filing-date lag) and #132
+//! (snapshot-factor coverage).
+//!
+//! This is the data-engineering side of the audit: no network, no engine run.
+//! It reuses the [`pomelo_data`] loaders and returns a serializable
+//! [`DataAuditReport`] of per-check `OK` / `WARN` / `FAIL` verdicts, so any
+//! front end — `yuzu-cli data-audit`, a nightly job, or a backend service — can
+//! call the same logic. The CLI is a thin shim that renders/emits the report and
+//! maps a `FAIL` to a non-zero exit.
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -18,8 +23,6 @@ use pomelo_data::{
 };
 use serde::Serialize;
 use serde_json::{json, Value};
-
-use crate::list_symbols;
 
 /// Overnight |return| above this flags a candidate un-adjusted split / bad tick.
 const JUMP_THRESHOLD: f64 = 0.5;
@@ -73,7 +76,7 @@ pub struct DataAuditReport {
 /// Fail-soft: a missing directory or file downgrades a check, never panics.
 pub fn run_data_audit(root: &Path, from: i32, to: i32) -> Result<DataAuditReport, String> {
     let src = LocalSource::new(root);
-    let symbols = list_symbols(root).map_err(|e| format!("listing symbols under {root:?}: {e}"))?;
+    let symbols = list_price_symbols(root);
 
     // One adj-close Panel (union calendar × symbols, NaN where absent) backs the
     // coverage / gaps / delist / jump checks.
@@ -525,7 +528,7 @@ fn scan_fundamentals(root: &Path, src: &LocalSource, from: i32, to: i32) -> Fund
         report_event_days: Vec::new(),
         file_count: 0,
     };
-    for sym in list_dir_stems(&root.join(FUNDAMENTALS_DIR)) {
+    for sym in list_stems(&root.join(FUNDAMENTALS_DIR), &[".csv.gz", ".csv"]) {
         let bytes = match try_get(src, &format!("{FUNDAMENTALS_DIR}/{sym}")) {
             Some(b) => b,
             None => continue,
@@ -567,6 +570,12 @@ fn scan_fundamentals(root: &Path, src: &LocalSource, from: i32, to: i32) -> Fund
 
 // ── small I/O + parsing helpers ──────────────────────────────────────────────
 
+/// Symbols with a per-symbol price file under `root/prices` (`.csv.gz` /
+/// `.parquet` / `.csv`), sorted and de-duplicated.
+fn list_price_symbols(root: &Path) -> Vec<String> {
+    list_stems(&root.join(PRICES_DIR), &[".csv.gz", ".parquet", ".csv"])
+}
+
 /// Load and decode `tracked/universe.csv.gz` into a `symbol → sector` map.
 fn load_industry_map(src: &LocalSource) -> Option<std::collections::HashMap<String, String>> {
     let bytes = try_get(src, "tracked/universe")?;
@@ -584,9 +593,9 @@ fn try_get(src: &LocalSource, key_stem: &str) -> Option<Vec<u8>> {
     None
 }
 
-/// File stems (symbol names) under `dir`, stripping `.csv.gz` / `.csv`.
-fn list_dir_stems(dir: &Path) -> Vec<String> {
-    const EXTS: &[&str] = &[".csv.gz", ".csv"];
+/// File stems under `dir` with any of `exts` stripped, sorted + de-duplicated.
+/// `exts` must be ordered longest-first so `.csv.gz` isn't mis-stripped to `.csv`.
+fn list_stems(dir: &Path, exts: &[&str]) -> Vec<String> {
     let mut out = BTreeSet::new();
     let Ok(rd) = std::fs::read_dir(dir) else {
         return Vec::new();
@@ -594,7 +603,7 @@ fn list_dir_stems(dir: &Path) -> Vec<String> {
     for entry in rd.flatten() {
         if entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
             if let Some(name) = entry.file_name().to_str() {
-                if let Some(stem) = EXTS.iter().find_map(|e| name.strip_suffix(e)) {
+                if let Some(stem) = exts.iter().find_map(|e| name.strip_suffix(e)) {
                     out.insert(stem.to_string());
                 }
             }
@@ -605,7 +614,7 @@ fn list_dir_stems(dir: &Path) -> Vec<String> {
 
 /// Series names of `panels/in_*.{csv.gz,csv}` (index membership panels).
 fn list_membership_panels(root: &Path) -> Vec<String> {
-    list_dir_stems(&root.join(PANELS_DIR))
+    list_stems(&root.join(PANELS_DIR), &[".csv.gz", ".csv"])
         .into_iter()
         .filter(|s| s.starts_with("in_"))
         .collect()
@@ -671,7 +680,7 @@ fn range_or_null(first: i32, last: i32) -> Value {
     }
 }
 
-/// Render the report as a compact human-readable table (the default output).
+/// Render the report as a compact human-readable table (the CLI's default output).
 pub fn render_table(report: &DataAuditReport) -> String {
     let mut out = String::new();
     out.push_str(&format!(
@@ -702,30 +711,32 @@ fn status_str(s: Status) -> &'static str {
 mod tests {
     use super::*;
     use pomelo_data::csv_io::{write_series, OhlcvRow};
+    use pomelo_data::fundamentals::{write_fundamentals, FundamentalRow};
     use std::fs;
     use std::path::PathBuf;
 
     fn tmp(tag: &str) -> PathBuf {
-        let d = std::env::temp_dir().join(format!("yuzu_audit_ut_{tag}"));
+        let d = std::env::temp_dir().join(format!("pomelo_audit_ut_{tag}"));
         let _ = fs::remove_dir_all(&d);
         fs::create_dir_all(&d).unwrap();
         d
     }
 
-    fn write_prices(dir: &Path, sym: &str, days: &[i32]) {
+    fn bar(day: i32, close: f64) -> OhlcvRow {
+        OhlcvRow {
+            day,
+            adj_open: close,
+            adj_high: close,
+            adj_low: close,
+            adj_close: close,
+            volume: 0.0,
+        }
+    }
+
+    fn write_prices(dir: &Path, sym: &str, bars: &[(i32, f64)]) {
         let p = dir.join("prices");
         fs::create_dir_all(&p).unwrap();
-        let rows: Vec<OhlcvRow> = days
-            .iter()
-            .map(|&day| OhlcvRow {
-                day,
-                adj_open: 10.0,
-                adj_high: 10.0,
-                adj_low: 10.0,
-                adj_close: 10.0,
-                volume: 0.0,
-            })
-            .collect();
+        let rows: Vec<OhlcvRow> = bars.iter().map(|&(d, c)| bar(d, c)).collect();
         fs::write(
             p.join(format!("{sym}.csv.gz")),
             write_series(&rows).unwrap(),
@@ -737,6 +748,106 @@ mod tests {
         r.checks.iter().find(|c| c.name == name).unwrap()
     }
 
+    /// A tree that trips one specific check each — the full WARN sweep.
+    fn build_rich_tree(tag: &str) -> PathBuf {
+        let dir = tmp(tag);
+        let d = [20240102, 20240103, 20240104, 20240105];
+        write_prices(
+            &dir,
+            "GOOD",
+            &[(d[0], 100.0), (d[1], 101.0), (d[2], 102.0), (d[3], 103.0)],
+        );
+        write_prices(&dir, "GAP", &[(d[0], 50.0), (d[1], 51.0), (d[3], 52.0)]); // 2024-01-04 missing
+        write_prices(
+            &dir,
+            "SPLIT",
+            &[(d[0], 100.0), (d[1], 100.0), (d[2], 200.0), (d[3], 201.0)],
+        );
+        write_prices(&dir, "DEAD", &[(d[0], 100.0), (d[1], 101.0)]); // ends early
+
+        // Fundamentals for GOOD: `pe` populated; a filing on 2023-12-31 (a month-end).
+        let fdir = dir.join("fundamentals");
+        fs::create_dir_all(&fdir).unwrap();
+        let mut vals = vec![f64::NAN; FUNDAMENTAL_FIELDS.len()];
+        vals[0] = 15.0; // pe
+        let rows = vec![
+            FundamentalRow {
+                day: 20231229,
+                values: vals.clone(),
+                report_event: 0.0,
+            },
+            FundamentalRow {
+                day: 20231231,
+                values: vals.clone(),
+                report_event: 1.0,
+            },
+        ];
+        fs::write(fdir.join("GOOD.csv.gz"), write_fundamentals(&rows).unwrap()).unwrap();
+
+        // An all-NaN snapshot-factor panel (plain .csv — the loader probes .csv).
+        let pdir = dir.join("panels");
+        fs::create_dir_all(&pdir).unwrap();
+        fs::write(
+            pdir.join("piotroski_score.csv"),
+            "day,GOOD\n2024-01-02,\n2024-01-03,\n",
+        )
+        .unwrap();
+
+        // Universe map with an extra name that has no price file.
+        let tdir = dir.join("tracked");
+        fs::create_dir_all(&tdir).unwrap();
+        fs::write(
+            tdir.join("universe.csv"),
+            "symbol,sector,market_cap\nGOOD,Tech,1e12\nGAP,Tech,1e11\nSPLIT,Tech,1e11\nDEAD,Tech,1e10\nMISSING,Tech,1e9\n",
+        )
+        .unwrap();
+        dir
+    }
+
+    #[test]
+    fn rich_tree_flags_each_check() {
+        let dir = build_rich_tree("rich");
+        let r = run_data_audit(&dir, 20000101, 99991231).unwrap();
+        assert_eq!(r.symbol_count, 4);
+        assert_eq!(r.overall, Status::Warn);
+
+        let cov = find(&r, "coverage");
+        assert_eq!(cov.status, Status::Warn);
+        assert!(cov.details["in_universe_missing_prices"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v == "MISSING"));
+
+        assert_eq!(find(&r, "calendar_gaps").status, Status::Warn);
+        assert_eq!(find(&r, "calendar_gaps").details["total_holes"], 1);
+
+        assert_eq!(find(&r, "adjustment").status, Status::Warn);
+        assert_eq!(find(&r, "adjustment").details["flagged"], 1);
+
+        assert_eq!(find(&r, "survivorship").status, Status::Ok);
+        assert_eq!(find(&r, "survivorship").details["ended_early"], 1);
+
+        assert_eq!(find(&r, "nan_density").status, Status::Warn);
+        assert!(find(&r, "nan_density").details["all_nan_factor_panels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v == "piotroski_score"));
+
+        let pit = find(&r, "pit_lag");
+        assert_eq!(pit.status, Status::Warn);
+        assert_eq!(pit.details["report_events"], 1);
+        assert_eq!(pit.details["on_month_end"], 1);
+
+        assert_eq!(find(&r, "index_membership").status, Status::Ok);
+
+        // The rendered table shows the overall WARN and the flagged checks.
+        let table = render_table(&r);
+        assert!(table.contains("WARN"));
+        assert!(table.contains("adjustment"));
+    }
+
     #[test]
     fn empty_tree_fails_and_takes_no_price_arms() {
         let d = tmp("empty");
@@ -744,11 +855,9 @@ mod tests {
         assert_eq!(r.overall, Status::Fail);
         assert_eq!(r.symbol_count, 0);
         assert_eq!(find(&r, "coverage").status, Status::Fail);
-        // Every price-dependent check takes its "no prices" arm → OK.
         for name in ["calendar_gaps", "adjustment", "survivorship"] {
             assert_eq!(find(&r, name).status, Status::Ok);
         }
-        // render_table + all three status strings.
         let table = render_table(&r);
         assert!(table.contains("FAIL"));
         assert!(table.contains("coverage"));
@@ -760,17 +869,18 @@ mod tests {
     #[test]
     fn prices_without_universe_or_fundamentals_are_ok() {
         let d = tmp("bare");
-        write_prices(&d, "AAA", &[20240102, 20240103, 20240104]);
+        write_prices(
+            &d,
+            "AAA",
+            &[(20240102, 10.0), (20240103, 10.0), (20240104, 10.0)],
+        );
         let r = run_data_audit(&d, 20000101, 99991231).unwrap();
         assert_eq!(r.overall, Status::Ok);
-        // No universe → coverage takes the "no universe to cross-check" arm.
         let cov = find(&r, "coverage");
         assert_eq!(cov.status, Status::Ok);
         assert!(cov.summary.contains("no tracked/universe"));
         assert!(cov.details["date_range"]["first_day"] == 20240102);
-        // Single symbol → survivorship can't judge survivors-only (len == 1).
         assert_eq!(find(&r, "survivorship").status, Status::Ok);
-        // No fundamentals + no factor panels → nan_density / pit_lag both OK.
         assert_eq!(find(&r, "nan_density").status, Status::Ok);
         assert!(find(&r, "nan_density")
             .summary
@@ -781,11 +891,10 @@ mod tests {
     #[test]
     fn index_membership_panel_is_summarized() {
         let d = tmp("index");
-        write_prices(&d, "AAA", &[20240102, 20240103]);
-        write_prices(&d, "BBB", &[20240102, 20240103]);
+        write_prices(&d, "AAA", &[(20240102, 10.0), (20240103, 10.0)]);
+        write_prices(&d, "BBB", &[(20240102, 10.0), (20240103, 10.0)]);
         let pan = d.join("panels");
         fs::create_dir_all(&pan).unwrap();
-        // AAA a member on both days; BBB only on the second.
         fs::write(
             pan.join("in_sp500.csv"),
             "day,AAA,BBB\n2024-01-02,1,\n2024-01-03,1,1\n",
@@ -799,6 +908,24 @@ mod tests {
         assert_eq!(p0["min_members"], 1);
         assert_eq!(p0["max_members"], 2);
         assert_eq!(p0["last_members"], 2);
+    }
+
+    #[test]
+    fn edge_arms_single_point_zero_close_and_empty_membership() {
+        let d = tmp("edge");
+        write_prices(&d, "ONE", &[(20240102, 10.0)]);
+        write_prices(&d, "ZERO", &[(20240102, 0.0), (20240103, 10.0)]);
+        let pan = d.join("panels");
+        fs::create_dir_all(&pan).unwrap();
+        fs::write(pan.join("in_empty.csv"), "day,ONE,ZERO\n2024-01-02,,\n").unwrap();
+
+        let r = run_data_audit(&d, 20000101, 99991231).unwrap();
+        // The 0 → 10 step is skipped by the c0 <= 0 guard, so nothing is flagged.
+        assert_eq!(find(&r, "adjustment").details["flagged"], 0);
+        assert_eq!(find(&r, "survivorship").status, Status::Ok);
+        let idx = find(&r, "index_membership");
+        assert_eq!(idx.status, Status::Warn);
+        assert_eq!(idx.details["panels"][0]["max_members"], 0);
     }
 
     #[test]
@@ -832,48 +959,5 @@ mod tests {
         assert!(range_or_null(i32::MAX, i32::MIN).is_null());
         assert!(!range_or_null(20240101, 20240102).is_null());
         assert_eq!(decode_text(b"plain,text"), "plain,text");
-    }
-
-    #[test]
-    fn edge_arms_single_point_zero_close_and_empty_membership() {
-        let d = tmp("edge");
-        // A single-bar symbol (skipped by the <2-point gap/jump guards) and one
-        // whose first close is 0 (the c0 <= 0 adjustment guard).
-        write_prices(&d, "ONE", &[20240102]);
-        let p = d.join("prices");
-        let zero = vec![
-            OhlcvRow {
-                day: 20240102,
-                adj_open: 0.0,
-                adj_high: 0.0,
-                adj_low: 0.0,
-                adj_close: 0.0,
-                volume: 0.0,
-            },
-            OhlcvRow {
-                day: 20240103,
-                adj_open: 10.0,
-                adj_high: 10.0,
-                adj_low: 10.0,
-                adj_close: 10.0,
-                volume: 0.0,
-            },
-        ];
-        fs::write(p.join("ZERO.csv.gz"), write_series(&zero).unwrap()).unwrap();
-
-        // An all-empty membership panel → the "no members" WARN arm.
-        let pan = d.join("panels");
-        fs::create_dir_all(&pan).unwrap();
-        fs::write(pan.join("in_empty.csv"), "day,ONE,ZERO\n2024-01-02,,\n").unwrap();
-
-        let r = run_data_audit(&d, 20000101, 99991231).unwrap();
-        // The 0 → 10 step is skipped by the c0 <= 0 guard, so nothing is flagged.
-        assert_eq!(find(&r, "adjustment").details["flagged"], 0);
-        // ONE ends before the last day → a delisted tail (survivorship OK).
-        assert_eq!(find(&r, "survivorship").status, Status::Ok);
-        // No members anywhere → WARN.
-        let idx = find(&r, "index_membership");
-        assert_eq!(idx.status, Status::Warn);
-        assert_eq!(idx.details["panels"][0]["max_members"], 0);
     }
 }

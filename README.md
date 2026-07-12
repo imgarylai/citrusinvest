@@ -26,7 +26,7 @@ contract live in [`docs/backtest-engine.md`](docs/backtest-engine.md).
 The workspace is organized into three crate families:
 
 - **yuzu** — the backtest engine and the product apps around it (CLI/server/wasm/py).
-- **pomelo** — data engineering: native I/O, storage backends, data sync.
+- **pomelo** — data engineering: native I/O, storage backends, data sync, quality audit.
 - **lemon** — the strategy language and its tooling.
 
 The library crates are published so you can link them from your own service — e.g.
@@ -41,6 +41,7 @@ It's a layered stack — `pomelo-*` → `yuzu-core` → `lemon` — not parallel
 | [`yuzu-core`](https://crates.io/crates/yuzu-core) | Pure, I/O-free backtest engine core. |
 | [`pomelo-data`](https://crates.io/crates/pomelo-data) | Native I/O: gzip CSV price/fundamental files → panels. |
 | [`pomelo-s3`](https://crates.io/crates/pomelo-s3) | S3-compatible `ObjectSource`/`ObjectSink` for `pomelo-data`. |
+| [`pomelo-audit`](https://crates.io/crates/pomelo-audit) | Read-only data-quality audit of a data-layout tree (`yuzu-cli data-audit`). |
 | [`pomelo-fmp`](https://crates.io/crates/pomelo-fmp) | Bring-your-own-key FMP data sync + snapshot-factor formulas; writes to local disk or S3/R2. |
 | [`lemon-lang`](https://crates.io/crates/lemon-lang) | The lemon strategy DSL (imported as `lemon`). |
 
