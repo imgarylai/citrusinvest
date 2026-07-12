@@ -6,43 +6,23 @@
 /// (and the CLI binary) are unchanged after the extraction.
 pub use pomelo_fmp as fmp;
 
+/// `list_symbols` now lives in `pomelo-data` (price-file discovery is a
+/// data-layout concern shared with `pomelo-audit`); re-exported so existing
+/// callers are unchanged.
+pub use pomelo_data::list_symbols;
+/// `write_index_membership` now lives in `pomelo-fmp`, next to
+/// `IndexMembership`; re-exported so existing callers are unchanged.
+pub use pomelo_fmp::write_index_membership;
+
 use std::collections::HashMap;
 use std::path::Path;
 
-use pomelo_data::{
-    load_combined_panel, load_panel, write_combined_panel, Field, LocalSource, ObjectSink,
-    PANELS_DIR, PRICES_DIR,
-};
+use pomelo_data::{load_combined_panel, load_panel, Field, LocalSource, PANELS_DIR, PRICES_DIR};
 use rayon::prelude::*;
 use serde::Serialize;
 use yuzu_core::backtest::BacktestConfig;
 use yuzu_core::report::Report;
 use yuzu_core::{run_backtest, EvalContext};
-
-/// Symbols with a per-symbol price file under `root/prices`, sorted and
-/// de-duplicated. Recognizes `.csv.gz`, `.parquet`, and `.csv`; the
-/// loaders detect the actual format from content.
-pub fn list_symbols(root: &Path) -> std::io::Result<Vec<String>> {
-    // `.csv.gz` before `.csv` so a gzip file isn't mis-stripped to "<sym>.csv".
-    const EXTS: &[&str] = &[".csv.gz", ".parquet", ".csv"];
-    let mut syms = std::collections::BTreeSet::new();
-    let prices = root.join(PRICES_DIR);
-    if !prices.exists() {
-        return Ok(Vec::new());
-    }
-    for entry in std::fs::read_dir(prices)? {
-        let entry = entry?;
-        if !entry.file_type()?.is_file() {
-            continue;
-        }
-        if let Some(name) = entry.file_name().to_str() {
-            if let Some(sym) = EXTS.iter().find_map(|ext| name.strip_suffix(ext)) {
-                syms.insert(sym.to_string());
-            }
-        }
-    }
-    Ok(syms.into_iter().collect())
-}
 
 /// OHLCV `Field` backing a price-series name usable as an execution/return
 /// series (`run_backtest`'s `price_key`). Only OHLC prices qualify — `volume`
@@ -153,47 +133,6 @@ pub(crate) fn load_ctx(
         panels,
         industry: HashMap::new(),
     })
-}
-
-/// The trading calendar of a synced tree: the ascending, unique dates of the
-/// `close` panel over `[from, to]`. Used to place an index membership panel on
-/// exactly the days prices exist for.
-pub fn trading_calendar(root: &Path, from: i32, to: i32) -> Result<Vec<i32>, String> {
-    let syms = list_symbols(root).map_err(|e| e.to_string())?;
-    if syms.is_empty() {
-        return Err("no synced prices to derive a trading calendar from".to_string());
-    }
-    let close = load_panel(
-        &LocalSource::new(root),
-        &syms,
-        Field::AdjClose,
-        from,
-        to,
-        PRICES_DIR,
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(close.dates)
-}
-
-/// Reconstruct and write an index membership panel (`panels/in_sp500.csv.gz`,
-/// etc.) over the synced tree's trading calendar. Columns are the index's
-/// `ever_members(from, to)` — the same universe you should have synced. Returns
-/// `(days, symbols)` in the written panel.
-pub fn write_index_membership(
-    root: &Path,
-    membership: &fmp::IndexMembership,
-    from: i32,
-    to: i32,
-) -> Result<(usize, usize), String> {
-    let calendar = trading_calendar(root, from, to)?;
-    let columns = membership.ever_members(from, to);
-    let panel = membership.membership_panel(&calendar, &columns)?;
-    let bytes = write_combined_panel(&panel).map_err(|e| e.to_string())?;
-    let key = format!("{PANELS_DIR}/{}.csv.gz", membership.series_name());
-    LocalSource::new(root)
-        .put(&key, &bytes)
-        .map_err(|e| e.to_string())?;
-    Ok((calendar.len(), columns.len()))
 }
 
 /// Which metric to rank by in a sweep.

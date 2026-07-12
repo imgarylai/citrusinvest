@@ -18,8 +18,8 @@ use std::path::Path;
 
 use pomelo_data::industry::parse_industry_csv;
 use pomelo_data::{
-    load_combined_panel, load_panel, Field, LocalSource, ObjectSource, FACTOR_PANEL_FIELDS,
-    FUNDAMENTALS_DIR, FUNDAMENTAL_FIELDS, PANELS_DIR, PRICES_DIR,
+    list_symbols, load_combined_panel, load_panel, Field, LocalSource, ObjectSource,
+    FACTOR_PANEL_FIELDS, FUNDAMENTALS_DIR, FUNDAMENTAL_FIELDS, PANELS_DIR, PRICES_DIR,
 };
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -76,7 +76,7 @@ pub struct DataAuditReport {
 /// Fail-soft: a missing directory or file downgrades a check, never panics.
 pub fn run_data_audit(root: &Path, from: i32, to: i32) -> Result<DataAuditReport, String> {
     let src = LocalSource::new(root);
-    let symbols = list_price_symbols(root);
+    let symbols = list_symbols(root).unwrap_or_default();
 
     // One adj-close Panel (union calendar × symbols, NaN where absent) backs the
     // coverage / gaps / delist / jump checks.
@@ -569,12 +569,6 @@ fn scan_fundamentals(root: &Path, src: &LocalSource, from: i32, to: i32) -> Fund
 }
 
 // ── small I/O + parsing helpers ──────────────────────────────────────────────
-
-/// Symbols with a per-symbol price file under `root/prices` (`.csv.gz` /
-/// `.parquet` / `.csv`), sorted and de-duplicated.
-fn list_price_symbols(root: &Path) -> Vec<String> {
-    list_stems(&root.join(PRICES_DIR), &[".csv.gz", ".parquet", ".csv"])
-}
 
 /// Load and decode `tracked/universe.csv.gz` into a `symbol → sector` map.
 fn load_industry_map(src: &LocalSource) -> Option<std::collections::HashMap<String, String>> {

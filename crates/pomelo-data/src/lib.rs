@@ -28,4 +28,4 @@ pub use fundamentals::{
     FundamentalRow, FACTOR_PANEL_FIELDS, FUNDAMENTALS_DIR, FUNDAMENTAL_FIELDS, REPORT_EVENT_FIELD,
 };
 pub use loader::{load_panel, PRICES_DIR};
-pub use source::{LocalSource, ObjectSink, ObjectSource};
+pub use source::{list_symbols, LocalSource, ObjectSink, ObjectSource};
