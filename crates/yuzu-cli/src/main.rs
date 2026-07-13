@@ -562,8 +562,8 @@ enum Cmd {
     ///
     /// Optional vendor path (epic #209). Prices: TIME_SERIES_DAILY_ADJUSTED →
     /// prices/ with adj OHLC scale (outputsize=full). Industry from OVERVIEW;
-    /// delisted via LISTING_STATUS. Fundies later (#216).
-    /// Coverage / gaps: docs/data-sources.md § Alpha Vantage.
+    /// delisted via LISTING_STATUS; annual IS/BS densify with period-end
+    /// report_event (no filing_date on AV). Coverage: docs/data-sources.md § AV.
     ///
     /// Example:
     ///   yuzu-cli av-sync --api-key "$ALPHA_VANTAGE_API_KEY" --out ./mydata \
@@ -591,7 +591,8 @@ enum Cmd {
         from: i32,
         #[arg(long, default_value_t = 20991231)]
         to: i32,
-        /// Also densify statement factors (later phase #216).
+        /// Also densify annual IS/BS → fundamentals/{SYM}.csv.gz
+        /// (period-end visibility; pe/ps/pb/market_cap left NaN historically).
         #[arg(long)]
         include_fundamentals: bool,
         /// Also fetch sector map from OVERVIEW → tracked/universe.csv.gz.

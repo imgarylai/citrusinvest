@@ -8,7 +8,7 @@
 //!
 //! ```text
 //! <out>/prices/{SYM}.csv.gz        adjusted OHLCV                 (#214)
-//! <out>/fundamentals/{SYM}.csv.gz  dense forward-filled factors   (later #216)
+//! <out>/fundamentals/{SYM}.csv.gz  dense forward-filled factors   (#216)
 //! <out>/tracked/universe.csv.gz    symbol,sector,market_cap       (#215)
 //! <out>/panels/{name}.csv.gz       membership / snapshot panels   (later)
 //! ```
@@ -26,7 +26,8 @@
 //! - **Skeleton (#213):** crate + `HttpClient` + CLI `av-sync`.
 //! - **Prices (#214):** `TIME_SERIES_DAILY_ADJUSTED` → `prices/` with adj OHLC scale.
 //! - **Industry + delisted (#215):** OVERVIEW sector map; `LISTING_STATUS` delisted union.
-//! - Fundies / snapshot: later phases under epic #209.
+//! - **Fundamentals (#216):** annual IS/BS densify + `report_event` (period-end visibility).
+//! - Snapshot: later (#218).
 //!
 //! Coverage / accepted gaps: spike
 //! [#207](https://github.com/citrusquant/citrusquant/issues/207) and
@@ -34,6 +35,7 @@
 
 mod config;
 mod delisted;
+mod fundamentals;
 mod http;
 mod industry;
 mod price;

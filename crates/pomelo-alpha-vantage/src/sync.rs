@@ -7,6 +7,7 @@ use pomelo_data::csv_io::write_series;
 use pomelo_data::{LocalSource, ObjectSink, ObjectSource, PRICES_DIR};
 
 use super::config::{SyncConfig, SyncSummary, WriteMode};
+use super::fundamentals::sync_fundamentals;
 use super::http::{Fetcher, HttpClient};
 use super::industry::{encode_industry, fetch_overview, load_existing_industry, INDUSTRY_KEY};
 use super::price::{parse_price_payload, price_url, read_existing_prices};
@@ -30,8 +31,10 @@ pub fn sync<H: HttpClient>(
 /// Storage-agnostic core: sync into any `store` (local disk or S3/R2).
 ///
 /// Always fetches `TIME_SERIES_DAILY_ADJUSTED` → `prices/{SYM}.csv.gz`.
-/// With `include_industry`, builds `tracked/universe.csv.gz` from OVERVIEW.
-/// Fundamentals / snapshot flags are reserved for later phases.
+/// With `include_fundamentals`, densifies annual IS/BS into
+/// `fundamentals/{SYM}.csv.gz` (period-end visibility). With
+/// `include_industry`, builds `tracked/universe.csv.gz` from OVERVIEW.
+/// Snapshot flags are reserved for a later phase.
 pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
     http: &H,
     api_key: &str,
@@ -61,9 +64,6 @@ pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
         BTreeMap::new()
     };
 
-    if cfg.include_fundamentals {
-        eprintln!("note: --include-fundamentals is not implemented yet (#216); ignoring");
-    }
     if cfg.include_snapshot_factors {
         eprintln!("note: --include-snapshot-factors is not implemented yet (#218); ignoring");
     }
@@ -137,6 +137,21 @@ pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
                 eprintln!("{layout}: encode failed: {e}");
                 summary.failures.push((layout, e));
                 continue;
+            }
+        }
+
+        let price_days: Vec<i32> = rows.iter().map(|r| r.day).collect();
+
+        if cfg.include_fundamentals {
+            match sync_fundamentals(&fetcher, store, &layout, &av, api_key, &price_days) {
+                Ok(true) => summary.fundamentals_written += 1,
+                Ok(false) => eprintln!("{layout}: no annual fundamentals snapshots"),
+                Err(e) => {
+                    eprintln!("{layout}: fundamentals skipped: {e}");
+                    summary
+                        .failures
+                        .push((format!("{layout} (fundamentals)"), e));
+                }
             }
         }
 
@@ -402,6 +417,43 @@ mod tests {
         assert_eq!(summary.symbols_skipped, 1);
         assert!(summary.industry_written);
         assert!(dir.join("tracked/universe.csv.gz").exists());
+    }
+
+    #[test]
+    fn fundamentals_flag_writes_dense_file() {
+        let dir = std::env::temp_dir().join("pomelo_av_fund_sync");
+        let _ = std::fs::remove_dir_all(&dir);
+        let is = r#"{"symbol":"IBM","annualReports":[{
+            "fiscalDateEnding":"2023-12-31","totalRevenue":"100","grossProfit":"40",
+            "netIncome":"20","operatingIncome":"30"
+        }]}"#;
+        let bs = r#"{"symbol":"IBM","annualReports":[{
+            "fiscalDateEnding":"2023-12-31","totalAssets":"200","totalLiabilities":"80",
+            "totalShareholderEquity":"120","currentNetReceivables":"10","longTermDebt":"50"
+        }]}"#;
+        let http = MockHttp {
+            routes: vec![
+                (
+                    "TIME_SERIES_DAILY_ADJUSTED".into(),
+                    RefCell::new(IBM_TS.as_bytes().to_vec()),
+                ),
+                (
+                    "INCOME_STATEMENT".into(),
+                    RefCell::new(is.as_bytes().to_vec()),
+                ),
+                ("BALANCE_SHEET".into(), RefCell::new(bs.as_bytes().to_vec())),
+            ],
+            default: b"{}".to_vec(),
+        };
+        let mut c = cfg();
+        c.include_fundamentals = true;
+        // price days after fiscal end so densify has a visible snapshot
+        c.from = 20240102;
+        c.to = 20240104;
+        let summary = sync(&http, "demo", &["IBM".into()], &dir, &c).unwrap();
+        assert_eq!(summary.symbols_written, 1);
+        assert_eq!(summary.fundamentals_written, 1);
+        assert!(dir.join("fundamentals/IBM.csv.gz").exists());
     }
 
     #[test]
