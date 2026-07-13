@@ -24,6 +24,8 @@ contract live in [`docs/backtest-engine.md`](docs/backtest-engine.md).
 [`docs/data-sources.md`](docs/data-sources.md).
 **EODHD official sync:**
 [`docs/eodhd-data-source.md`](docs/eodhd-data-source.md).
+**Alpha Vantage official sync:**
+[`docs/alpha-vantage-data-source.md`](docs/alpha-vantage-data-source.md).
 
 ## Crate families
 

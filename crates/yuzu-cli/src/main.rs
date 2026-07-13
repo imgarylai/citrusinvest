@@ -602,7 +602,8 @@ enum Cmd {
         /// (survivorship-honest price files when those bars still exist).
         #[arg(long)]
         include_delisted: bool,
-        /// Best-effort snapshot panels (later phase #218).
+        /// Best-effort snapshot panels (analyst_upside_pct, consensus_rating,
+        /// fcf_yield, pe_industry_pctile) → panels/. Current-as-of; no piotroski/altman.
         #[arg(long)]
         include_snapshot_factors: bool,
         /// Max requests per minute (0 = no throttle).

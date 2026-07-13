@@ -222,4 +222,55 @@ mod tests {
             .to_string()
             .contains("boom"));
     }
+
+    #[test]
+    fn throttle_with_rate_limit_runs() {
+        let http = SeqHttp {
+            calls: RefCell::new(vec![Ok(b"{}".to_vec()), Ok(b"{}".to_vec())]),
+        };
+        let cfg = SyncConfig {
+            rate_limit_per_min: 6000, // 10ms min interval
+            max_retries: 0,
+            backoff_base: Duration::ZERO,
+            ..SyncConfig::default()
+        };
+        let fetcher = Fetcher::new(&http, &cfg);
+        assert!(fetcher.get("https://x/?apikey=k").is_ok());
+        assert!(fetcher.get("https://x/?apikey=k").is_ok());
+    }
+
+    #[test]
+    fn fetcher_gives_up_after_retries() {
+        let http = SeqHttp {
+            calls: RefCell::new(vec![
+                Err(HttpError::Status(503)),
+                Err(HttpError::Status(503)),
+                Err(HttpError::Status(503)),
+            ]),
+        };
+        let cfg = SyncConfig {
+            rate_limit_per_min: 0,
+            max_retries: 1,
+            backoff_base: Duration::ZERO,
+            ..SyncConfig::default()
+        };
+        let fetcher = Fetcher::new(&http, &cfg);
+        assert!(fetcher.get("https://x").is_err());
+    }
+
+    #[test]
+    fn fetcher_does_not_retry_client_errors() {
+        let http = SeqHttp {
+            calls: RefCell::new(vec![Err(HttpError::Status(404))]),
+        };
+        let cfg = SyncConfig {
+            rate_limit_per_min: 0,
+            max_retries: 5,
+            backoff_base: Duration::ZERO,
+            ..SyncConfig::default()
+        };
+        let fetcher = Fetcher::new(&http, &cfg);
+        let err = fetcher.get("https://x").unwrap_err();
+        assert!(err.contains("404"), "{err}");
+    }
 }

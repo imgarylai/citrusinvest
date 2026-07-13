@@ -11,6 +11,7 @@ use super::fundamentals::sync_fundamentals;
 use super::http::{Fetcher, HttpClient};
 use super::industry::{encode_industry, fetch_overview, load_existing_industry, INDUSTRY_KEY};
 use super::price::{parse_price_payload, price_url, read_existing_prices};
+use super::snapshot::{compute_symbol, SnapshotAccum};
 use super::symbol::split_symbol;
 
 /// Alpha Vantage query API root (no trailing slash).
@@ -34,7 +35,7 @@ pub fn sync<H: HttpClient>(
 /// With `include_fundamentals`, densifies annual IS/BS into
 /// `fundamentals/{SYM}.csv.gz` (period-end visibility). With
 /// `include_industry`, builds `tracked/universe.csv.gz` from OVERVIEW.
-/// Snapshot flags are reserved for a later phase.
+/// With `include_snapshot_factors`, best-effort panels (analyst / fcf / pe_industry).
 pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
     http: &H,
     api_key: &str,
@@ -63,10 +64,7 @@ pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
     } else {
         BTreeMap::new()
     };
-
-    if cfg.include_snapshot_factors {
-        eprintln!("note: --include-snapshot-factors is not implemented yet (#218); ignoring");
-    }
+    let mut snapshots = cfg.include_snapshot_factors.then(SnapshotAccum::new);
 
     for raw in symbols {
         let Some((layout, av)) = split_symbol(raw, &cfg.default_exchange) else {
@@ -172,6 +170,12 @@ pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
             }
         }
 
+        if let Some(acc) = snapshots.as_mut() {
+            let last_close = rows.last().map(|r| r.adj_close).unwrap_or(f64::NAN);
+            let snap = compute_symbol(&fetcher, &av, api_key, &price_days, last_close);
+            acc.push(layout.clone(), snap, &price_days);
+        }
+
         summary.symbols_written += 1;
         summary.price_rows += rows.len();
         eprintln!("{layout}: wrote {} price rows", rows.len());
@@ -182,6 +186,10 @@ pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
         store.put(INDUSTRY_KEY, &bytes).map_err(|e| e.to_string())?;
         summary.industry_written = true;
         eprintln!("wrote {} industry rows to {INDUSTRY_KEY}", industry.len());
+    }
+
+    if let Some(acc) = snapshots {
+        summary.snapshot_factor_panels = acc.write_panels(store).map_err(|e| e.to_string())?;
     }
 
     if !any_valid {
@@ -417,6 +425,37 @@ mod tests {
         assert_eq!(summary.symbols_skipped, 1);
         assert!(summary.industry_written);
         assert!(dir.join("tracked/universe.csv.gz").exists());
+    }
+
+    #[test]
+    fn snapshot_factors_flag_writes_panels() {
+        let dir = std::env::temp_dir().join("pomelo_av_snap_sync");
+        let _ = std::fs::remove_dir_all(&dir);
+        let ov = r#"{
+          "Symbol":"S0","AnalystTargetPrice":"120","AnalystRatingStrongBuy":"5",
+          "AnalystRatingBuy":"0","AnalystRatingHold":"0","AnalystRatingSell":"0",
+          "AnalystRatingStrongSell":"0","PERatio":"25","MarketCapitalization":"1000",
+          "Industry":"Software"
+        }"#;
+        let cf = r#"{"symbol":"S0","annualReports":[{"fiscalDateEnding":"2024-09-30","freeCashFlow":"100"}]}"#;
+        let http = MockHttp {
+            routes: vec![
+                (
+                    "TIME_SERIES_DAILY_ADJUSTED".into(),
+                    RefCell::new(IBM_TS.as_bytes().to_vec()),
+                ),
+                ("OVERVIEW".into(), RefCell::new(ov.as_bytes().to_vec())),
+                ("CASH_FLOW".into(), RefCell::new(cf.as_bytes().to_vec())),
+            ],
+            default: b"{}".to_vec(),
+        };
+        let mut c = cfg();
+        c.include_snapshot_factors = true;
+        let syms: Vec<String> = (0..5).map(|i| format!("S{i}")).collect();
+        let summary = sync(&http, "demo", &syms, &dir, &c).unwrap();
+        assert_eq!(summary.symbols_written, 5);
+        assert!(summary.snapshot_factor_panels >= 1);
+        assert!(dir.join("panels/analyst_upside_pct.csv.gz").exists());
     }
 
     #[test]

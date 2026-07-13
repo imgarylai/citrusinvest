@@ -29,7 +29,7 @@
 //! - **Fundamentals (#216):** annual IS/BS densify + `report_event` (period-end visibility).
 //! - **Universe helper (#217):** `LISTING_STATUS&state=active` → `av-symbols` (not a cap screener).
 //!   **No index PIT** — AV has no historical constituents; we do not fake `in_sp500`.
-//! - Snapshot: later (#218).
+//! - **Snapshot + docs (#218):** best-effort analyst/fcf/pe_industry panels; `docs/alpha-vantage-data-source.md`.
 //!
 //! Coverage / accepted gaps: spike
 //! [#207](https://github.com/citrusquant/citrusquant/issues/207) and
@@ -37,11 +37,13 @@
 
 mod config;
 mod delisted;
+mod factors;
 mod fundamentals;
 mod http;
 mod industry;
 mod price;
 mod screener;
+mod snapshot;
 mod symbol;
 mod sync;
 mod util;
