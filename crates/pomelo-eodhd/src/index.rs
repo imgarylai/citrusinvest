@@ -319,8 +319,127 @@ mod tests {
     #[test]
     fn index_parse() {
         assert_eq!(Index::parse("spx"), Some(Index::Sp500));
+        assert_eq!(Index::parse("sp500"), Some(Index::Sp500));
         assert_eq!(Index::parse("nope"), None);
         assert_eq!(Index::Sp500.series_name(), "in_sp500");
         assert!(MEMBERSHIP_SERIES.contains(&"in_sp500"));
+    }
+
+    #[test]
+    fn parse_components_array_and_empty() {
+        let v = json!([{"Code": "XOM"}, {"code": "cvx.US"}]);
+        let set = parse_components(Some(&v));
+        assert!(set.contains("XOM"));
+        assert!(set.contains("CVX"));
+        assert!(parse_components(None).is_empty());
+        assert!(parse_components(Some(&json!("nope"))).is_empty());
+    }
+
+    #[test]
+    fn fetch_and_write_membership() {
+        use crate::http::HttpError;
+        use pomelo_data::csv_io::{write_series, OhlcvRow};
+        use std::cell::RefCell;
+        use std::time::Duration;
+
+        struct MockHttp {
+            body: RefCell<Vec<u8>>,
+        }
+        impl HttpClient for MockHttp {
+            fn get(&self, _url: &str) -> Result<Vec<u8>, HttpError> {
+                Ok(self.body.borrow().clone())
+            }
+        }
+
+        let payload = json!({
+            "Components": {
+                "0": {"Code": "AAA", "Exchange": "US"},
+                "1": {"Code": "BBB", "Exchange": "US"}
+            },
+            "HistoricalComponents": {
+                "2024-01-02": {
+                    "0": {"Code": "AAA"},
+                    "1": {"Code": "BBB"}
+                },
+                "2024-01-04": {
+                    "0": {"Code": "BBB"},
+                    "1": {"Code": "CCC"}
+                }
+            }
+        });
+        let http = MockHttp {
+            body: RefCell::new(serde_json::to_vec(&payload).unwrap()),
+        };
+        let cfg = SyncConfig {
+            from: 20240102,
+            to: 20240104,
+            rate_limit_per_min: 0,
+            max_retries: 0,
+            backoff_base: Duration::ZERO,
+            ..SyncConfig::default()
+        };
+        let m = IndexMembership::fetch(&http, "tok", Index::Sp500, &cfg).unwrap();
+        assert_eq!(m.series_name(), "in_sp500");
+        assert!(!m.ever_members(20240102, 20240104).is_empty());
+
+        // Tree with prices so trading calendar exists.
+        let dir = std::env::temp_dir().join("pomelo_eodhd_idx_write");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("prices")).unwrap();
+        for (sym, c) in [("AAA", 1.0), ("BBB", 2.0), ("CCC", 3.0)] {
+            let rows: Vec<OhlcvRow> = (0..3)
+                .map(|i| OhlcvRow {
+                    day: 20240102 + i,
+                    adj_open: c,
+                    adj_high: c,
+                    adj_low: c,
+                    adj_close: c,
+                    volume: 1.0,
+                })
+                .collect();
+            std::fs::write(
+                dir.join(format!("prices/{sym}.csv.gz")),
+                write_series(&rows).unwrap(),
+            )
+            .unwrap();
+        }
+        let (days, cols) = write_index_membership(&dir, &m, 20240102, 20240104).unwrap();
+        assert_eq!(days, 3);
+        assert!(cols >= 2);
+        assert!(dir.join("panels/in_sp500.csv.gz").exists());
+    }
+
+    #[test]
+    fn fetch_errors_when_empty() {
+        use crate::http::HttpError;
+        use std::cell::RefCell;
+        use std::time::Duration;
+
+        struct MockHttp;
+        impl HttpClient for MockHttp {
+            fn get(&self, _url: &str) -> Result<Vec<u8>, HttpError> {
+                Ok(br#"{"Components":{},"HistoricalComponents":{}}"#.to_vec())
+            }
+        }
+        let cfg = SyncConfig {
+            rate_limit_per_min: 0,
+            max_retries: 0,
+            backoff_base: Duration::ZERO,
+            ..SyncConfig::default()
+        };
+        let _ = RefCell::new(0);
+        assert!(IndexMembership::fetch(&MockHttp, "tok", Index::Sp500, &cfg).is_err());
+    }
+
+    #[test]
+    fn empty_calendar_errors() {
+        let m = IndexMembership {
+            index: Index::Sp500,
+            snapshots: vec![Snapshot {
+                date: 20240102,
+                members: ["A"].iter().map(|s| s.to_string()).collect(),
+            }],
+        };
+        assert!(m.membership_panel(&[], &["A".into()]).is_err());
     }
 }
