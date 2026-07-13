@@ -17,3 +17,6 @@ serde_json = { workspace = true }
 chrono = { workspace = true }
 thiserror = { workspace = true }
 lemon = { package = "lemon-lang", path = "../lemon-lang", version = "0.8.2" }
+
+[dev-dependencies]
+proptest = { workspace = true }

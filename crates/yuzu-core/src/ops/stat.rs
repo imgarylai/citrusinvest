@@ -95,6 +95,7 @@ pub(crate) fn sorted_quantile(sorted: &[f64], q: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
 
     #[test]
     fn argsort_stable_breaks_ties_by_index() {
@@ -148,5 +149,88 @@ mod tests {
         assert_eq!(sorted_quantile(&s, 0.0), 1.0);
         assert_eq!(sorted_quantile(&s, 1.0), 4.0);
         assert_eq!(sorted_quantile(&s, 0.5), 2.5);
+    }
+
+    /// Arbitrary f64 including NaN/Inf — used for panic-freedom checks.
+    fn any_f64() -> impl Strategy<Value = f64> {
+        prop_oneof![
+            Just(f64::NAN),
+            Just(f64::INFINITY),
+            Just(f64::NEG_INFINITY),
+            Just(0.0),
+            Just(-0.0),
+            -1e6f64..1e6f64,
+        ]
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(64))]
+
+        /// `mean_std` never panics; skips non-finite; empty → (NaN, NaN).
+        #[test]
+        fn mean_std_never_panics_on_any_f64(
+            xs in prop::collection::vec(any_f64(), 0..32),
+            ddof in 0usize..3,
+        ) {
+            let (m, s) = mean_std(&xs, ddof);
+            let finite_n = xs.iter().filter(|x| x.is_finite()).count();
+            if finite_n == 0 {
+                prop_assert!(m.is_nan() && s.is_nan());
+            } else {
+                prop_assert!(m.is_finite());
+                if finite_n <= ddof {
+                    prop_assert!(s.is_nan());
+                } else {
+                    prop_assert!(s.is_finite() && s >= 0.0);
+                }
+            }
+        }
+
+        /// Finite argsort is a permutation and is sorted ascending.
+        #[test]
+        fn argsort_stable_is_permutation_of_finite(
+            xs in prop::collection::vec(-1e3f64..1e3f64, 0..24),
+        ) {
+            let order = argsort_stable(&xs);
+            prop_assert_eq!(order.len(), xs.len());
+            let mut seen = vec![false; xs.len()];
+            for &i in &order {
+                prop_assert!(i < xs.len());
+                prop_assert!(!seen[i]);
+                seen[i] = true;
+            }
+            for w in order.windows(2) {
+                let (a, b) = (xs[w[0]], xs[w[1]]);
+                prop_assert!(a <= b || (a == b && w[0] < w[1]));
+            }
+        }
+
+        /// Average ranks on finite inputs are in `1..=n` and sum to `n(n+1)/2`.
+        #[test]
+        fn average_ranks_bounds_and_sum(
+            xs in prop::collection::vec(-1e3f64..1e3f64, 1..20),
+        ) {
+            let n = xs.len() as f64;
+            let r = average_ranks(&xs);
+            prop_assert_eq!(r.len(), xs.len());
+            let sum: f64 = r.iter().sum();
+            prop_assert!((sum - n * (n + 1.0) / 2.0).abs() < 1e-9);
+            for &v in &r {
+                prop_assert!(v >= 1.0 && v <= n);
+            }
+        }
+
+        /// Quantile of a sorted finite slice stays inside [min, max].
+        #[test]
+        fn sorted_quantile_in_range(
+            mut xs in prop::collection::vec(-1e3f64..1e3f64, 1..24),
+            q in -0.5f64..1.5,
+        ) {
+            xs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            let y = sorted_quantile(&xs, q);
+            let lo = xs[0];
+            let hi = xs[xs.len() - 1];
+            prop_assert!(y >= lo - 1e-12 && y <= hi + 1e-12);
+        }
     }
 }
