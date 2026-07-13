@@ -80,7 +80,7 @@ adapter.”
 | **One-shot (official)** | `yuzu-cli fmp-sync …` → data root | Supported |
 | **BYO** | Write the [data-layout](../reference/data-layout) tree yourself | Supported |
 | **Assemble** | Fill blocks from different vendors into **one** data root | Supported as a pattern; recipes below are sketches |
-| **Second full adapter** | `pomelo-eodhd` + `yuzu-cli eodhd-sync` (epic [#192](https://github.com/citrusquant/citrusquant/issues/192)) | Prices + industry/delisted live (#194–#195); fundamentals densify next (#196) |
+| **Second full adapter** | `pomelo-eodhd` + `yuzu-cli eodhd-sync` (epic [#192](https://github.com/citrusquant/citrusquant/issues/192)) | Prices + industry/delisted + fundies densify live (#194–#196); index/snapshot later |
 
 Engine / `pomelo-data` only need the finished tree (local or S3 via
 `pomelo-s3`). Optional quality pass: `yuzu-cli data-audit`.

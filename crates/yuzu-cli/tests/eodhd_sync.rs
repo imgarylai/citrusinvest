@@ -5,6 +5,7 @@ use std::cell::RefCell;
 use std::time::Duration;
 
 use pomelo_data::csv_io::parse_series;
+use pomelo_data::fundamentals::parse_fundamentals;
 use pomelo_data::{Field, LocalSource, ObjectSource};
 use yuzu_cli::eodhd::{
     fetch_delisted, sync, HttpClient, HttpError, SyncConfig, WriteMode, INDUSTRY_KEY,
@@ -126,6 +127,57 @@ fn scales_split_adjusted_bars() {
     let close = parse_series(&bytes, Field::AdjClose).unwrap()[0].1;
     assert!((close - 100.0).abs() < 1e-9);
     assert!((open - 101.0).abs() < 1e-9);
+}
+
+#[test]
+fn densifies_fundamentals_from_statements() {
+    let eod = r#"[
+        {"date":"2024-01-02","open":10.0,"high":10.0,"low":10.0,"close":10.0,"adjusted_close":10.0,"volume":1},
+        {"date":"2024-01-03","open":10.0,"high":10.0,"low":10.0,"close":10.0,"adjusted_close":10.0,"volume":1},
+        {"date":"2024-01-04","open":10.0,"high":10.0,"low":10.0,"close":10.0,"adjusted_close":10.0,"volume":1}
+    ]"#;
+    let fund = r#"{
+      "Financials::Income_Statement::yearly": {
+        "2023-09-30": {
+          "date":"2023-09-30","filing_date":"2023-11-03",
+          "totalRevenue":100.0,"grossProfit":40.0,"netIncome":20.0,"operatingIncome":30.0
+        },
+        "2024-09-30": {
+          "date":"2024-09-30","filing_date":"2024-01-03",
+          "totalRevenue":110.0,"grossProfit":44.0,"netIncome":22.0,"operatingIncome":33.0
+        }
+      },
+      "Financials::Balance_Sheet::yearly": {
+        "2023-09-30": {
+          "date":"2023-09-30","filing_date":"2023-11-03",
+          "totalAssets":200.0,"totalLiab":80.0,"totalStockholderEquity":120.0,"netReceivables":10.0,"shortLongTermDebtTotal":50.0
+        },
+        "2024-09-30": {
+          "date":"2024-09-30","filing_date":"2024-01-03",
+          "totalAssets":220.0,"totalLiab":88.0,"totalStockholderEquity":132.0,"netReceivables":11.0,"shortLongTermDebtTotal":55.0
+        }
+      }
+    }"#;
+    let http = MockHttp::multi(vec![("/eod/AAPL.US", eod), ("fundamentals/AAPL.US", fund)]);
+    let dir = tmp("fundies");
+    let mut c = cfg();
+    c.include_fundamentals = true;
+    let summary = sync(&http, "KEY", &["AAPL".into()], &dir, &c).unwrap();
+    assert_eq!(summary.fundamentals_written, 1);
+    let bytes = LocalSource::new(&dir)
+        .get("fundamentals/AAPL.csv.gz")
+        .unwrap()
+        .unwrap();
+    let rev = parse_fundamentals(&bytes, "revenue").unwrap();
+    // 2023 filing (2023-11-03) is before the price window → day1 already has rev 100
+    assert!((rev[0].1 - 100.0).abs() < 1e-6);
+    // On 2024-01-03 second filing becomes visible → rev 110
+    assert!((rev[1].1 - 110.0).abs() < 1e-6);
+    assert!((rev[2].1 - 110.0).abs() < 1e-6);
+    let events = parse_fundamentals(&bytes, "report_event").unwrap();
+    assert_eq!(events[0].1, 1.0); // first day applies outstanding 2023 snapshot
+    assert_eq!(events[1].1, 1.0); // 2024 snapshot lands
+    assert_eq!(events[2].1, 0.0);
 }
 
 #[test]

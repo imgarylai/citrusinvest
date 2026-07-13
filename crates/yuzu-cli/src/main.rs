@@ -484,7 +484,8 @@ enum Cmd {
         from: i32,
         #[arg(long, default_value_t = 20991231)]
         to: i32,
-        /// Also fetch fundamentals (not yet implemented — reserved for #196).
+        /// Also densify annual statement factors → fundamentals/{SYM}.csv.gz
+        /// (filing-date visibility; pe/ps/pb/market_cap left NaN historically).
         #[arg(long)]
         include_fundamentals: bool,
         /// Also fetch sector map → tracked/universe.csv.gz from fundamentals General.
