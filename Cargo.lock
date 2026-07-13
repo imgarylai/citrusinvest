@@ -1375,6 +1375,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "pomelo-finnhub"
+version = "0.10.0"
+dependencies = [
+ "flate2",
+ "pomelo-data",
+ "serde_json",
+ "ureq",
+ "yuzu-core",
+]
+
+[[package]]
 name = "pomelo-fmp"
 version = "0.10.0"
 dependencies = [
@@ -2383,6 +2394,7 @@ dependencies = [
  "pomelo-audit",
  "pomelo-data",
  "pomelo-eodhd",
+ "pomelo-finnhub",
  "pomelo-fmp",
  "pomelo-s3",
  "rayon",
