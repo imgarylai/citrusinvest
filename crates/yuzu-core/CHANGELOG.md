@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0](https://github.com/citrusquant/citrusquant/compare/yuzu-core-v0.8.2...yuzu-core-v0.9.0) - 2026-07-13
+
+### Fixed
+
+- *(yuzu-core)* NaN-safe sorts and non-panicking date decode
+- correct doc drift (rise/fall, op counts, crate publish list, Parquet)
+
+### Other
+
+- *(yuzu-core)* proptest edge cases and document NaN policy
+- *(yuzu-core)* fix cap_industry doc link to private helper
+- *(yuzu-core)* expand rustdoc for public APIs
+- rustfmt EngineError call sites
+- *(yuzu-core)* structured EngineError via thiserror
+- rustfmt bootstrap comment alignment
+
 ## [0.8.1](https://github.com/citrusquant/citrusquant/compare/yuzu-core-v0.7.0...yuzu-core-v0.8.1) - 2026-07-12
 
 ### Other
