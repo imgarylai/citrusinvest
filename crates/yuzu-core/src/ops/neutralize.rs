@@ -115,15 +115,17 @@ impl Panel {
                 .get(&self.symbols[c])
                 .map(String::as_str)
                 .unwrap_or(OTHER);
-            groups.entry(cat).or_insert_with(|| {
-                order.push(cat);
-                Vec::new()
-            });
-            groups.get_mut(cat).unwrap().push(c);
+            groups
+                .entry(cat)
+                .or_insert_with(|| {
+                    order.push(cat);
+                    Vec::new()
+                })
+                .push(c);
         }
         order
             .into_iter()
-            .map(|cat| (cat, groups.remove(cat).unwrap()))
+            .filter_map(|cat| groups.remove(cat).map(|cols| (cat, cols)))
             .collect()
     }
 

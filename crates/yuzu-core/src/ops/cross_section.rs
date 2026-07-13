@@ -4,7 +4,7 @@
 //! Preprocess toolkit: `winsorize`, `zscore`, `bucket`, `demean` (all NaN-aware).
 
 use crate::align::align;
-use crate::ops::stat::{average_ranks, mean_std, sorted_quantile};
+use crate::ops::stat::{average_ranks, cmp_f64, mean_std, sort_f64s, sorted_quantile};
 use crate::panel::{bool_to_f64, Panel};
 use ndarray::Array2;
 
@@ -35,8 +35,9 @@ impl Panel {
             }
             // stable sort: by value (desc for largest / asc for smallest),
             // ties keep original column order (already ascending by c).
+            // total_cmp: NaN was filtered above; Inf is ordered without panic.
             valid.sort_by(|a, b| {
-                let ord = a.1.partial_cmp(&b.1).unwrap();
+                let ord = cmp_f64(a.1, b.1);
                 if largest {
                     ord.reverse()
                 } else {
@@ -212,7 +213,7 @@ impl Panel {
             if vals.is_empty() {
                 continue;
             }
-            vals.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            sort_f64s(&mut vals);
             let lo = sorted_quantile(&vals, lo_q);
             let hi = sorted_quantile(&vals, hi_q);
             for c in 0..ncols {

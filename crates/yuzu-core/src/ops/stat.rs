@@ -4,18 +4,34 @@
 //!
 //! - **argsort / average ranks**: ascending order; ties share the mean of their
 //!   1-based ranks (pandas `"average"`). Argsort breaks residual ties by
-//!   original index (stable).
+//!   original index (stable). Sorting uses [`f64::total_cmp`] so NaN/Inf never
+//!   panic; callers that need finite-only ranking should filter first.
 //! - **mean_std**: finite entries only (`is_finite`); empty → `(NaN, NaN)`.
 //!   `ddof = 0` is population (`/ n`); `ddof = 1` is sample (`/ (n − 1)`), with
 //!   std `NaN` when `n < 2`.
 //! - **sorted_quantile**: linear interpolation on a **pre-sorted** non-empty
 //!   slice (pandas default); `q` is clamped to `[0, 1]`.
 
+use std::cmp::Ordering;
+
+/// Total order on `f64` for sorting; never panics on NaN/Inf.
+#[inline]
+pub(crate) fn cmp_f64(a: f64, b: f64) -> Ordering {
+    a.total_cmp(&b)
+}
+
+/// Sort `xs` ascending with a total order (NaN-safe).
+#[inline]
+pub(crate) fn sort_f64s(xs: &mut [f64]) {
+    xs.sort_by(|a, b| a.total_cmp(b));
+}
+
 /// Indices that would sort `xs` ascending; ties broken by original index.
+/// Uses [`f64::total_cmp`] so NaN never panics the sort.
 #[inline]
 pub(crate) fn argsort_stable(xs: &[f64]) -> Vec<usize> {
     let mut idx: Vec<usize> = (0..xs.len()).collect();
-    idx.sort_by(|&a, &b| xs[a].partial_cmp(&xs[b]).unwrap().then(a.cmp(&b)));
+    idx.sort_by(|&a, &b| cmp_f64(xs[a], xs[b]).then(a.cmp(&b)));
     idx
 }
 
@@ -84,6 +100,24 @@ mod tests {
     fn argsort_stable_breaks_ties_by_index() {
         let xs = [3.0, 1.0, 1.0, 2.0];
         assert_eq!(argsort_stable(&xs), vec![1, 2, 3, 0]);
+    }
+
+    #[test]
+    fn argsort_stable_and_sort_f64s_tolerate_nan() {
+        let xs = [3.0, f64::NAN, 1.0];
+        // Must not panic; finite values keep ascending order among themselves.
+        let order = argsort_stable(&xs);
+        assert_eq!(order.len(), 3);
+        assert_eq!(xs[order[0]], 1.0);
+        assert_eq!(xs[order[1]], 3.0);
+        assert!(xs[order[2]].is_nan());
+
+        let mut s = [2.0, f64::NAN, 0.0, f64::INFINITY];
+        sort_f64s(&mut s);
+        assert_eq!(s[0], 0.0);
+        assert_eq!(s[1], 2.0);
+        assert!(s[2].is_infinite() && s[2] > 0.0);
+        assert!(s[3].is_nan());
     }
 
     #[test]
