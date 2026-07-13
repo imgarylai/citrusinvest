@@ -9,7 +9,11 @@
   "prConcurrentLimit": 6,
   "prHourlyLimit": 4,
   "lockFileMaintenance": {
-    "enabled": true
+    "enabled": true,
+    "schedule": ["before 4am on the first day of the month"],
+    "automerge": true,
+    "automergeType": "pr",
+    "platformAutomerge": true
   },
   "ignorePaths": [
     "**/node_modules/**",
