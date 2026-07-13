@@ -24,12 +24,13 @@
 //!
 //! - **Prices (#194):** EOD → full adj OHLC via `adjusted_close/close` scale.
 //! - **Industry + delisted (#195):** sector map; delisted list for universe union.
-//! - Fundamentals densify: #196.
+//! - **Fundamentals (#196):** yearly statements → dense `FUNDAMENTAL_FIELDS` + `report_event`.
 //!
 //! Coverage map: [`docs/data-sources.md`](../../../docs/data-sources.md).
 
 mod config;
 mod delisted;
+mod fundamentals;
 mod http;
 mod industry;
 mod price;

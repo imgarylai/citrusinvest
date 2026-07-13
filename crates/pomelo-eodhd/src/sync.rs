@@ -7,6 +7,7 @@ use pomelo_data::csv_io::write_series;
 use pomelo_data::{LocalSource, ObjectSink, ObjectSource, PRICES_DIR};
 
 use super::config::{SyncConfig, SyncSummary, WriteMode};
+use super::fundamentals::sync_fundamentals;
 use super::http::{Fetcher, HttpClient};
 use super::industry::{encode_industry, fetch_profile, load_existing_industry, INDUSTRY_KEY};
 use super::price::{parse_price_rows, price_url, read_existing_prices};
@@ -30,8 +31,9 @@ pub fn sync<H: HttpClient>(
 /// Storage-agnostic core: sync into any `store` (local disk or S3/R2).
 ///
 /// Always fetches adjusted EOD prices → `prices/{SYM}.csv.gz`.
-/// With `include_industry`, also builds `tracked/universe.csv.gz` from
-/// fundamentals sector metadata.
+/// With `include_fundamentals`, densifies statement-based factors into
+/// `fundamentals/{SYM}.csv.gz`. With `include_industry`, builds
+/// `tracked/universe.csv.gz` from fundamentals sector metadata.
 pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
     http: &H,
     api_token: &str,
@@ -134,8 +136,19 @@ pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
             }
         }
 
+        let price_days: Vec<i32> = rows.iter().map(|r| r.day).collect();
+
         if cfg.include_fundamentals {
-            eprintln!("{layout}: fundamentals requested but not implemented yet (#196)");
+            match sync_fundamentals(&fetcher, store, &layout, &eodhd, api_token, &price_days) {
+                Ok(true) => summary.fundamentals_written += 1,
+                Ok(false) => eprintln!("{layout}: no annual fundamentals snapshots"),
+                Err(e) => {
+                    eprintln!("{layout}: fundamentals skipped: {e}");
+                    summary
+                        .failures
+                        .push((format!("{layout} (fundamentals)"), e));
+                }
+            }
         }
 
         if cfg.include_industry {
