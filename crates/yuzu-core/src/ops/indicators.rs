@@ -392,6 +392,7 @@ impl Panel {
 #[cfg(test)]
 mod tests {
     use crate::panel::Panel;
+    use proptest::prelude::*;
 
     #[test]
     fn average_min_periods_is_half_n() {
@@ -627,5 +628,53 @@ mod tests {
         assert_eq!(r.data[[0, 0]], 1.0);
         assert_eq!(r.data[[0, 1]], 2.0);
         assert!(r.data[[0, 2]].is_nan());
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(48))]
+
+        /// Rolling min/max never panic; warm-up / NaN windows stay NaN; finite
+        /// full windows yield a finite extremum from the window.
+        #[test]
+        fn rolling_min_max_edge_inputs(
+            values in prop::collection::vec(
+                prop_oneof![Just(f64::NAN), -1e3f64..1e3f64],
+                0..16,
+            ),
+            n in 0usize..8,
+        ) {
+            let dates: Vec<i32> = (0..values.len() as i32).map(|i| 20240101 + i).collect();
+            let rows: Vec<Vec<f64>> = values.iter().map(|&v| vec![v]).collect();
+            let p = Panel::from_rows(dates, vec!["A".into()], rows).unwrap();
+            let rmax = p.rolling_max(n);
+            let rmin = p.rolling_min(n);
+            prop_assert_eq!(rmax.nrows(), p.nrows());
+            prop_assert_eq!(rmin.nrows(), p.nrows());
+            if n == 0 || p.nrows() == 0 {
+                for r in 0..p.nrows() {
+                    prop_assert!(rmax.data[[r, 0]].is_nan());
+                    prop_assert!(rmin.data[[r, 0]].is_nan());
+                }
+                return Ok(());
+            }
+            for r in 0..p.nrows() {
+                if r < n - 1 {
+                    prop_assert!(rmax.data[[r, 0]].is_nan());
+                    prop_assert!(rmin.data[[r, 0]].is_nan());
+                    continue;
+                }
+                let lo = r + 1 - n;
+                let window = &values[lo..=r];
+                if window.iter().any(|v| v.is_nan()) {
+                    prop_assert!(rmax.data[[r, 0]].is_nan());
+                    prop_assert!(rmin.data[[r, 0]].is_nan());
+                } else {
+                    let expect_max = window.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                    let expect_min = window.iter().copied().fold(f64::INFINITY, f64::min);
+                    prop_assert!((rmax.data[[r, 0]] - expect_max).abs() < 1e-12);
+                    prop_assert!((rmin.data[[r, 0]] - expect_min).abs() < 1e-12);
+                }
+            }
+        }
     }
 }
