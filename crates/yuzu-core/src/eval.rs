@@ -1,5 +1,8 @@
 //! Evaluates an [`Expr`] tree against a data context (`HashMap<String, Panel>`).
-//! [`run_strategy`] parses a JSON spec and evaluates it to a position matrix.
+//!
+//! - [`run_strategy`] — parse a JSON lemon/spec tree and evaluate to a panel
+//!   (typically a boolean / weight position matrix).
+//! - [`run_backtest`] — evaluate then run the NAV loop into a [`Report`].
 //!
 //! Internally, evaluation borrows `Data` leaves from the context so multi-reference
 //! expression trees do not deep-copy dense series at every leaf. The public API
@@ -13,15 +16,38 @@ use crate::panel::{bool_to_f64, Panel};
 use crate::spec::Expr;
 use std::collections::HashMap;
 
-/// Data context for evaluation: numeric `panels` keyed by series name, plus a
-/// `symbol -> sector` classification used by the neutralization/grouping ops.
-/// `industry` is empty for strategies that use no industry ops.
+/// Data context for strategy evaluation.
+///
+/// - `panels`: series name → [`Panel`] (e.g. `"close"`, `"volume"`, factor names).
+/// - `industry`: optional `symbol → sector` map for industry neutralize / group ops.
+///   Leave empty when the strategy never touches those ops.
+///
+/// # Example
+///
+/// ```
+/// use std::collections::HashMap;
+/// use yuzu_core::panel::Panel;
+/// use yuzu_core::EvalContext;
+///
+/// let close = Panel::from_rows(
+///     vec![20240102, 20240103],
+///     vec!["A".into()],
+///     vec![vec![10.0], vec![11.0]],
+/// )
+/// .unwrap();
+/// let mut panels = HashMap::new();
+/// panels.insert("close".into(), close);
+/// let ctx = EvalContext::new(panels);
+/// assert!(ctx.panels.contains_key("close"));
+/// assert!(ctx.industry.is_empty());
+/// ```
 pub struct EvalContext {
     pub panels: HashMap<String, Panel>,
     pub industry: HashMap<String, String>,
 }
 
 impl EvalContext {
+    /// Build a context with the given series map and an empty industry map.
     pub fn new(panels: HashMap<String, Panel>) -> Self {
         EvalContext {
             panels,
@@ -36,6 +62,38 @@ impl From<HashMap<String, Panel>> for EvalContext {
     }
 }
 
+/// Parse a JSON strategy spec and evaluate it against `ctx`.
+///
+/// `spec_json` is the lemon-lowered [`Expr`] tree (see `docs/lemon.md` and
+/// `schema/lemon-spec.schema.json`). Returns the root panel — for long-only
+/// selectors usually a boolean position matrix consumed by the NAV loop.
+///
+/// # Errors
+///
+/// - Spec JSON that fails to deserialize → [`EngineError::SpecParse`].
+/// - Unknown series → [`EngineError::UnknownSeries`]; bad rebalance args →
+///   [`EngineError::RebalanceBoth`] / [`EngineError::RebalanceNeither`] /
+///   [`EngineError::BadFreq`]; bare top-level `Const` → [`EngineError::BareConst`].
+///
+/// # Example
+///
+/// ```
+/// use std::collections::HashMap;
+/// use yuzu_core::panel::Panel;
+/// use yuzu_core::{run_strategy, EvalContext};
+///
+/// let close = Panel::from_rows(
+///     vec![20240102, 20240103],
+///     vec!["A".into()],
+///     vec![vec![10.0], vec![12.0]],
+/// )
+/// .unwrap();
+/// let mut panels = HashMap::new();
+/// panels.insert("close".into(), close);
+/// let ctx = EvalContext::new(panels);
+/// let pos = run_strategy(r#"{"op":"Data","name":"close"}"#, &ctx).unwrap();
+/// assert_eq!(pos.data[[1, 0]], 12.0);
+/// ```
 pub fn run_strategy(spec_json: &str, ctx: &EvalContext) -> Result<Panel, EngineError> {
     let expr: Expr =
         serde_json::from_str(spec_json).map_err(|e| EngineError::SpecParse(e.to_string()))?;
@@ -615,6 +673,49 @@ use crate::report::{benchmark_equity, build_report_with_benchmark, Report};
 /// Fixed seed for the report bootstrap — same input, same bands, every run.
 const BOOTSTRAP_SEED: u64 = 0x00C1_7A05;
 
+/// Evaluate a strategy and run the daily NAV backtest loop.
+///
+/// 1. [`run_strategy`] on `spec_json` → position / weight panel.
+/// 2. Look up `price_key` in `ctx.panels` (usually `"close"`).
+/// 3. Optional OHLC/volume series (`"open"`/`"high"`/`"low"`/`"volume"`) feed
+///    stops and liquidity caps when present.
+/// 4. Build a [`Report`] with equity, trades, metrics; optional benchmark and
+///    bootstrap bands from [`BacktestConfig`].
+///
+/// # Errors
+///
+/// Strategy evaluation errors (see [`run_strategy`]), missing `price_key` →
+/// [`EngineError::UnknownPriceKey`], or an unknown / empty `cfg.benchmark_key`
+/// → [`EngineError::UnknownBenchmark`] / [`EngineError::EmptyBenchmark`] when a
+/// benchmark is requested.
+///
+/// # Example
+///
+/// ```
+/// use std::collections::HashMap;
+/// use yuzu_core::backtest::BacktestConfig;
+/// use yuzu_core::panel::Panel;
+/// use yuzu_core::{run_backtest, EvalContext};
+///
+/// let close = Panel::from_rows(
+///     vec![20240102, 20240103, 20240104],
+///     vec!["A".into()],
+///     vec![vec![10.0], vec![11.0], vec![12.0]],
+/// )
+/// .unwrap();
+/// // Always long: raw close as a positive "weight" panel (engine normalizes).
+/// let mut panels = HashMap::new();
+/// panels.insert("close".into(), close);
+/// let ctx = EvalContext::new(panels);
+/// let report = run_backtest(
+///     r#"{"op":"Data","name":"close"}"#,
+///     &ctx,
+///     "close",
+///     &BacktestConfig::default(),
+/// )
+/// .unwrap();
+/// assert_eq!(report.equity.len(), 3);
+/// ```
 pub fn run_backtest(
     spec_json: &str,
     ctx: &EvalContext,

@@ -1,13 +1,18 @@
 //! [`EngineError`]: shape violations from panel construction and evaluation failures.
+//!
+//! Surface via [`std::fmt::Display`] / [`ToString`] in CLI and WASM bindings, or
+//! match on variants when you need structured handling.
 
 use thiserror::Error;
 
 /// Errors from panel construction, strategy evaluation, and backtest setup.
 ///
-/// Callers (CLI / server / WASM) typically surface these via [`Display`] /
-/// [`ToString`]; match on variants when you need structured handling.
+/// Callers (CLI / server / WASM) typically surface these via
+/// [`std::fmt::Display`] / [`ToString`]; match on variants when you need
+/// structured handling.
 #[derive(Debug, Error)]
 pub enum EngineError {
+    /// `Panel` dimensions do not match `dates` / `symbols`.
     #[error("shape mismatch: {rows}x{cols} != data len {data_len}")]
     ShapeMismatch {
         rows: usize,

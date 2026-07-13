@@ -1,10 +1,38 @@
 //! The [`Panel`] type: a dense `f64` matrix indexed by `dates` (rows, `YYYYMMDD`)
 //! and `symbols` (columns). `NaN` = missing; booleans are `1.0`/`0.0` with `NaN`
 //! falsy (see [`is_true`]).
+//!
+//! Construction validates shape: `data.nrows() == dates.len()` and
+//! `data.ncols() == symbols.len()`, otherwise [`EngineError::ShapeMismatch`].
 
 use crate::error::EngineError;
 use ndarray::{Array2, Axis};
 
+/// Dense dates × symbols matrix of `f64` cells.
+///
+/// # Conventions
+///
+/// - **Dates** are civil calendar codes `YYYYMMDD` as `i32`, sorted ascending.
+/// - **Missing** values are `f64::NAN` (never optional cells).
+/// - **Boolean / position** panels use `1.0` / `0.0`; treat other finite values
+///   as truthy only via ops that define their own threshold (see [`is_true`]
+///   for the strict `== 1.0` form).
+///
+/// # Example
+///
+/// ```
+/// use yuzu_core::panel::Panel;
+///
+/// let p = Panel::from_rows(
+///     vec![20240102, 20240103],
+///     vec!["AAPL".into(), "MSFT".into()],
+///     vec![vec![100.0, 200.0], vec![101.0, 201.0]],
+/// )
+/// .unwrap();
+/// assert_eq!(p.nrows(), 2);
+/// assert_eq!(p.ncols(), 2);
+/// assert_eq!(p.data[[0, 0]], 100.0);
+/// ```
 #[derive(Debug, Clone)]
 pub struct Panel {
     pub dates: Vec<i32>,
@@ -12,10 +40,12 @@ pub struct Panel {
     pub data: Array2<f64>,
 }
 
+/// Strict boolean cell: only exact `1.0` is true (`NaN` and `0.0` are false).
 pub fn is_true(x: f64) -> bool {
     x == 1.0
 }
 
+/// Encode a Rust `bool` as a panel cell (`1.0` / `0.0`).
 pub fn bool_to_f64(b: bool) -> f64 {
     if b {
         1.0
@@ -25,6 +55,10 @@ pub fn bool_to_f64(b: bool) -> f64 {
 }
 
 impl Panel {
+    /// Build a panel from an already-shaped [`Array2`].
+    ///
+    /// Returns [`EngineError::ShapeMismatch`] when the matrix dimensions do not
+    /// match `dates` / `symbols`.
     pub fn new(
         dates: Vec<i32>,
         symbols: Vec<String>,
@@ -44,6 +78,9 @@ impl Panel {
         })
     }
 
+    /// Build a panel from row-major `Vec<Vec<f64>>` (one inner vec per date).
+    ///
+    /// Each row must have length `symbols.len()`; otherwise shape mismatch.
     pub fn from_rows(
         dates: Vec<i32>,
         symbols: Vec<String>,
