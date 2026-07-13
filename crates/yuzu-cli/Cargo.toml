@@ -34,8 +34,10 @@ pomelo-fmp = { path = "../pomelo-fmp", version = "0.10.0", default-features = fa
 # EODHD second official sync path (epic #192). default-features=false keeps the
 # pure symbol helpers without TLS; `eodhd-sync` turns on ureq.
 pomelo-eodhd = { path = "../pomelo-eodhd", version = "0.10.0", default-features = false }
-# S3/R2 output for vendor-sync `--out s3://…` (optional; enabled by either
-# fmp-sync or eodhd-sync).
+# Alpha Vantage path (epic #209). default-features=false keeps pure helpers
+# without TLS; `alpha-vantage-sync` turns on ureq.
+pomelo-alpha-vantage = { path = "../pomelo-alpha-vantage", version = "0.10.0", default-features = false }
+# S3/R2 output for vendor-sync `--out s3://…` (optional; enabled by vendor-sync features).
 pomelo-s3 = { path = "../pomelo-s3", version = "0.10.0", optional = true }
 clap = { workspace = true }
 rayon = { workspace = true }
@@ -44,10 +46,12 @@ serde_json = { workspace = true }
 flate2 = { workspace = true }
 
 [features]
-default = ["fmp-sync", "eodhd-sync"]
+default = ["fmp-sync", "eodhd-sync", "alpha-vantage-sync"]
 # `yuzu-cli fmp-sync`: fetch prices/fundamentals from FMP with the user's own
 # key over HTTPS. Pulls the ureq TLS stack (via pomelo-fmp); disable with
 # --no-default-features for an offline-only CLI build.
 fmp-sync = ["pomelo-fmp/fmp-sync", "dep:pomelo-s3"]
 # `yuzu-cli eodhd-sync`: second official vendor path (pomelo-eodhd).
 eodhd-sync = ["pomelo-eodhd/eodhd-sync", "dep:pomelo-s3"]
+# `yuzu-cli av-sync`: Alpha Vantage path (pomelo-alpha-vantage; epic #209).
+alpha-vantage-sync = ["pomelo-alpha-vantage/alpha-vantage-sync", "dep:pomelo-s3"]

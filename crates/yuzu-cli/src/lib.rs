@@ -12,6 +12,9 @@ pub use pomelo_fmp as fmp;
 /// EODHD data sync (epic #192), re-exported as `yuzu_cli::eodhd::…`.
 pub use pomelo_eodhd as eodhd;
 
+/// Alpha Vantage data sync (epic #209), re-exported as `yuzu_cli::alpha_vantage::…`.
+pub use pomelo_alpha_vantage as alpha_vantage;
+
 /// `list_symbols` lives in `pomelo-data` (price-file discovery is a data-layout
 /// concern shared with `pomelo-audit`); re-exported so callers are unchanged.
 pub use pomelo_data::list_symbols;

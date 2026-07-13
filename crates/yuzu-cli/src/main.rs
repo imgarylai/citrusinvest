@@ -558,6 +558,58 @@ enum Cmd {
         #[arg(long, default_value_t = 4)]
         max_retries: u32,
     },
+    /// Sync Alpha Vantage data with YOUR OWN API key into a `data-layout.md` tree.
+    ///
+    /// Optional vendor path (epic #209). Skeleton validates config only until
+    /// prices land (#214). Coverage / gaps: docs/data-sources.md § Alpha Vantage.
+    ///
+    /// Example:
+    ///   yuzu-cli av-sync --api-key "$ALPHA_VANTAGE_API_KEY" --out ./mydata \
+    ///     --symbols AAPL,MSFT --from 20200101 --to 20251231
+    #[cfg(feature = "alpha-vantage-sync")]
+    AvSync {
+        /// Alpha Vantage API key (kept local). Falls back to
+        /// $ALPHA_VANTAGE_API_KEY or $ALPHAVANTAGE_API_KEY if unset.
+        #[arg(long)]
+        api_key: Option<String>,
+        /// Output data root — local path or `s3://bucket[/prefix]`.
+        #[arg(long)]
+        out: String,
+        /// Comma-separated tickers (`AAPL` or `TSCO.LON`). Or use --symbols-file.
+        #[arg(long, value_delimiter = ',')]
+        symbols: Vec<String>,
+        /// Read symbols from a file (one per line, or comma-separated; `#` comments).
+        #[arg(long)]
+        symbols_file: Option<PathBuf>,
+        /// Default exchange hint for bare tickers (US equities stay bare on AV).
+        #[arg(long, default_value = yuzu_cli::alpha_vantage::DEFAULT_EXCHANGE)]
+        exchange: String,
+        #[arg(long, default_value_t = 20000101)]
+        from: i32,
+        #[arg(long, default_value_t = 20991231)]
+        to: i32,
+        /// Also densify statement factors (later phase).
+        #[arg(long)]
+        include_fundamentals: bool,
+        /// Also fetch sector map (later phase).
+        #[arg(long)]
+        include_industry: bool,
+        /// Best-effort snapshot panels (later phase).
+        #[arg(long)]
+        include_snapshot_factors: bool,
+        /// Max requests per minute (0 = no throttle).
+        #[arg(long, default_value_t = 0)]
+        rate_limit: u32,
+        /// Retries on 429 / 5xx / transport errors.
+        #[arg(long, default_value_t = 4)]
+        max_retries: u32,
+        /// Merge fetched rows into existing files instead of overwriting.
+        #[arg(long)]
+        append: bool,
+        /// Skip symbols that already have a price file.
+        #[arg(long)]
+        resume: bool,
+    },
 }
 
 fn emit(out: &Option<PathBuf>, json: String) -> std::io::Result<()> {
@@ -1145,6 +1197,89 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     "wrote panels/{}.csv.gz: {days} days × {cols} symbols (mask with mask(signal, {}))",
                     m.series_name(),
                     m.series_name()
+                );
+            }
+        }
+        #[cfg(feature = "alpha-vantage-sync")]
+        Cmd::AvSync {
+            api_key,
+            out,
+            symbols,
+            symbols_file,
+            exchange,
+            from,
+            to,
+            include_fundamentals,
+            include_industry,
+            include_snapshot_factors,
+            rate_limit,
+            max_retries,
+            append,
+            resume,
+        } => {
+            let api_key = api_key
+                .or_else(|| std::env::var("ALPHA_VANTAGE_API_KEY").ok())
+                .or_else(|| std::env::var("ALPHAVANTAGE_API_KEY").ok())
+                .filter(|k| !k.trim().is_empty())
+                .ok_or(
+                    "provide --api-key or set ALPHA_VANTAGE_API_KEY (or ALPHAVANTAGE_API_KEY)",
+                )?;
+            let mut explicit: Vec<String> = symbols
+                .into_iter()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            if let Some(path) = symbols_file {
+                let text = std::fs::read_to_string(&path)
+                    .map_err(|e| format!("reading {}: {e}", path.display()))?;
+                explicit.extend(yuzu_cli::alpha_vantage::parse_symbols_list(&text));
+            }
+            let mut seen = std::collections::HashSet::new();
+            explicit.retain(|s| seen.insert(s.clone()));
+            if explicit.is_empty() {
+                return Err("provide --symbols and/or --symbols-file".into());
+            }
+            let mode = if resume {
+                yuzu_cli::alpha_vantage::WriteMode::Resume
+            } else if append {
+                yuzu_cli::alpha_vantage::WriteMode::Append
+            } else {
+                yuzu_cli::alpha_vantage::WriteMode::Overwrite
+            };
+            let cfg = yuzu_cli::alpha_vantage::SyncConfig {
+                from,
+                to,
+                default_exchange: exchange,
+                include_fundamentals,
+                include_industry,
+                include_snapshot_factors,
+                rate_limit_per_min: rate_limit,
+                max_retries,
+                backoff_base: std::time::Duration::from_secs(2),
+                mode,
+            };
+            let client = yuzu_cli::alpha_vantage::UreqClient::new();
+            let out_store = pomelo_s3::OutStore::parse(&out)?;
+            let summary =
+                yuzu_cli::alpha_vantage::sync_into(&client, &api_key, &explicit, &out_store, &cfg)?;
+            eprintln!(
+                "done: {} written, {} skipped, {} filtered, {} price rows, {} fundamentals, industry={}, snapshot_panels={}, {} failures",
+                summary.symbols_written,
+                summary.symbols_skipped,
+                summary.symbols_filtered,
+                summary.price_rows,
+                summary.fundamentals_written,
+                summary.industry_written,
+                summary.snapshot_factor_panels,
+                summary.failures.len(),
+            );
+            for (sym, err) in &summary.failures {
+                eprintln!("  FAILED {sym}: {err}");
+            }
+            if summary.symbols_written == 0 {
+                return Err(
+                    "no symbols were written (skeleton: price sync lands in a later #209 phase)"
+                        .into(),
                 );
             }
         }
