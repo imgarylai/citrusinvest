@@ -419,6 +419,58 @@ mod tests {
         let cols = pe_industry_pctile_columns(&acc.pe_inputs);
         assert!(cols.iter().all(|c| c.is_empty()));
     }
+
+    #[test]
+    fn flat_multi_filter_analyst_keys() {
+        let payload = br#"{
+          "AnalystRatings::TargetPrice": 200.0,
+          "AnalystRatings::Rating": 5.0,
+          "Highlights::PERatio": "12.5",
+          "Highlights::MarketCapitalization": "800",
+          "General::Industry": "  Software  ",
+          "Financials::Cash_Flow::yearly": {
+            "2024-12-31": {"freeCashFlow": 80.0}
+          }
+        }"#;
+        let http = MockHttp {
+            body: payload.to_vec(),
+        };
+        let cfg = SyncConfig {
+            rate_limit_per_min: 0,
+            max_retries: 0,
+            backoff_base: Duration::ZERO,
+            ..SyncConfig::default()
+        };
+        let fetcher = Fetcher::new(&http, &cfg);
+        let days = [20240102, 20240103];
+        let snap = compute_symbol(&fetcher, "Z.US", "tok", &days, 100.0);
+        assert_eq!(snap.columns[0].last().map(|(_, v)| *v), Some(100.0));
+        assert_eq!(snap.columns[1].last().map(|(_, v)| *v), Some(1.0));
+        assert!((snap.columns[2].last().unwrap().1 - 0.1).abs() < 1e-9);
+        assert_eq!(snap.pe, Some(12.5));
+        assert_eq!(snap.industry.as_deref(), Some("Software"));
+    }
+
+    #[test]
+    fn fetch_error_yields_empty_snapshot() {
+        struct FailHttp;
+        impl HttpClient for FailHttp {
+            fn get(&self, _url: &str) -> Result<Vec<u8>, HttpError> {
+                Err(HttpError::Status(500))
+            }
+        }
+        let cfg = SyncConfig {
+            rate_limit_per_min: 0,
+            max_retries: 0,
+            backoff_base: Duration::ZERO,
+            ..SyncConfig::default()
+        };
+        let fetcher = Fetcher::new(&FailHttp, &cfg);
+        let snap = compute_symbol(&fetcher, "Z.US", "tok", &[20240102], 50.0);
+        assert!(snap.columns.iter().all(|c| c.is_empty()));
+        assert!(snap.pe.is_none());
+        assert!(snap.industry.is_none());
+    }
 }
 
 // SymbolSnapshot needs Clone for test

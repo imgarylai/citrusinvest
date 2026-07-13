@@ -397,4 +397,100 @@ mod tests {
         assert_eq!(summary.symbols_written, 1);
         assert_eq!(summary.failures.len(), 1);
     }
+
+    #[test]
+    fn snapshot_factors_flag_writes_panels() {
+        let snap = r#"{
+          "AnalystRatings": {"TargetPrice": 120.0, "Rating": 4.0},
+          "Highlights::PERatio": 25.0,
+          "Highlights::MarketCapitalization": 1000.0,
+          "General::Industry": "Software",
+          "Financials::Cash_Flow::yearly": {
+            "2024-09-30": {"date":"2024-09-30","freeCashFlow":100.0}
+          }
+        }"#;
+        // Shared routes: every symbol hits the same eod + fundamentals paths.
+        let http = MockHttp {
+            routes: vec![
+                (
+                    "/eod/".into(),
+                    RefCell::new(vec![Ok(AAPL_EOD.as_bytes().to_vec())]),
+                ),
+                (
+                    "fundamentals/".into(),
+                    RefCell::new(vec![Ok(snap.as_bytes().to_vec())]),
+                ),
+            ],
+        };
+        let dir = std::env::temp_dir().join("pomelo_eodhd_snap_sync");
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut c = cfg();
+        c.include_snapshot_factors = true;
+        // 5 symbols → pe_industry_pctile cohort meets MIN_COHORT.
+        let syms: Vec<String> = (0..5).map(|i| format!("S{i}")).collect();
+        let summary = sync(&http, "demo", &syms, &dir, &c).unwrap();
+        assert_eq!(summary.symbols_written, 5);
+        assert!(summary.snapshot_factor_panels >= 3);
+        assert!(dir.join("panels/analyst_upside_pct.csv.gz").exists());
+        assert!(dir.join("panels/consensus_rating.csv.gz").exists());
+        assert!(dir.join("panels/fcf_yield.csv.gz").exists());
+        assert!(dir.join("panels/pe_industry_pctile.csv.gz").exists());
+    }
+
+    const FUND_FLAT: &str = r#"{
+        "Financials::Income_Statement::yearly": {
+            "2023-09-30": {
+                "date":"2023-09-30","filing_date":"2023-11-03",
+                "totalRevenue":100.0,"grossProfit":40.0,"netIncome":20.0,"operatingIncome":30.0
+            },
+            "2024-09-30": {
+                "date":"2024-09-30","filing_date":"2024-11-01",
+                "totalRevenue":110.0,"grossProfit":44.0,"netIncome":22.0,"operatingIncome":33.0
+            }
+        },
+        "Financials::Balance_Sheet::yearly": {
+            "2023-09-30": {
+                "date":"2023-09-30","filing_date":"2023-11-03",
+                "totalAssets":200.0,"totalLiab":80.0,"totalStockholderEquity":120.0,
+                "netReceivables":10.0,"shortLongTermDebtTotal":50.0
+            },
+            "2024-09-30": {
+                "date":"2024-09-30","filing_date":"2024-11-01",
+                "totalAssets":220.0,"totalLiab":88.0,"totalStockholderEquity":132.0,
+                "netReceivables":11.0,"shortLongTermDebtTotal":55.0
+            }
+        }
+    }"#;
+
+    #[test]
+    fn fundamentals_flag_writes_dense_file() {
+        let http = MockHttp::multi(vec![
+            ("/eod/AAPL.US", AAPL_EOD),
+            ("fundamentals/AAPL.US", FUND_FLAT),
+        ]);
+        let dir = std::env::temp_dir().join("pomelo_eodhd_fund_sync");
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut c = cfg();
+        c.include_fundamentals = true;
+        let summary = sync(&http, "demo", &["AAPL".into()], &dir, &c).unwrap();
+        assert_eq!(summary.symbols_written, 1);
+        assert_eq!(summary.fundamentals_written, 1);
+        assert!(dir.join("fundamentals/AAPL.csv.gz").exists());
+    }
+
+    #[test]
+    fn fundamentals_flag_empty_payload_no_write() {
+        let http = MockHttp::multi(vec![
+            ("/eod/AAPL.US", AAPL_EOD),
+            ("fundamentals/AAPL.US", r#"{}"#),
+        ]);
+        let dir = std::env::temp_dir().join("pomelo_eodhd_fund_empty");
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut c = cfg();
+        c.include_fundamentals = true;
+        let summary = sync(&http, "demo", &["AAPL".into()], &dir, &c).unwrap();
+        assert_eq!(summary.symbols_written, 1);
+        assert_eq!(summary.fundamentals_written, 0);
+        assert!(!dir.join("fundamentals/AAPL.csv.gz").exists());
+    }
 }

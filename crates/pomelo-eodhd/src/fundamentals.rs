@@ -432,4 +432,115 @@ mod tests {
         assert_eq!(snaps[0].visible, 20240930);
         assert!(snaps[0].fell_back);
     }
+
+    #[test]
+    fn extract_nested_financials_form() {
+        let payload = json!({
+            "Financials": {
+                "Income_Statement": {
+                    "yearly": {
+                        "2024-12-31": {
+                            "date": "2024-12-31",
+                            "filing_date": "2025-02-15",
+                            "totalRevenue": "50",
+                            "grossProfit": "20",
+                            "netIncome": "10",
+                            "operatingIncome": "12"
+                        }
+                    }
+                },
+                "Balance_Sheet": {
+                    "yearly": {
+                        "2024-12-31": {
+                            "date": "2024-12-31",
+                            "filing_date": "2025-02-15",
+                            "totalAssets": "100",
+                            "totalLiab": "40",
+                            "totalStockholderEquity": "60",
+                            "netReceivables": "5",
+                            "shortLongTermDebtTotal": "15"
+                        }
+                    }
+                }
+            }
+        });
+        let (is_y, bs_y) = extract_yearly(&payload);
+        assert_eq!(is_y.len(), 1);
+        assert_eq!(bs_y.len(), 1);
+        let snaps = build_snapshots(&is_y, &bs_y);
+        assert_eq!(snaps.len(), 1);
+        assert_eq!(snaps[0].visible, 20250215);
+        assert!((snaps[0].values[10] - 50.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn extract_non_object_root_empty() {
+        let (is_y, bs_y) = extract_yearly(&json!([]));
+        assert!(is_y.is_empty());
+        assert!(bs_y.is_empty());
+        assert!(build_snapshots(&is_y, &bs_y).is_empty());
+    }
+
+    #[test]
+    fn sync_fundamentals_writes_file() {
+        use crate::config::SyncConfig;
+        use crate::http::{Fetcher, HttpClient, HttpError};
+        use pomelo_data::LocalSource;
+        use std::time::Duration;
+
+        struct OkHttp(Vec<u8>);
+        impl HttpClient for OkHttp {
+            fn get(&self, _url: &str) -> Result<Vec<u8>, HttpError> {
+                Ok(self.0.clone())
+            }
+        }
+
+        let body = serde_json::to_vec(&sample_payload()).unwrap();
+        let http = OkHttp(body);
+        let cfg = SyncConfig {
+            rate_limit_per_min: 0,
+            max_retries: 0,
+            backoff_base: Duration::ZERO,
+            ..SyncConfig::default()
+        };
+        let fetcher = Fetcher::new(&http, &cfg);
+        let dir = std::env::temp_dir().join("pomelo_eodhd_fund_unit");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = LocalSource::new(&dir);
+        let days = [20240102, 20240103, 20241102];
+        let wrote = sync_fundamentals(&fetcher, &store, "AAPL", "AAPL.US", "tok", &days).unwrap();
+        assert!(wrote);
+        assert!(dir.join("fundamentals/AAPL.csv.gz").exists());
+    }
+
+    #[test]
+    fn sync_fundamentals_empty_returns_false() {
+        use crate::config::SyncConfig;
+        use crate::http::{Fetcher, HttpClient, HttpError};
+        use pomelo_data::LocalSource;
+        use std::time::Duration;
+
+        struct OkHttp;
+        impl HttpClient for OkHttp {
+            fn get(&self, _url: &str) -> Result<Vec<u8>, HttpError> {
+                Ok(b"{}".to_vec())
+            }
+        }
+
+        let cfg = SyncConfig {
+            rate_limit_per_min: 0,
+            max_retries: 0,
+            backoff_base: Duration::ZERO,
+            ..SyncConfig::default()
+        };
+        let http = OkHttp;
+        let fetcher = Fetcher::new(&http, &cfg);
+        let dir = std::env::temp_dir().join("pomelo_eodhd_fund_empty_unit");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = LocalSource::new(&dir);
+        let wrote = sync_fundamentals(&fetcher, &store, "X", "X.US", "tok", &[20240102]).unwrap();
+        assert!(!wrote);
+    }
 }
