@@ -3,6 +3,8 @@
 use std::cell::Cell;
 use std::time::{Duration, Instant};
 
+use serde_json::Value;
+
 use super::config::SyncConfig;
 
 /// A classified HTTP failure so the retry loop knows whether to back off.
@@ -25,7 +27,6 @@ impl std::fmt::Display for HttpError {
 
 impl HttpError {
     /// Whether retrying (after a backoff) could plausibly succeed.
-    #[allow(dead_code)] // used by Fetcher; exercised in unit tests
     pub(crate) fn retryable(&self) -> bool {
         match self {
             HttpError::Transport(_) => true,
@@ -75,7 +76,6 @@ impl HttpClient for UreqClient {
 }
 
 /// Redact common EODHD token query params for stderr logs.
-#[allow(dead_code)] // used by Fetcher (#194+); unit-tested here
 pub(crate) fn redact(url: &str) -> String {
     for key in ["api_token=", "api_key="] {
         if let Some(i) = url.find(key) {
@@ -91,28 +91,38 @@ pub(crate) fn redact(url: &str) -> String {
 }
 
 // ---- fetcher (throttle + retry) --------------------------------------------
-// Wired for price/fundamentals fetch in #194+; kept compiled so the skeleton
-// matches pomelo-fmp's HTTP pattern and unit tests cover retry/redact.
 
 /// Wraps an [`HttpClient`] with rate-limit throttle and retry/backoff.
-#[allow(dead_code)]
 pub(crate) struct Fetcher<'a, H: HttpClient> {
     http: &'a H,
     cfg: &'a SyncConfig,
-    /// Earliest instant the next request may fire (rate limit).
-    next_ok: Cell<Instant>,
+    last_request: Cell<Option<Instant>>,
 }
 
-#[allow(dead_code)]
 impl<'a, H: HttpClient> Fetcher<'a, H> {
     pub(crate) fn new(http: &'a H, cfg: &'a SyncConfig) -> Self {
         Fetcher {
             http,
             cfg,
-            next_ok: Cell::new(Instant::now()),
+            last_request: Cell::new(None),
         }
     }
 
+    fn throttle(&self) {
+        if self.cfg.rate_limit_per_min == 0 {
+            return;
+        }
+        let min_interval = Duration::from_secs_f64(60.0 / self.cfg.rate_limit_per_min as f64);
+        if let Some(prev) = self.last_request.get() {
+            let elapsed = prev.elapsed();
+            if elapsed < min_interval {
+                std::thread::sleep(min_interval - elapsed);
+            }
+        }
+        self.last_request.set(Some(Instant::now()));
+    }
+
+    /// GET with throttle + bounded exponential backoff.
     pub(crate) fn get(&self, url: &str) -> Result<Vec<u8>, String> {
         let mut attempt = 0u32;
         loop {
@@ -120,43 +130,46 @@ impl<'a, H: HttpClient> Fetcher<'a, H> {
             match self.http.get(url) {
                 Ok(body) => return Ok(body),
                 Err(e) if e.retryable() && attempt < self.cfg.max_retries => {
-                    attempt += 1;
-                    let wait = self
-                        .cfg
-                        .backoff_base
-                        .saturating_mul(2u32.saturating_pow(attempt.saturating_sub(1)));
+                    let wait = self.cfg.backoff_base * 2u32.pow(attempt.min(16));
                     eprintln!(
-                        "retry {attempt}/{} after {} ({wait:?}): {}",
+                        "  retry {}/{} after {}: {} ({:?})",
+                        attempt + 1,
                         self.cfg.max_retries,
                         e,
-                        redact(url)
+                        redact(url),
+                        wait
                     );
                     if !wait.is_zero() {
                         std::thread::sleep(wait);
                     }
+                    attempt += 1;
                 }
-                Err(e) => {
-                    return Err(format!("{}: {}", redact(url), e));
-                }
+                Err(e) => return Err(format!("{e} for {}", redact(url))),
             }
         }
     }
-}
 
-#[allow(dead_code)]
-impl<H: HttpClient> Fetcher<'_, H> {
-    fn throttle(&self) {
-        let rpm = self.cfg.rate_limit_per_min;
-        if rpm == 0 {
-            return;
+    /// GET and parse a JSON array of row objects (EOD list endpoints).
+    pub(crate) fn get_rows(&self, url: &str) -> Result<Vec<Value>, String> {
+        let body = self.get(url)?;
+        let value: Value = serde_json::from_slice(&body)
+            .map_err(|e| format!("bad JSON from {}: {e}", redact(url)))?;
+        match value {
+            Value::Array(rows) => Ok(rows),
+            Value::Object(map) => {
+                if let Some(msg) = map
+                    .get("message")
+                    .or_else(|| map.get("error"))
+                    .or_else(|| map.get("Error Message"))
+                    .and_then(|v| v.as_str())
+                {
+                    Err(format!("EODHD error: {msg}"))
+                } else {
+                    Err(format!("expected a JSON array from {}", redact(url)))
+                }
+            }
+            _ => Err(format!("expected a JSON array from {}", redact(url))),
         }
-        let min_gap = Duration::from_secs_f64(60.0 / f64::from(rpm));
-        let now = Instant::now();
-        let next = self.next_ok.get();
-        if now < next {
-            std::thread::sleep(next - now);
-        }
-        self.next_ok.set(Instant::now() + min_gap);
     }
 }
 

@@ -458,8 +458,7 @@ enum Cmd {
     /// Direct HTTP (no third-party EODHD SDK); the token stays on this machine.
     /// Coverage map: docs/data-sources.md § EODHD.
     ///
-    /// Skeleton (#193): validates args and symbol normalization; price fetch
-    /// lands in a follow-up. Example:
+    /// Example:
     ///   yuzu-cli eodhd-sync --api-token "$EODHD_API_TOKEN" --out ./mydata \
     ///     --symbols AAPL,MSFT --from 20200101 --to 20251231
     #[cfg(feature = "eodhd-sync")]
@@ -1026,12 +1025,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             for (sym, err) in &summary.failures {
                 eprintln!("  FAILED {sym}: {err}");
             }
-            // Skeleton (#193): zero writes is expected — do not fail the process.
             if summary.symbols_written == 0 {
-                eprintln!(
-                    "note: pomelo-eodhd skeleton — no price files written yet \
-                     (prices land in #194; epic #192)"
-                );
+                return Err("no symbols were written".into());
             }
         }
     }

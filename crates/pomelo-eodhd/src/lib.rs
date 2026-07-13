@@ -6,9 +6,9 @@
 //! tree — the same contract as `pomelo-fmp`:
 //!
 //! ```text
-//! <out>/prices/{SYM}.csv.gz        adjusted OHLCV                 (phase #194)
-//! <out>/fundamentals/{SYM}.csv.gz  dense forward-filled factors   (phase #196)
-//! <out>/tracked/universe.csv.gz    symbol,sector,…               (phase #195)
+//! <out>/prices/{SYM}.csv.gz        adjusted OHLCV                 (#194)
+//! <out>/fundamentals/{SYM}.csv.gz  dense forward-filled factors   (#196)
+//! <out>/tracked/universe.csv.gz    symbol,sector,…               (#195)
 //! <out>/panels/{name}.csv.gz       membership / snapshot panels   (later)
 //! ```
 //!
@@ -22,15 +22,19 @@
 //! [`HttpClient`] indirection keeps networking optional
 //! (`--no-default-features`) and testable.
 //!
-//! ## Skeleton status (#193)
+//! ## Status
 //!
-//! Crate + CLI wiring + symbol normalization. Price fetch is intentionally a
-//! no-op until #194. Coverage map: [`docs/data-sources.md`](../../../docs/data-sources.md).
+//! - **Prices (#194):** EOD → full adj OHLC via `adjusted_close/close` scale.
+//! - Fundamentals / industry / index: later epic phases.
+//!
+//! Coverage map: [`docs/data-sources.md`](../../../docs/data-sources.md).
 
 mod config;
 mod http;
+mod price;
 mod symbol;
 mod sync;
+mod util;
 
 pub use config::{SyncConfig, SyncSummary, WriteMode};
 /// The real ureq-backed client — only with the `eodhd-sync` feature.
