@@ -1360,6 +1360,7 @@ dependencies = [
  "pomelo-data",
  "serde_json",
  "ureq",
+ "yuzu-core",
 ]
 
 [[package]]
