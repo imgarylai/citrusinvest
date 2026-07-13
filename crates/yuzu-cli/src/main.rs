@@ -515,6 +515,10 @@ enum Cmd {
         /// (survivorship-honest price files). Uses exchange-symbol-list?delisted=1.
         #[arg(long)]
         include_delisted: bool,
+        /// Best-effort snapshot panels (analyst_upside_pct, consensus_rating,
+        /// fcf_yield, pe_industry_pctile) → panels/. Current-as-of, not history.
+        #[arg(long)]
+        include_snapshot_factors: bool,
         /// Max requests per minute (0 = no throttle).
         #[arg(long, default_value_t = 0)]
         rate_limit: u32,
@@ -1018,6 +1022,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             include_fundamentals,
             include_industry,
             include_delisted,
+            include_snapshot_factors,
             rate_limit,
             max_retries,
             append,
@@ -1061,6 +1066,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 default_exchange: exchange.clone(),
                 include_fundamentals,
                 include_industry,
+                include_snapshot_factors,
                 rate_limit_per_min: rate_limit,
                 max_retries,
                 backoff_base: std::time::Duration::from_secs(2),
@@ -1112,13 +1118,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let summary =
                 yuzu_cli::eodhd::sync_into(&client, &api_token, &explicit, &out_store, &cfg)?;
             eprintln!(
-                "done: {} written, {} skipped, {} filtered, {} price rows, {} fundamentals, industry={}, {} failures",
+                "done: {} written, {} skipped, {} filtered, {} price rows, {} fundamentals, industry={}, snapshot_panels={}, {} failures",
                 summary.symbols_written,
                 summary.symbols_skipped,
                 summary.symbols_filtered,
                 summary.price_rows,
                 summary.fundamentals_written,
                 summary.industry_written,
+                summary.snapshot_factor_panels,
                 summary.failures.len(),
             );
             for (sym, err) in &summary.failures {

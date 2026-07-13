@@ -13,7 +13,8 @@
 - [Engine architecture](docs/backtest-engine.md): panels, NAV model, metrics, the `Report` JSON contract.
 - [Input data layout](docs/data-layout.md): bring-your-own prices/fundamentals/panels tree, series names, PIT notes.
 - [FMP Starter gaps vs features](docs/fmp-data-source.md): which ops/backtests need which panels when data is short/coarse.
-- [Data sources beyond FMP](docs/data-sources.md): WIP block→vendor map and assemble recipes (not a second full sync CLI).
+- [Data sources beyond FMP](docs/data-sources.md): block→vendor map and assemble recipes.
+- [EODHD data source](docs/eodhd-data-source.md): second official sync path (`eodhd-sync` / `pomelo-eodhd`).
 - [Research (factor / event)](docs/research.md): rank-IC/quantile factor reports and event studies — JSON, not lemon ops.
 - [Strategy envelope](docs/strategy-envelope.md): the shareable, versioned strategy document + `lemon check` validation + reproducibility.
 - [Contributing & release flow](CONTRIBUTING.md).

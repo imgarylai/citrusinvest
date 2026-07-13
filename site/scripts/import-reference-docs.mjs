@@ -22,6 +22,7 @@ const DOCS = [
   ['docs/data-layout.md', 'data-layout', 'Data layout'],
   ['docs/data-sources.md', 'data-sources', 'Data sources (WIP)'],
   ['docs/fmp-data-source.md', 'fmp-data-source', 'FMP data source'],
+  ['docs/eodhd-data-source.md', 'eodhd-data-source', 'EODHD data source'],
   ['docs/research.md', 'research', 'Research (factor / event)'],
   ['docs/strategy-envelope.md', 'strategy-envelope', 'Strategy envelope'],
 ];

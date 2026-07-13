@@ -102,6 +102,7 @@ export default defineConfig({
             { label: 'Data layout', slug: 'reference/data-layout' },
             { label: 'Data sources (WIP)', slug: 'reference/data-sources' },
             { label: 'FMP data source', slug: 'reference/fmp-data-source' },
+            { label: 'EODHD data source', slug: 'reference/eodhd-data-source' },
             { label: 'Research (factor / event)', slug: 'reference/research' },
             { label: 'Strategy envelope', slug: 'reference/strategy-envelope' },
             { label: 'API reference (docs.rs)', slug: 'reference/api' },
