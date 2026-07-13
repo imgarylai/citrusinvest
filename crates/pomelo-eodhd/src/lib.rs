@@ -26,17 +26,20 @@
 //! - **Industry + delisted (#195):** sector map; delisted list for universe union.
 //! - **Fundamentals (#196):** yearly statements → dense `FUNDAMENTAL_FIELDS` + `report_event`.
 //! - **Index PIT + screener (#197):** `in_sp500` panel; `eodhd-symbols` universe helper.
+//! - **Snapshot + docs (#198):** best-effort analyst/fcf/pe_industry panels; `docs/eodhd-data-source.md`.
 //!
 //! Coverage map: [`docs/data-sources.md`](../../../docs/data-sources.md).
 
 mod config;
 mod delisted;
+mod factors;
 mod fundamentals;
 mod http;
 mod index;
 mod industry;
 mod price;
 mod screener;
+mod snapshot;
 mod symbol;
 mod sync;
 mod util;

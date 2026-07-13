@@ -17,6 +17,7 @@ can honestly backtest (and which are blocked by missing panels) is documented in
 comparison table.
 **Other vendors / assemble a tree without FMP** (WIP):
 [`data-sources.md`](data-sources.md).
+**EODHD official sync:** [`eodhd-data-source.md`](eodhd-data-source.md).
 
 ---
 

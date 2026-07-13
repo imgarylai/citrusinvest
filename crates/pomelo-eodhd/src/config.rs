@@ -24,6 +24,8 @@ pub struct SyncConfig {
     pub include_fundamentals: bool,
     /// Also fetch sector map → `tracked/universe.csv.gz`.
     pub include_industry: bool,
+    /// Also compute best-effort snapshot panels (analyst, fcf_yield, pe_industry_pctile).
+    pub include_snapshot_factors: bool,
     /// Max requests per minute (`0` = no throttle). Tune to your EODHD plan.
     pub rate_limit_per_min: u32,
     /// Retries per request on a retryable error before giving up on the symbol.
@@ -42,6 +44,7 @@ impl Default for SyncConfig {
             default_exchange: "US".to_string(),
             include_fundamentals: false,
             include_industry: false,
+            include_snapshot_factors: false,
             rate_limit_per_min: 0,
             max_retries: 4,
             backoff_base: Duration::from_secs(2),
@@ -65,6 +68,8 @@ pub struct SyncSummary {
     pub fundamentals_written: usize,
     /// Whether `tracked/universe.csv.gz` was written this run.
     pub industry_written: bool,
+    /// Number of snapshot-factor panels written under `panels/`.
+    pub snapshot_factor_panels: usize,
     /// Per-symbol failures (symbol, message); batch continues after a failure.
     pub failures: Vec<(String, String)>,
 }

@@ -11,6 +11,7 @@ use super::fundamentals::sync_fundamentals;
 use super::http::{Fetcher, HttpClient};
 use super::industry::{encode_industry, fetch_profile, load_existing_industry, INDUSTRY_KEY};
 use super::price::{parse_price_rows, price_url, read_existing_prices};
+use super::snapshot::{compute_symbol, SnapshotAccum};
 use super::symbol::split_symbol;
 
 /// EODHD API root (no trailing slash).
@@ -62,6 +63,7 @@ pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
     } else {
         BTreeMap::new()
     };
+    let mut snapshots = cfg.include_snapshot_factors.then(SnapshotAccum::new);
 
     for raw in symbols {
         let Some((layout, eodhd)) = split_symbol(raw, &cfg.default_exchange) else {
@@ -168,6 +170,12 @@ pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
             }
         }
 
+        if let Some(acc) = snapshots.as_mut() {
+            let last_close = rows.last().map(|r| r.adj_close).unwrap_or(f64::NAN);
+            let snap = compute_symbol(&fetcher, &eodhd, api_token, &price_days, last_close);
+            acc.push(layout.clone(), snap, &price_days);
+        }
+
         summary.symbols_written += 1;
         summary.price_rows += rows.len();
         eprintln!("{layout}: wrote {} price rows", rows.len());
@@ -178,6 +186,10 @@ pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
         store.put(INDUSTRY_KEY, &bytes).map_err(|e| e.to_string())?;
         summary.industry_written = true;
         eprintln!("wrote {} industry rows to {INDUSTRY_KEY}", industry.len());
+    }
+
+    if let Some(acc) = snapshots {
+        summary.snapshot_factor_panels = acc.write_panels(store).map_err(|e| e.to_string())?;
     }
 
     if !any_valid {

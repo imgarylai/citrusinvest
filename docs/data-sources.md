@@ -75,7 +75,7 @@ adapter.”
 | **One-shot (official)** | `yuzu-cli fmp-sync …` → data root | Supported |
 | **BYO** | Write the [data-layout](data-layout.md) tree yourself | Supported |
 | **Assemble** | Fill blocks from different vendors into **one** data root | Supported as a pattern; recipes below are sketches |
-| **Second full adapter** | `pomelo-eodhd` + `yuzu-cli eodhd-sync` (epic [#192](https://github.com/citrusquant/citrusquant/issues/192)) | Prices + industry/delisted + fundies + SPX PIT + screener (#194–#197); snapshot docs next (#198) |
+| **Second full adapter** | `pomelo-eodhd` + `yuzu-cli eodhd-sync` (epic [#192](https://github.com/citrusquant/citrusquant/issues/192)) | Full path live (#193–#198); see [`eodhd-data-source.md`](eodhd-data-source.md) |
 
 Engine / `pomelo-data` only need the finished tree (local or S3 via
 `pomelo-s3`). Optional quality pass: `yuzu-cli data-audit`.
@@ -237,6 +237,7 @@ EODHD uses `{CODE}.{EXCHANGE}` (e.g. `AAPL.US`). citrusquant layout keys are bar
 ## Related docs
 
 - [`data-layout.md`](data-layout.md) — on-disk contract (source of truth for shapes)
+- [`eodhd-data-source.md`](eodhd-data-source.md) — EODHD CLI, flags, plans, gaps
 - [`fmp-data-source.md`](fmp-data-source.md) — FMP Starter vs feature families
 - [`backtest-engine.md`](backtest-engine.md) — panels / backtest semantics
-- crate `pomelo-fmp` — only full vendor sync in-tree today
+- crates `pomelo-fmp`, `pomelo-eodhd` — official one-shot syncs
