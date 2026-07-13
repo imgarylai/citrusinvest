@@ -7,9 +7,9 @@
 //! contract as `pomelo-fmp` / `pomelo-eodhd`:
 //!
 //! ```text
-//! <out>/prices/{SYM}.csv.gz        adjusted OHLCV                 (later #214)
+//! <out>/prices/{SYM}.csv.gz        adjusted OHLCV                 (#214)
 //! <out>/fundamentals/{SYM}.csv.gz  dense forward-filled factors   (later #216)
-//! <out>/tracked/universe.csv.gz    symbol,sector,market_cap       (later #215)
+//! <out>/tracked/universe.csv.gz    symbol,sector,market_cap       (#215)
 //! <out>/panels/{name}.csv.gz       membership / snapshot panels   (later)
 //! ```
 //!
@@ -25,24 +25,29 @@
 //!
 //! - **Skeleton (#213):** crate + `HttpClient` + CLI `av-sync`.
 //! - **Prices (#214):** `TIME_SERIES_DAILY_ADJUSTED` → `prices/` with adj OHLC scale.
-//! - Fundies / industry / delisted / snapshot: later phases under epic #209.
+//! - **Industry + delisted (#215):** OVERVIEW sector map; `LISTING_STATUS` delisted union.
+//! - Fundies / snapshot: later phases under epic #209.
 //!
 //! Coverage / accepted gaps: spike
 //! [#207](https://github.com/citrusquant/citrusquant/issues/207) and
 //! [`docs/data-sources.md`](../../../docs/data-sources.md) § Alpha Vantage.
 
 mod config;
+mod delisted;
 mod http;
+mod industry;
 mod price;
 mod symbol;
 mod sync;
 mod util;
 
 pub use config::{SyncConfig, SyncSummary, WriteMode};
+pub use delisted::{fetch_delisted, DelistedSymbol};
 /// The real ureq-backed client — only with the `alpha-vantage-sync` feature.
 #[cfg(feature = "alpha-vantage-sync")]
 pub use http::UreqClient;
 pub use http::{HttpClient, HttpError};
+pub use industry::INDUSTRY_KEY;
 pub use symbol::{layout_symbol, parse_symbols_list, split_symbol};
 pub use sync::{sync, sync_into, ALPHA_VANTAGE_BASE};
 

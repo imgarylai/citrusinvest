@@ -1,5 +1,6 @@
 //! Orchestrate multi-symbol Alpha Vantage → data-layout sync.
 
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use pomelo_data::csv_io::write_series;
@@ -7,6 +8,7 @@ use pomelo_data::{LocalSource, ObjectSink, ObjectSource, PRICES_DIR};
 
 use super::config::{SyncConfig, SyncSummary, WriteMode};
 use super::http::{Fetcher, HttpClient};
+use super::industry::{encode_industry, fetch_overview, load_existing_industry, INDUSTRY_KEY};
 use super::price::{parse_price_payload, price_url, read_existing_prices};
 use super::symbol::split_symbol;
 
@@ -27,8 +29,9 @@ pub fn sync<H: HttpClient>(
 
 /// Storage-agnostic core: sync into any `store` (local disk or S3/R2).
 ///
-/// Fetches `TIME_SERIES_DAILY_ADJUSTED` → `prices/{SYM}.csv.gz` with adj OHLC
-/// scale. Fundamentals / industry / snapshot flags are reserved for later phases.
+/// Always fetches `TIME_SERIES_DAILY_ADJUSTED` → `prices/{SYM}.csv.gz`.
+/// With `include_industry`, builds `tracked/universe.csv.gz` from OVERVIEW.
+/// Fundamentals / snapshot flags are reserved for later phases.
 pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
     http: &H,
     api_key: &str,
@@ -52,12 +55,14 @@ pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
     let fetcher = Fetcher::new(http, cfg);
     let mut summary = SyncSummary::default();
     let mut any_valid = false;
+    let mut industry: BTreeMap<String, (String, Option<f64>)> = if cfg.include_industry {
+        load_existing_industry(store)
+    } else {
+        BTreeMap::new()
+    };
 
     if cfg.include_fundamentals {
         eprintln!("note: --include-fundamentals is not implemented yet (#216); ignoring");
-    }
-    if cfg.include_industry {
-        eprintln!("note: --include-industry is not implemented yet (#215); ignoring");
     }
     if cfg.include_snapshot_factors {
         eprintln!("note: --include-snapshot-factors is not implemented yet (#218); ignoring");
@@ -76,6 +81,17 @@ pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
         if cfg.mode == WriteMode::Resume && store.get(&price_key).ok().flatten().is_some() {
             eprintln!("{layout}: already present, skipping (resume)");
             summary.symbols_skipped += 1;
+            if cfg.include_industry && !industry.contains_key(&layout) {
+                match fetch_overview(&fetcher, &av, api_key) {
+                    Ok(Some(p)) => {
+                        if let Some(sector) = p.sector {
+                            industry.insert(layout.clone(), (sector, p.market_cap));
+                        }
+                    }
+                    Ok(None) => {}
+                    Err(e) => eprintln!("{layout}: industry fetch skipped: {e}"),
+                }
+            }
             continue;
         }
 
@@ -124,9 +140,33 @@ pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
             }
         }
 
+        if cfg.include_industry {
+            match fetch_overview(&fetcher, &av, api_key) {
+                Ok(Some(p)) => {
+                    if let Some(sector) = p.sector {
+                        industry.insert(layout.clone(), (sector, p.market_cap));
+                    } else {
+                        eprintln!("{layout}: no Sector in OVERVIEW");
+                    }
+                }
+                Ok(None) => eprintln!("{layout}: no OVERVIEW for industry map"),
+                Err(e) => {
+                    eprintln!("{layout}: industry fetch failed: {e}");
+                    summary.failures.push((format!("{layout} (industry)"), e));
+                }
+            }
+        }
+
         summary.symbols_written += 1;
         summary.price_rows += rows.len();
         eprintln!("{layout}: wrote {} price rows", rows.len());
+    }
+
+    if cfg.include_industry && !industry.is_empty() {
+        let bytes = encode_industry(&industry).map_err(|e| e.to_string())?;
+        store.put(INDUSTRY_KEY, &bytes).map_err(|e| e.to_string())?;
+        summary.industry_written = true;
+        eprintln!("wrote {} industry rows to {INDUSTRY_KEY}", industry.len());
     }
 
     if !any_valid {
@@ -141,14 +181,22 @@ mod tests {
     use crate::http::{HttpClient, HttpError};
     use pomelo_data::csv_io::parse_series;
     use pomelo_data::{Field, LocalSource};
+    use std::cell::RefCell;
     use std::time::Duration;
 
     struct MockHttp {
-        body: Vec<u8>,
+        /// If URL matches substring → body; first match wins. Empty body uses last.
+        routes: Vec<(String, RefCell<Vec<u8>>)>,
+        default: Vec<u8>,
     }
     impl HttpClient for MockHttp {
-        fn get(&self, _url: &str) -> Result<Vec<u8>, HttpError> {
-            Ok(self.body.clone())
+        fn get(&self, url: &str) -> Result<Vec<u8>, HttpError> {
+            for (pat, body) in &self.routes {
+                if url.contains(pat) {
+                    return Ok(body.borrow().clone());
+                }
+            }
+            Ok(self.default.clone())
         }
     }
 
@@ -187,11 +235,19 @@ mod tests {
         }
     }"#;
 
+    const IBM_OV: &str = r#"{
+        "Symbol": "IBM",
+        "Sector": "TECHNOLOGY",
+        "Industry": "INFORMATION TECHNOLOGY SERVICES",
+        "MarketCapitalization": "1000000000"
+    }"#;
+
     #[test]
     fn rejects_empty_key_and_symbols() {
         let dir = std::env::temp_dir().join("pomelo_av_rej");
         let http = MockHttp {
-            body: IBM_TS.as_bytes().to_vec(),
+            routes: vec![],
+            default: IBM_TS.as_bytes().to_vec(),
         };
         assert!(sync(&http, "", &["AAPL".into()], &dir, &cfg()).is_err());
         assert!(sync(&http, "tok", &[], &dir, &cfg()).is_err());
@@ -202,7 +258,8 @@ mod tests {
         let dir = std::env::temp_dir().join("pomelo_av_prices");
         let _ = std::fs::remove_dir_all(&dir);
         let http = MockHttp {
-            body: IBM_TS.as_bytes().to_vec(),
+            routes: vec![],
+            default: IBM_TS.as_bytes().to_vec(),
         };
         let summary = sync(&http, "demo", &["IBM".into()], &dir, &cfg()).unwrap();
         assert_eq!(summary.symbols_written, 1);
@@ -218,11 +275,36 @@ mod tests {
     }
 
     #[test]
+    fn writes_industry_map_when_flagged() {
+        let dir = std::env::temp_dir().join("pomelo_av_industry");
+        let _ = std::fs::remove_dir_all(&dir);
+        let http = MockHttp {
+            routes: vec![
+                (
+                    "TIME_SERIES_DAILY_ADJUSTED".into(),
+                    RefCell::new(IBM_TS.as_bytes().to_vec()),
+                ),
+                ("OVERVIEW".into(), RefCell::new(IBM_OV.as_bytes().to_vec())),
+            ],
+            default: b"{}".to_vec(),
+        };
+        let mut c = cfg();
+        c.include_industry = true;
+        let summary = sync(&http, "demo", &["IBM".into()], &dir, &c).unwrap();
+        assert!(summary.industry_written);
+        let text = crate::industry::decode_csv_text(
+            &LocalSource::new(&dir).get(INDUSTRY_KEY).unwrap().unwrap(),
+        );
+        assert!(text.contains("IBM,TECHNOLOGY,1000000000"), "{text}");
+    }
+
+    #[test]
     fn resume_skips_existing() {
         let dir = std::env::temp_dir().join("pomelo_av_resume");
         let _ = std::fs::remove_dir_all(&dir);
         let http = MockHttp {
-            body: IBM_TS.as_bytes().to_vec(),
+            routes: vec![],
+            default: IBM_TS.as_bytes().to_vec(),
         };
         sync(&http, "demo", &["IBM".into()], &dir, &cfg()).unwrap();
         let mut c = cfg();
@@ -243,7 +325,8 @@ mod tests {
             "2024-01-03":{"1. open":"10.1","2. high":"11.5","3. low":"9.8","4. close":"10.8","5. adjusted close":"10.8","6. volume":"1100"}
         }}"#;
         let http = MockHttp {
-            body: day1.as_bytes().to_vec(),
+            routes: vec![],
+            default: day1.as_bytes().to_vec(),
         };
         let mut c = cfg();
         c.from = 20240102;
@@ -251,7 +334,8 @@ mod tests {
         sync(&http, "demo", &["IBM".into()], &dir, &c).unwrap();
 
         let http2 = MockHttp {
-            body: day2.as_bytes().to_vec(),
+            routes: vec![],
+            default: day2.as_bytes().to_vec(),
         };
         c.from = 20240103;
         c.to = 20240103;
@@ -274,7 +358,8 @@ mod tests {
     fn rejects_inverted_dates() {
         let dir = std::env::temp_dir().join("pomelo_av_dates");
         let http = MockHttp {
-            body: b"{}".to_vec(),
+            routes: vec![],
+            default: b"{}".to_vec(),
         };
         let mut c = cfg();
         c.from = 20250101;
@@ -286,9 +371,61 @@ mod tests {
     fn invalid_symbols_only_errors() {
         let dir = std::env::temp_dir().join("pomelo_av_bad");
         let http = MockHttp {
-            body: b"{}".to_vec(),
+            routes: vec![],
+            default: b"{}".to_vec(),
         };
         let err = sync(&http, "tok", &[".".into(), "  ".into()], &dir, &cfg()).unwrap_err();
         assert!(err.contains("no valid symbols"), "{err}");
+    }
+
+    #[test]
+    fn resume_fills_missing_industry() {
+        let dir = std::env::temp_dir().join("pomelo_av_resume_ind");
+        let _ = std::fs::remove_dir_all(&dir);
+        let http = MockHttp {
+            routes: vec![
+                (
+                    "TIME_SERIES_DAILY_ADJUSTED".into(),
+                    RefCell::new(IBM_TS.as_bytes().to_vec()),
+                ),
+                ("OVERVIEW".into(), RefCell::new(IBM_OV.as_bytes().to_vec())),
+            ],
+            default: b"{}".to_vec(),
+        };
+        // First pass: prices only
+        sync(&http, "demo", &["IBM".into()], &dir, &cfg()).unwrap();
+        // Resume with industry
+        let mut c = cfg();
+        c.mode = WriteMode::Resume;
+        c.include_industry = true;
+        let summary = sync(&http, "demo", &["IBM".into()], &dir, &c).unwrap();
+        assert_eq!(summary.symbols_skipped, 1);
+        assert!(summary.industry_written);
+        assert!(dir.join("tracked/universe.csv.gz").exists());
+    }
+
+    #[test]
+    fn industry_missing_sector_skips_row() {
+        let dir = std::env::temp_dir().join("pomelo_av_ind_empty");
+        let _ = std::fs::remove_dir_all(&dir);
+        let empty_ov = r#"{"Symbol":"IBM","Name":"IBM"}"#;
+        let http = MockHttp {
+            routes: vec![
+                (
+                    "TIME_SERIES_DAILY_ADJUSTED".into(),
+                    RefCell::new(IBM_TS.as_bytes().to_vec()),
+                ),
+                (
+                    "OVERVIEW".into(),
+                    RefCell::new(empty_ov.as_bytes().to_vec()),
+                ),
+            ],
+            default: b"{}".to_vec(),
+        };
+        let mut c = cfg();
+        c.include_industry = true;
+        let summary = sync(&http, "demo", &["IBM".into()], &dir, &c).unwrap();
+        assert_eq!(summary.symbols_written, 1);
+        assert!(!summary.industry_written);
     }
 }
