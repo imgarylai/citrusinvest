@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0](https://github.com/citrusquant/citrusquant/compare/pomelo-s3-v0.9.0...pomelo-s3-v0.10.0) - 2026-07-13
+
+### Added
+
+- *(pomelo-eodhd)* snapshot factors + eodhd-data-source docs ([#198](https://github.com/citrusquant/citrusquant/pull/198))
+- *(pomelo-eodhd)* crate skeleton + yuzu-cli eodhd-sync ([#193](https://github.com/citrusquant/citrusquant/pull/193))
+
+### Other
+
+- add WIP data-sources guide for non-FMP assemble paths
+
 ## [0.9.0](https://github.com/citrusquant/citrusquant/compare/pomelo-s3-v0.8.2...pomelo-s3-v0.9.0) - 2026-07-13
 
 ### Fixed
