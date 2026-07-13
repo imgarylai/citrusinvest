@@ -75,5 +75,10 @@ mod tests {
         let cohort = [10.0, 20.0, 30.0, 40.0, 50.0];
         assert_eq!(pe_industry_pctile(30.0, &cohort), Some(50.0));
         assert_eq!(pe_industry_pctile(30.0, &[10.0, 20.0]), None);
+        assert_eq!(pe_industry_pctile(-1.0, &cohort), None);
+        assert_eq!(percentile_rank(&[], 1.0), 0.0);
+        assert_eq!(percentile_rank(&[f64::NAN, 10.0], 10.0), 0.5);
+        assert!(analyst_upside_pct(1.0, 0.0).is_none());
+        assert!(eodhd_rating_to_consensus(f64::NAN).is_none());
     }
 }
