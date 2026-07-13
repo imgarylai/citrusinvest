@@ -174,7 +174,10 @@ mod tests {
             redact("https://eodhd.com/api/eod/AAPL.US?api_token=SECRET"),
             "https://eodhd.com/api/eod/AAPL.US?api_token=***"
         );
-        assert_eq!(redact("https://eodhd.com/api/eod/AAPL.US"), "https://eodhd.com/api/eod/AAPL.US");
+        assert_eq!(
+            redact("https://eodhd.com/api/eod/AAPL.US"),
+            "https://eodhd.com/api/eod/AAPL.US"
+        );
     }
 
     #[test]
