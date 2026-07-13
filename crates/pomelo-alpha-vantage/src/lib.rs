@@ -21,17 +21,22 @@
 //! The key never leaves the machine; we neither host nor redistribute Alpha
 //! Vantage data. AV stays **out** of `yuzu-core` / `pomelo-data` / WASM.
 //!
-//! ## Status (skeleton #213)
+//! ## Status
 //!
-//! Crate shape + CLI stub only: validates config/symbols; does **not** fetch
-//! prices yet. Coverage / accepted gaps: spike
+//! - **Skeleton (#213):** crate + `HttpClient` + CLI `av-sync`.
+//! - **Prices (#214):** `TIME_SERIES_DAILY_ADJUSTED` → `prices/` with adj OHLC scale.
+//! - Fundies / industry / delisted / snapshot: later phases under epic #209.
+//!
+//! Coverage / accepted gaps: spike
 //! [#207](https://github.com/citrusquant/citrusquant/issues/207) and
 //! [`docs/data-sources.md`](../../../docs/data-sources.md) § Alpha Vantage.
 
 mod config;
 mod http;
+mod price;
 mod symbol;
 mod sync;
+mod util;
 
 pub use config::{SyncConfig, SyncSummary, WriteMode};
 /// The real ureq-backed client — only with the `alpha-vantage-sync` feature.
