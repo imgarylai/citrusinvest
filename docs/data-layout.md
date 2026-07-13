@@ -15,9 +15,10 @@ If you load data from an **FMP Starter**-class key: which library features you
 can honestly backtest (and which are blocked by missing panels) is documented in
 [`fmp-data-source.md`](fmp-data-source.md) — feature/series gaps, not a plan
 comparison table.
-**Other vendors / assemble a tree without FMP** (WIP):
+**Multi-vendor stance, assemble recipes, FMP vs EODHD gaps:**
 [`data-sources.md`](data-sources.md).
-**EODHD official sync:** [`eodhd-data-source.md`](eodhd-data-source.md).
+**Official syncs:** [`fmp-data-source.md`](fmp-data-source.md) ·
+[`eodhd-data-source.md`](eodhd-data-source.md).
 
 ---
 
@@ -420,6 +421,6 @@ check table and the shallow-vs-deep cost tradeoff over S3.
 
 - [`backtest-engine.md`](backtest-engine.md) — panels, backtest, Report JSON  
 - [`lemon.md`](lemon.md) — strategy language  
-- [`data-sources.md`](data-sources.md) — non-FMP / multi-source options (**WIP**)  
+- [`data-sources.md`](data-sources.md) — multi-source stance, official adapters, assemble  
 - [`fmp-data-source.md`](fmp-data-source.md) — FMP Starter vs feature families  
 - [`crates/pomelo-data/README.md`](../crates/pomelo-data/README.md) — crate feature flags  
