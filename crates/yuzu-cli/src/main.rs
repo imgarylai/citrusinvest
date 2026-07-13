@@ -561,12 +561,14 @@ enum Cmd {
     /// Sync Alpha Vantage data with YOUR OWN API key into a `data-layout.md` tree.
     ///
     /// Optional vendor path (epic #209). Prices: TIME_SERIES_DAILY_ADJUSTED →
-    /// prices/ with adj OHLC scale (outputsize=full). Fundies/industry later.
+    /// prices/ with adj OHLC scale (outputsize=full). Industry from OVERVIEW;
+    /// delisted via LISTING_STATUS. Fundies later (#216).
     /// Coverage / gaps: docs/data-sources.md § Alpha Vantage.
     ///
     /// Example:
     ///   yuzu-cli av-sync --api-key "$ALPHA_VANTAGE_API_KEY" --out ./mydata \
-    ///     --symbols AAPL,MSFT --from 20200101 --to 20251231
+    ///     --symbols AAPL,MSFT --from 20200101 --to 20251231 \
+    ///     --include-industry --include-delisted
     #[cfg(feature = "alpha-vantage-sync")]
     AvSync {
         /// Alpha Vantage API key (kept local). Falls back to
@@ -589,13 +591,17 @@ enum Cmd {
         from: i32,
         #[arg(long, default_value_t = 20991231)]
         to: i32,
-        /// Also densify statement factors (later phase).
+        /// Also densify statement factors (later phase #216).
         #[arg(long)]
         include_fundamentals: bool,
-        /// Also fetch sector map (later phase).
+        /// Also fetch sector map from OVERVIEW → tracked/universe.csv.gz.
         #[arg(long)]
         include_industry: bool,
-        /// Best-effort snapshot panels (later phase).
+        /// Also union LISTING_STATUS delisted names into the sync list
+        /// (survivorship-honest price files when those bars still exist).
+        #[arg(long)]
+        include_delisted: bool,
+        /// Best-effort snapshot panels (later phase #218).
         #[arg(long)]
         include_snapshot_factors: bool,
         /// Max requests per minute (0 = no throttle).
@@ -1212,6 +1218,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             to,
             include_fundamentals,
             include_industry,
+            include_delisted,
             include_snapshot_factors,
             rate_limit,
             max_retries,
@@ -1237,9 +1244,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             let mut seen = std::collections::HashSet::new();
             explicit.retain(|s| seen.insert(s.clone()));
-            if explicit.is_empty() {
-                return Err("provide --symbols and/or --symbols-file".into());
-            }
+
             let mode = if resume {
                 yuzu_cli::alpha_vantage::WriteMode::Resume
             } else if append {
@@ -1260,6 +1265,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 mode,
             };
             let client = yuzu_cli::alpha_vantage::UreqClient::new();
+
+            if include_delisted {
+                eprintln!("fetching delisted universe from Alpha Vantage LISTING_STATUS…");
+                let delisted = yuzu_cli::alpha_vantage::fetch_delisted(&client, &api_key, &cfg)?;
+                let before = explicit.len();
+                for d in delisted {
+                    if seen.insert(d.symbol.clone()) {
+                        explicit.push(d.symbol);
+                    }
+                }
+                eprintln!("delisted: +{} names unioned in", explicit.len() - before);
+            }
+            if explicit.is_empty() {
+                return Err(
+                    "provide --symbols and/or --symbols-file, or --include-delisted".into(),
+                );
+            }
+
             let out_store = pomelo_s3::OutStore::parse(&out)?;
             let summary =
                 yuzu_cli::alpha_vantage::sync_into(&client, &api_key, &explicit, &out_store, &cfg)?;
