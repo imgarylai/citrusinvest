@@ -1,0 +1,26 @@
+[package]
+name = "pomelo-finnhub"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+rust-version.workspace = true
+description = "Bring-your-own-key Finnhub data sync for the yuzu backtest engine. Writes a data-layout tree to any ObjectSink (local disk or S3/R2). No Finnhub data redistributed."
+keywords = ["finnhub", "backtesting", "finance", "market-data"]
+categories = ["finance"]
+
+[dependencies]
+yuzu-core = { path = "../yuzu-core", version = "0.10.0" }
+pomelo-data = { path = "../pomelo-data", version = "0.10.0" }
+serde_json = { workspace = true }
+flate2 = { workspace = true }
+# Direct HTTP (no third-party Finnhub SDK). Optional behind default-on
+# `finnhub-sync` so dependents can supply their own `HttpClient` without TLS.
+ureq = { version = "3.3.0", default-features = false, features = ["rustls"], optional = true }
+
+[features]
+default = ["finnhub-sync"]
+# The real ureq-backed `UreqClient`. Disable for a networking-free dependent
+# that supplies its own `HttpClient`.
+finnhub-sync = ["dep:ureq"]
