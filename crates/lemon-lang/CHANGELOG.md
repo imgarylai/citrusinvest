@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0](https://github.com/citrusquant/citrusquant/compare/lemon-lang-v0.8.2...lemon-lang-v0.9.0) - 2026-07-13
+
+### Fixed
+
+- correct doc drift (rise/fall, op counts, crate publish list, Parquet)
+
+### Other
+
+- *(lemon)* parser edge cases must not panic
+
 ## [0.8.1](https://github.com/citrusquant/citrusquant/compare/lemon-lang-v0.8.0...lemon-lang-v0.8.1) - 2026-07-12
 
 ### Other
