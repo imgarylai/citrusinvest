@@ -160,4 +160,81 @@ mod tests {
         assert!(u.contains("to=2024-01-04"));
         assert!(u.contains("fmt=json"));
     }
+
+    #[test]
+    fn zero_close_uses_factor_one() {
+        let rows = vec![json!({
+            "date": "2024-01-02",
+            "open": 1.0,
+            "high": 1.0,
+            "low": 1.0,
+            "close": 0.0,
+            "adjusted_close": 5.0,
+            "volume": 1
+        })];
+        let out = parse_price_rows(&rows, &cfg());
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].adj_close, 5.0);
+        assert_eq!(out[0].adj_open, 1.0); // factor 1.0 when close==0
+    }
+
+    #[test]
+    fn missing_adj_close_falls_back_to_close() {
+        let rows = vec![json!({
+            "date": "2024-01-02",
+            "open": 9.0,
+            "high": 11.0,
+            "low": 8.0,
+            "close": 10.0,
+            "volume": 7
+        })];
+        let out = parse_price_rows(&rows, &cfg());
+        assert_eq!(out[0].adj_close, 10.0);
+        assert_eq!(out[0].adj_open, 9.0);
+        assert_eq!(out[0].volume, 7.0);
+    }
+
+    #[test]
+    fn skips_non_object_and_bad_dates_dedupes() {
+        let rows = vec![
+            json!("skip-me"),
+            json!({"date": "nope", "close": 1.0}),
+            json!({"date": "2024-01-02", "close": 1.0, "adjusted_close": 1.0}),
+            json!({"date": "2024-01-02", "close": 2.0, "adjusted_close": 2.0}),
+        ];
+        let out = parse_price_rows(&rows, &cfg());
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].adj_close, 1.0); // first wins after dedup_by_key
+    }
+
+    #[test]
+    fn read_existing_prices_roundtrip() {
+        use pomelo_data::csv_io::write_series;
+        use pomelo_data::LocalSource;
+
+        let dir = std::env::temp_dir().join("pomelo_eodhd_read_existing");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("prices")).unwrap();
+        let rows = vec![OhlcvRow {
+            day: 20240102,
+            adj_open: 1.0,
+            adj_high: 2.0,
+            adj_low: 0.5,
+            adj_close: 1.5,
+            volume: 9.0,
+        }];
+        let bytes = write_series(&rows).unwrap();
+        std::fs::write(dir.join("prices/AAA.csv.gz"), bytes).unwrap();
+        let src = LocalSource::new(&dir);
+        let map = read_existing_prices(&src, "AAA");
+        assert_eq!(map.len(), 1);
+        let r = map.get(&20240102).unwrap();
+        assert_eq!(r.adj_close, 1.5);
+        assert_eq!(r.adj_open, 1.0);
+        assert_eq!(r.adj_high, 2.0);
+        assert_eq!(r.adj_low, 0.5);
+        assert_eq!(r.volume, 9.0);
+
+        assert!(read_existing_prices(&src, "MISSING").is_empty());
+    }
 }
