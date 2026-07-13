@@ -20,6 +20,7 @@ const DOCS = [
   ['docs/lemon.md', 'lemon', 'lemon language'],
   ['docs/backtest-engine.md', 'backtest-engine', 'Backtest engine'],
   ['docs/data-layout.md', 'data-layout', 'Data layout'],
+  ['docs/data-sources.md', 'data-sources', 'Data sources (WIP)'],
   ['docs/fmp-data-source.md', 'fmp-data-source', 'FMP data source'],
   ['docs/research.md', 'research', 'Research (factor / event)'],
   ['docs/strategy-envelope.md', 'strategy-envelope', 'Strategy envelope'],

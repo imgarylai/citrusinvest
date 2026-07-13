@@ -20,6 +20,8 @@ If you load data from an **FMP Starter**-class key: which library features you
 can honestly backtest (and which are blocked by missing panels) is documented in
 [`fmp-data-source.md`](../reference/fmp-data-source) — feature/series gaps, not a plan
 comparison table.
+**Other vendors / assemble a tree without FMP** (WIP):
+[`data-sources.md`](../reference/data-sources).
 
 ---
 
@@ -422,5 +424,7 @@ check table and the shallow-vs-deep cost tradeoff over S3.
 
 - [`backtest-engine.md`](../reference/backtest-engine) — panels, backtest, Report JSON  
 - [`lemon.md`](../reference/lemon) — strategy language  
+- [`data-sources.md`](../reference/data-sources) — non-FMP / multi-source options (**WIP**)  
+- [`fmp-data-source.md`](../reference/fmp-data-source) — FMP Starter vs feature families  
 - [`crates/pomelo-data/README.md`](https://github.com/citrusquant/citrusquant/blob/main/crates/pomelo-data/README.md) — crate feature flags  
 
