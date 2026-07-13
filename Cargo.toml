@@ -22,3 +22,4 @@ flate2 = "1.0.35"
 clap = { version = "4.0.32", features = ["derive"] }
 rayon = "1.0.3"
 wasm-bindgen = "0.2.126"
+thiserror = "2.0.18"

@@ -2203,6 +2203,7 @@ dependencies = [
  "ndarray",
  "serde",
  "serde_json",
+ "thiserror",
 ]
 
 [[package]]
