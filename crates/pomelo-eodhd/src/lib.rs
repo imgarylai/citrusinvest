@@ -1,0 +1,44 @@
+//! Bring-your-own-key [EODHD](https://eodhd.com/) data sync for citrusquant
+//! (epic [#192](https://github.com/citrusquant/citrusquant/issues/192)).
+//!
+//! Direct HTTP, **no third-party EODHD SDK**. Given the user's own API token,
+//! fetch market data and write a [`docs/data-layout.md`](../../../docs/data-layout.md)
+//! tree — the same contract as `pomelo-fmp`:
+//!
+//! ```text
+//! <out>/prices/{SYM}.csv.gz        adjusted OHLCV                 (phase #194)
+//! <out>/fundamentals/{SYM}.csv.gz  dense forward-filled factors   (phase #196)
+//! <out>/tracked/universe.csv.gz    symbol,sector,…               (phase #195)
+//! <out>/panels/{name}.csv.gz       membership / snapshot panels   (later)
+//! ```
+//!
+//! ## Reuse across CLI and service
+//!
+//! [`sync`] writes to a local path; [`sync_into`] is the storage-agnostic core
+//! over any `ObjectSink` + `ObjectSource` (local disk or S3/R2 via `pomelo-s3`).
+//!
+//! The token never leaves the machine; we neither host nor redistribute EODHD
+//! data. EODHD stays **out** of `yuzu-core` / `pomelo-data` / WASM — the
+//! [`HttpClient`] indirection keeps networking optional
+//! (`--no-default-features`) and testable.
+//!
+//! ## Skeleton status (#193)
+//!
+//! Crate + CLI wiring + symbol normalization. Price fetch is intentionally a
+//! no-op until #194. Coverage map: [`docs/data-sources.md`](../../../docs/data-sources.md).
+
+mod config;
+mod http;
+mod symbol;
+mod sync;
+
+pub use config::{SyncConfig, SyncSummary, WriteMode};
+/// The real ureq-backed client — only with the `eodhd-sync` feature.
+#[cfg(feature = "eodhd-sync")]
+pub use http::UreqClient;
+pub use http::{HttpClient, HttpError};
+pub use symbol::{layout_symbol, parse_symbols_list, split_symbol};
+pub use sync::{sync, sync_into, EODHD_BASE};
+
+/// Default US exchange code for bare tickers (`AAPL` → `AAPL.US`).
+pub const DEFAULT_EXCHANGE: &str = "US";

@@ -46,6 +46,7 @@ It's a layered stack — `pomelo-*` → `yuzu-core` → `lemon` — not parallel
 | [`pomelo-s3`](https://crates.io/crates/pomelo-s3) | S3-compatible `ObjectSource`/`ObjectSink` for `pomelo-data`. |
 | [`pomelo-audit`](https://crates.io/crates/pomelo-audit) | Read-only data-quality audit of a data-layout tree (`yuzu-cli data-audit`). |
 | [`pomelo-fmp`](https://crates.io/crates/pomelo-fmp) | Bring-your-own-key FMP data sync + snapshot-factor formulas; writes to local disk or S3/R2. |
+| `pomelo-eodhd` | Bring-your-own-key EODHD data sync (second official path; skeleton → full layout). |
 | [`lemon-lang`](https://crates.io/crates/lemon-lang) | The lemon strategy DSL (imported as `lemon`). |
 
 **Python**: `crates/yuzu-py` binds the engine + DSL for Python (`pip install ./crates/yuzu-py`,

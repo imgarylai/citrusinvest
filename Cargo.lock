@@ -1353,6 +1353,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "pomelo-eodhd"
+version = "0.9.0"
+dependencies = [
+ "pomelo-data",
+ "serde_json",
+ "ureq",
+]
+
+[[package]]
 name = "pomelo-fmp"
 version = "0.9.0"
 dependencies = [
@@ -2359,6 +2368,7 @@ dependencies = [
  "flate2",
  "pomelo-audit",
  "pomelo-data",
+ "pomelo-eodhd",
  "pomelo-fmp",
  "pomelo-s3",
  "rayon",

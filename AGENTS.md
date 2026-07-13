@@ -22,6 +22,7 @@ It's a layered stack, not parallel silos: `pomelo-*` → `yuzu-core` → `lemon`
 - `pomelo-data` — native data loading (reads gzip CSV price/fundamental files into panels).
 - `pomelo-s3` — an S3-backed data source (an `ObjectSource`/`ObjectSink` impl; `LocalSource` reads/writes local files).
 - `pomelo-fmp` — bring-your-own-key FMP data sync + snapshot-factor formulas. `sync_into` writes a data-layout tree to any `ObjectSink` (local or S3/R2); the CLI is a thin wrapper. FMP stays out of `yuzu-core`/`pomelo-data`/WASM.
+- `pomelo-eodhd` — bring-your-own-key EODHD data sync (second official vendor path; epic #192). Same data-layout contract as FMP; CLI: `yuzu-cli eodhd-sync`.
 - `pomelo-audit` — read-only data-quality audit of a data-layout tree (`run_data_audit` → an `OK`/`WARN`/`FAIL` report). Exposed as `yuzu-cli data-audit`; the CLI is a thin caller.
 - `lemon` / `lemon-lang` — the **strategy DSL**. Strategies are written in lemon and lowered to a JSON `Expr` tree the engine evaluates. Its `services` module provides pure editor language services (diagnostics/hover/completions).
 - `lemon-lsp` — a thin `tower-lsp` language server over `lemon::services` (hover, completion, live diagnostics). Editor integration (incl. a VS Code extension + TextMate grammar) lives under `editors/`.
@@ -69,5 +70,5 @@ additionally flags unknown series names (typos become silent `Data` leaves) and 
   `fix:`/`perf:`→patch; `docs`/`chore`/`refactor`/`test`/`ci` don't release.
 - Don't hand-edit crate `version` fields — release-plz owns them.
 - Published library crates: `yuzu-core`, `yuzu-research`, `pomelo-data`, `pomelo-s3`,
-  `pomelo-fmp`, `pomelo-audit`, `lemon-lang` (the `lemon` crate is imported as
+  `pomelo-fmp`, `pomelo-eodhd`, `pomelo-audit`, `lemon-lang` (the `lemon` crate is imported as
   `lemon`). The wasm/CLI/server crates are `publish = false`.

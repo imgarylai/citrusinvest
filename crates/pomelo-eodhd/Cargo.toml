@@ -1,0 +1,24 @@
+[package]
+name = "pomelo-eodhd"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+rust-version.workspace = true
+description = "Bring-your-own-key EODHD data sync for the yuzu backtest engine. Writes a data-layout tree to any ObjectSink (local disk or S3/R2). No EODHD data redistributed."
+keywords = ["eodhd", "backtesting", "finance", "market-data"]
+categories = ["finance"]
+
+[dependencies]
+pomelo-data = { path = "../pomelo-data", version = "0.9.0" }
+serde_json = { workspace = true }
+# Direct HTTP (no third-party EODHD SDK). Optional behind default-on `eodhd-sync`
+# so dependents can supply their own `HttpClient` without a TLS stack.
+ureq = { version = "3.3.0", default-features = false, features = ["rustls"], optional = true }
+
+[features]
+default = ["eodhd-sync"]
+# The real ureq-backed `UreqClient`. Disable for a networking-free dependent
+# that supplies its own `HttpClient`.
+eodhd-sync = ["dep:ureq"]
