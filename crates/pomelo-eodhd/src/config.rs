@@ -14,9 +14,6 @@ pub enum WriteMode {
 }
 
 /// Knobs for one [`crate::sync`] run.
-///
-/// Later phases fill in industry / fundamentals / index flags; the skeleton
-/// only validates dates + write mode.
 pub struct SyncConfig {
     /// Inclusive date bounds, packed `YYYYMMDD`.
     pub from: i32,
@@ -25,7 +22,7 @@ pub struct SyncConfig {
     pub default_exchange: String,
     /// Also fetch fundamentals → `fundamentals/{SYM}.csv.gz` (phase #196).
     pub include_fundamentals: bool,
-    /// Also fetch sector map → `tracked/universe.csv.gz` (phase #195).
+    /// Also fetch sector map → `tracked/universe.csv.gz`.
     pub include_industry: bool,
     /// Max requests per minute (`0` = no throttle). Tune to your EODHD plan.
     pub rate_limit_per_min: u32,
@@ -66,6 +63,8 @@ pub struct SyncSummary {
     pub price_rows: usize,
     /// Symbols that got a fundamentals file.
     pub fundamentals_written: usize,
+    /// Whether `tracked/universe.csv.gz` was written this run.
+    pub industry_written: bool,
     /// Per-symbol failures (symbol, message); batch continues after a failure.
     pub failures: Vec<(String, String)>,
 }

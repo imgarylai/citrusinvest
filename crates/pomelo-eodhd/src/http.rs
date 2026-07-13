@@ -149,11 +149,15 @@ impl<'a, H: HttpClient> Fetcher<'a, H> {
         }
     }
 
-    /// GET and parse a JSON array of row objects (EOD list endpoints).
-    pub(crate) fn get_rows(&self, url: &str) -> Result<Vec<Value>, String> {
+    /// GET and parse any JSON value.
+    pub(crate) fn get_json(&self, url: &str) -> Result<Value, String> {
         let body = self.get(url)?;
-        let value: Value = serde_json::from_slice(&body)
-            .map_err(|e| format!("bad JSON from {}: {e}", redact(url)))?;
+        serde_json::from_slice(&body).map_err(|e| format!("bad JSON from {}: {e}", redact(url)))
+    }
+
+    /// GET and parse a JSON array of row objects (EOD / symbol-list endpoints).
+    pub(crate) fn get_rows(&self, url: &str) -> Result<Vec<Value>, String> {
+        let value = self.get_json(url)?;
         match value {
             Value::Array(rows) => Ok(rows),
             Value::Object(map) => {

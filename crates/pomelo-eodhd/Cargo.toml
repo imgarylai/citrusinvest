@@ -13,6 +13,7 @@ categories = ["finance"]
 [dependencies]
 pomelo-data = { path = "../pomelo-data", version = "0.9.0" }
 serde_json = { workspace = true }
+flate2 = { workspace = true }
 # Direct HTTP (no third-party EODHD SDK). Optional behind default-on `eodhd-sync`
 # so dependents can supply their own `HttpClient` without a TLS stack.
 ureq = { version = "3.3.0", default-features = false, features = ["rustls"], optional = true }

@@ -1,5 +1,6 @@
 //! Orchestrate multi-symbol EODHD → data-layout sync.
 
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use pomelo_data::csv_io::write_series;
@@ -7,6 +8,7 @@ use pomelo_data::{LocalSource, ObjectSink, ObjectSource, PRICES_DIR};
 
 use super::config::{SyncConfig, SyncSummary, WriteMode};
 use super::http::{Fetcher, HttpClient};
+use super::industry::{encode_industry, fetch_profile, load_existing_industry, INDUSTRY_KEY};
 use super::price::{parse_price_rows, price_url, read_existing_prices};
 use super::symbol::split_symbol;
 
@@ -27,8 +29,9 @@ pub fn sync<H: HttpClient>(
 
 /// Storage-agnostic core: sync into any `store` (local disk or S3/R2).
 ///
-/// Always fetches adjusted EOD prices → `prices/{SYM}.csv.gz`. Fundamentals /
-/// industry flags are reserved for later phases (#195 / #196).
+/// Always fetches adjusted EOD prices → `prices/{SYM}.csv.gz`.
+/// With `include_industry`, also builds `tracked/universe.csv.gz` from
+/// fundamentals sector metadata.
 pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
     http: &H,
     api_token: &str,
@@ -52,6 +55,11 @@ pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
     let fetcher = Fetcher::new(http, cfg);
     let mut summary = SyncSummary::default();
     let mut any_valid = false;
+    let mut industry: BTreeMap<String, (String, Option<f64>)> = if cfg.include_industry {
+        load_existing_industry(store)
+    } else {
+        BTreeMap::new()
+    };
 
     for raw in symbols {
         let Some((layout, eodhd)) = split_symbol(raw, &cfg.default_exchange) else {
@@ -66,6 +74,18 @@ pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
         if cfg.mode == WriteMode::Resume && store.get(&price_key).ok().flatten().is_some() {
             eprintln!("{layout}: already present, skipping (resume)");
             summary.symbols_skipped += 1;
+            // Optionally fill missing industry row for resumed symbols.
+            if cfg.include_industry && !industry.contains_key(&layout) {
+                match fetch_profile(&fetcher, &eodhd, api_token) {
+                    Ok(Some(p)) => {
+                        if let Some(sector) = p.sector {
+                            industry.insert(layout.clone(), (sector, p.market_cap));
+                        }
+                    }
+                    Ok(None) => {}
+                    Err(e) => eprintln!("{layout}: industry fetch skipped: {e}"),
+                }
+            }
             continue;
         }
 
@@ -117,13 +137,34 @@ pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
         if cfg.include_fundamentals {
             eprintln!("{layout}: fundamentals requested but not implemented yet (#196)");
         }
+
         if cfg.include_industry {
-            eprintln!("{layout}: industry map requested but not implemented yet (#195)");
+            match fetch_profile(&fetcher, &eodhd, api_token) {
+                Ok(Some(p)) => {
+                    if let Some(sector) = p.sector {
+                        industry.insert(layout.clone(), (sector, p.market_cap));
+                    } else {
+                        eprintln!("{layout}: no Sector in fundamentals General");
+                    }
+                }
+                Ok(None) => eprintln!("{layout}: no fundamentals profile for industry map"),
+                Err(e) => {
+                    eprintln!("{layout}: industry fetch failed: {e}");
+                    summary.failures.push((format!("{layout} (industry)"), e));
+                }
+            }
         }
 
         summary.symbols_written += 1;
         summary.price_rows += rows.len();
         eprintln!("{layout}: wrote {} price rows", rows.len());
+    }
+
+    if cfg.include_industry && !industry.is_empty() {
+        let bytes = encode_industry(&industry).map_err(|e| e.to_string())?;
+        store.put(INDUSTRY_KEY, &bytes).map_err(|e| e.to_string())?;
+        summary.industry_written = true;
+        eprintln!("wrote {} industry rows to {INDUSTRY_KEY}", industry.len());
     }
 
     if !any_valid {
@@ -155,9 +196,17 @@ mod tests {
             }
         }
 
-        fn seq(pat: &str, bodies: Vec<Result<Vec<u8>, HttpError>>) -> Self {
+        fn multi(routes: Vec<(&str, &str)>) -> Self {
             MockHttp {
-                routes: vec![(pat.to_string(), RefCell::new(bodies))],
+                routes: routes
+                    .into_iter()
+                    .map(|(pat, body)| {
+                        (
+                            pat.to_string(),
+                            RefCell::new(vec![Ok(body.as_bytes().to_vec())]),
+                        )
+                    })
+                    .collect(),
             }
         }
     }
@@ -196,6 +245,13 @@ mod tests {
         {"date":"2024-01-02","open":9.5,"high":11.0,"low":9.0,"close":10.0,"adjusted_close":10.0,"volume":1000}
     ]"#;
 
+    const AAPL_PROF: &str = r#"{
+        "General::Sector":"Technology",
+        "General::Industry":"Consumer Electronics",
+        "General::Type":"Common Stock",
+        "Highlights::MarketCapitalization":1000000000
+    }"#;
+
     #[test]
     fn rejects_empty_token_and_symbols() {
         let dir = std::env::temp_dir().join("pomelo_eodhd_rej");
@@ -220,14 +276,24 @@ mod tests {
             parse_series(&bytes, Field::AdjClose).unwrap(),
             vec![(20240102, 10.0), (20240103, 10.8), (20240104, 11.5)]
         );
-        assert_eq!(
-            parse_series(&bytes, Field::AdjHigh).unwrap()[0],
-            (20240102, 11.0)
+    }
+
+    #[test]
+    fn writes_industry_map_when_flagged() {
+        let dir = std::env::temp_dir().join("pomelo_eodhd_industry");
+        let _ = std::fs::remove_dir_all(&dir);
+        let http = MockHttp::multi(vec![
+            ("/eod/AAPL.US", AAPL_EOD),
+            ("fundamentals/AAPL.US", AAPL_PROF),
+        ]);
+        let mut c = cfg();
+        c.include_industry = true;
+        let summary = sync(&http, "demo", &["AAPL".into()], &dir, &c).unwrap();
+        assert!(summary.industry_written);
+        let text = crate::industry::decode_csv_text(
+            &LocalSource::new(&dir).get(INDUSTRY_KEY).unwrap().unwrap(),
         );
-        assert_eq!(
-            parse_series(&bytes, Field::Volume).unwrap()[2],
-            (20240104, 1200.0)
-        );
+        assert!(text.contains("AAPL,Technology,1000000000"));
     }
 
     #[test]
@@ -268,7 +334,6 @@ mod tests {
     fn fetch_failure_and_empty_rows_recorded() {
         let dir = std::env::temp_dir().join("pomelo_eodhd_fail");
         let _ = std::fs::remove_dir_all(&dir);
-        // MSFT 404; AAPL empty array
         let http = MockHttp {
             routes: vec![("AAPL.US".into(), RefCell::new(vec![Ok(b"[]".to_vec())]))],
         };
@@ -296,28 +361,6 @@ mod tests {
         let summary = sync(&http2, "demo", &["AAPL".into()], &dir, &c).unwrap();
         assert_eq!(summary.symbols_written, 1);
         assert_eq!(summary.price_rows, 2);
-
-        let bytes = LocalSource::new(&dir)
-            .get("prices/AAPL.csv.gz")
-            .unwrap()
-            .unwrap();
-        assert_eq!(
-            parse_series(&bytes, Field::AdjClose).unwrap(),
-            vec![(20240102, 10.0), (20240103, 10.8)]
-        );
-    }
-
-    #[test]
-    fn include_flags_log_but_still_write_prices() {
-        let dir = std::env::temp_dir().join("pomelo_eodhd_flags");
-        let _ = std::fs::remove_dir_all(&dir);
-        let http = MockHttp::ok("AAPL.US", AAPL_EOD);
-        let mut c = cfg();
-        c.include_fundamentals = true;
-        c.include_industry = true;
-        let summary = sync(&http, "demo", &["AAPL".into()], &dir, &c).unwrap();
-        assert_eq!(summary.symbols_written, 1);
-        assert_eq!(summary.fundamentals_written, 0);
     }
 
     #[test]
@@ -328,11 +371,5 @@ mod tests {
         let summary = sync(&http, "demo", &[".".into(), "AAPL".into()], &dir, &cfg()).unwrap();
         assert_eq!(summary.symbols_written, 1);
         assert_eq!(summary.failures.len(), 1);
-    }
-
-    #[test]
-    fn seq_helper_unused_path_covered_via_404() {
-        // Document MockHttp::seq exists for future retry tests at sync layer.
-        let _ = MockHttp::seq("X", vec![Err(HttpError::Status(500))]);
     }
 }

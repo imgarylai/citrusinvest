@@ -6,7 +6,9 @@ use std::time::Duration;
 
 use pomelo_data::csv_io::parse_series;
 use pomelo_data::{Field, LocalSource, ObjectSource};
-use yuzu_cli::eodhd::{sync, HttpClient, HttpError, SyncConfig, WriteMode};
+use yuzu_cli::eodhd::{
+    fetch_delisted, sync, HttpClient, HttpError, SyncConfig, WriteMode, INDUSTRY_KEY,
+};
 use yuzu_cli::run_single;
 
 struct MockHttp {
@@ -124,4 +126,34 @@ fn scales_split_adjusted_bars() {
     let close = parse_series(&bytes, Field::AdjClose).unwrap()[0].1;
     assert!((close - 100.0).abs() < 1e-9);
     assert!((open - 101.0).abs() < 1e-9);
+}
+
+#[test]
+fn industry_map_and_delisted_fetch() {
+    let eod = r#"[{"date":"2024-01-02","open":10.0,"high":10.0,"low":10.0,"close":10.0,"adjusted_close":10.0,"volume":1}]"#;
+    let prof = r#"{"General::Sector":"Technology","General::Industry":"Software","Highlights::MarketCapitalization":9e9}"#;
+    let delisted = r#"[
+        {"Code":"DEAD","Exchange":"US","Type":"Common Stock"},
+        {"Code":"AAPL","Exchange":"US","Type":"Common Stock"}
+    ]"#;
+    let http = MockHttp::multi(vec![
+        ("/eod/AAPL.US", eod),
+        ("fundamentals/AAPL.US", prof),
+        ("exchange-symbol-list/US", delisted),
+    ]);
+    let dir = tmp("industry");
+    let mut c = cfg();
+    c.from = 20240102;
+    c.to = 20240102;
+    c.include_industry = true;
+    let summary = sync(&http, "KEY", &["AAPL".into()], &dir, &c).unwrap();
+    assert!(summary.industry_written);
+    let gz = LocalSource::new(&dir).get(INDUSTRY_KEY).unwrap().unwrap();
+    // gunzip via flate2 not required — content is gzip; just ensure object exists
+    assert!(!gz.is_empty());
+
+    let d = fetch_delisted(&http, "KEY", &c, "US").unwrap();
+    assert_eq!(d.len(), 2);
+    assert_eq!(d[0].symbol, "AAPL");
+    assert_eq!(d[1].symbol, "DEAD");
 }

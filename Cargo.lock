@@ -1356,6 +1356,7 @@ dependencies = [
 name = "pomelo-eodhd"
 version = "0.9.0"
 dependencies = [
+ "flate2",
  "pomelo-data",
  "serde_json",
  "ureq",

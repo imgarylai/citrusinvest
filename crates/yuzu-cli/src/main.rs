@@ -487,9 +487,13 @@ enum Cmd {
         /// Also fetch fundamentals (not yet implemented — reserved for #196).
         #[arg(long)]
         include_fundamentals: bool,
-        /// Also fetch sector map (not yet implemented — reserved for #195).
+        /// Also fetch sector map → tracked/universe.csv.gz from fundamentals General.
         #[arg(long)]
         include_industry: bool,
+        /// Also union EODHD delisted names for `--exchange` into the sync list
+        /// (survivorship-honest price files). Uses exchange-symbol-list?delisted=1.
+        #[arg(long)]
+        include_delisted: bool,
         /// Max requests per minute (0 = no throttle).
         #[arg(long, default_value_t = 0)]
         rate_limit: u32,
@@ -965,6 +969,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             to,
             include_fundamentals,
             include_industry,
+            include_delisted,
             rate_limit,
             max_retries,
             append,
@@ -988,8 +993,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // De-dupe while preserving order.
             let mut seen = std::collections::HashSet::new();
             explicit.retain(|s| seen.insert(s.clone()));
-            if explicit.is_empty() {
-                return Err("provide --symbols and/or --symbols-file".into());
+            if explicit.is_empty() && !include_delisted {
+                return Err(
+                    "provide --symbols and/or --symbols-file (or --include-delisted)".into(),
+                );
             }
             let mode = if resume {
                 yuzu_cli::eodhd::WriteMode::Resume
@@ -1001,7 +1008,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let cfg = yuzu_cli::eodhd::SyncConfig {
                 from,
                 to,
-                default_exchange: exchange,
+                default_exchange: exchange.clone(),
                 include_fundamentals,
                 include_industry,
                 rate_limit_per_min: rate_limit,
@@ -1010,16 +1017,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 mode,
             };
             let client = yuzu_cli::eodhd::UreqClient::new();
+            if include_delisted {
+                eprintln!("fetching delisted universe from EODHD ({exchange})…");
+                let delisted =
+                    yuzu_cli::eodhd::fetch_delisted(&client, &api_token, &cfg, &exchange)?;
+                let before = explicit.len();
+                for d in delisted {
+                    if seen.insert(d.symbol.clone()) {
+                        explicit.push(d.symbol);
+                    }
+                }
+                eprintln!("delisted: +{} names unioned in", explicit.len() - before);
+            }
+            if explicit.is_empty() {
+                return Err("no symbols to sync after filters".into());
+            }
             let out_store = pomelo_s3::OutStore::parse(&out)?;
             let summary =
                 yuzu_cli::eodhd::sync_into(&client, &api_token, &explicit, &out_store, &cfg)?;
             eprintln!(
-                "done: {} written, {} skipped, {} filtered, {} price rows, {} fundamentals, {} failures",
+                "done: {} written, {} skipped, {} filtered, {} price rows, {} fundamentals, industry={}, {} failures",
                 summary.symbols_written,
                 summary.symbols_skipped,
                 summary.symbols_filtered,
                 summary.price_rows,
                 summary.fundamentals_written,
+                summary.industry_written,
                 summary.failures.len(),
             );
             for (sym, err) in &summary.failures {
