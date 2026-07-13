@@ -38,16 +38,18 @@ pub fn max_drawdown(equity: &[f64]) -> f64 {
     drawdown_series(equity).into_iter().fold(0.0, f64::min)
 }
 
-fn to_naive(yyyymmdd: i32) -> NaiveDate {
+fn to_naive(yyyymmdd: i32) -> Option<NaiveDate> {
     let y = yyyymmdd / 10000;
     let m = (yyyymmdd / 100 % 100) as u32;
     let d = (yyyymmdd % 100) as u32;
-    NaiveDate::from_ymd_opt(y, m, d).unwrap()
+    NaiveDate::from_ymd_opt(y, m, d)
 }
 
 pub fn year_frac(start: i32, end: i32) -> f64 {
-    let secs = (to_naive(end) - to_naive(start)).num_seconds() as f64;
-    secs / 31_557_600.0
+    match (to_naive(start), to_naive(end)) {
+        (Some(a), Some(b)) => (b - a).num_seconds() as f64 / 31_557_600.0,
+        _ => f64::NAN,
+    }
 }
 
 /// Sample mean + std (`ddof = 1`) over finite entries.
@@ -482,7 +484,7 @@ fn percentile(xs: &[f64], q: f64) -> f64 {
         return f64::NAN;
     }
     let mut s = xs.to_vec();
-    s.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    crate::ops::stat::sort_f64s(&mut s);
     if s.len() == 1 {
         return s[0];
     }
@@ -537,13 +539,19 @@ pub fn ulcer_index(equity: &[f64]) -> f64 {
 // ---- lookback returns ------------------------------------------------------
 
 /// Shift a `YYYYMMDD` date by `delta` years, clamping an invalid Feb-29 target
-/// to Feb-28. Anchors the trailing-return windows.
+/// to Feb-28. Anchors the trailing-return windows. Invalid input dates are
+/// returned unchanged (no panic).
 fn shift_years(yyyymmdd: i32, delta: i32) -> i32 {
-    let d = to_naive(yyyymmdd);
+    let Some(d) = to_naive(yyyymmdd) else {
+        return yyyymmdd;
+    };
     let y = d.year() + delta;
-    let shifted = d
-        .with_year(y)
-        .unwrap_or_else(|| NaiveDate::from_ymd_opt(y, d.month(), 28).unwrap());
+    // Day 28 is valid in every month; Jan 1 is a final unreachable fallback.
+    let shifted = d.with_year(y).unwrap_or_else(|| {
+        NaiveDate::from_ymd_opt(y, d.month(), 28)
+            .or_else(|| NaiveDate::from_ymd_opt(y, 1, 1))
+            .expect("Jan 1 of year y is always a valid civil date")
+    });
     shifted.year() * 10000 + shifted.month() as i32 * 100 + shifted.day() as i32
 }
 

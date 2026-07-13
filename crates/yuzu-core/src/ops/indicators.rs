@@ -3,7 +3,7 @@
 //! `rank_cs` (cross-sectional rank), `quantile_row` (per-row quantile),
 //! `rsi` (Wilder's RSI, TA-Lib compatible).
 
-use crate::ops::stat::{average_ranks, sorted_quantile};
+use crate::ops::stat::{average_ranks, sort_f64s, sorted_quantile};
 use crate::panel::Panel;
 use ndarray::Array2;
 
@@ -378,7 +378,7 @@ impl Panel {
             if vals.is_empty() {
                 continue;
             }
-            vals.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            sort_f64s(&mut vals);
             out[[r, 0]] = sorted_quantile(&vals, c);
         }
         Panel {

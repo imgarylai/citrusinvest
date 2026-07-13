@@ -13,16 +13,16 @@ pub enum Freq {
     YearEnd,
 }
 
-fn to_naive(yyyymmdd: i32) -> NaiveDate {
+fn to_naive(yyyymmdd: i32) -> Option<NaiveDate> {
     let y = yyyymmdd / 10000;
     let m = (yyyymmdd / 100 % 100) as u32;
     let d = (yyyymmdd % 100) as u32;
-    NaiveDate::from_ymd_opt(y, m, d).unwrap()
+    NaiveDate::from_ymd_opt(y, m, d)
 }
 
-fn period_key(d: i32, freq: Freq) -> i64 {
-    let nd = to_naive(d);
-    match freq {
+fn period_key(d: i32, freq: Freq) -> Option<i64> {
+    let nd = to_naive(d)?;
+    Some(match freq {
         Freq::Weekly => {
             let iso = nd.iso_week();
             iso.year() as i64 * 100 + iso.week() as i64
@@ -30,7 +30,7 @@ fn period_key(d: i32, freq: Freq) -> i64 {
         Freq::MonthEnd => nd.year() as i64 * 100 + nd.month() as i64,
         Freq::QuarterEnd => nd.year() as i64 * 10 + ((nd.month() as i64 - 1) / 3),
         Freq::YearEnd => nd.year() as i64,
-    }
+    })
 }
 
 impl Panel {
@@ -39,7 +39,10 @@ impl Panel {
         let mut last_in_period: std::collections::HashMap<i64, usize> =
             std::collections::HashMap::new();
         for (i, &d) in self.dates.iter().enumerate() {
-            let k = period_key(d, freq);
+            // Skip non-civil YYYYMMDD values rather than panicking.
+            let Some(k) = period_key(d, freq) else {
+                continue;
+            };
             let e = last_in_period.entry(k).or_insert(i);
             if self.dates[*e] < d {
                 *e = i;

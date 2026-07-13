@@ -409,7 +409,10 @@ pub fn run_nav(inputs: NavInputs<'_>, cfg: &BacktestConfig) -> BacktestRun {
             if entry_now {
                 open = Some((r, px.data[[r, c]]));
             } else if exit_now {
-                let (er, ep) = open.take().unwrap();
+                // `exit_now` implies `open` is Some; take without unwrap.
+                let Some((er, ep)) = open.take() else {
+                    continue;
+                };
                 // A delisting exit fills at the last valid price less the
                 // haircut and pays no exit-leg costs (nothing traded).
                 let delisted = delist

@@ -52,7 +52,7 @@ fn percentile(sorted: &[f64], q: f64) -> f64 {
 
 fn ci(mut samples: Vec<f64>) -> BootstrapCi {
     samples.retain(|x| !x.is_nan());
-    samples.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    crate::ops::stat::sort_f64s(&mut samples);
     BootstrapCi {
         p05: percentile(&samples, 0.05),
         p50: percentile(&samples, 0.50),
@@ -99,7 +99,8 @@ pub fn bootstrap(
                     break;
                 }
                 let r = rets[(start + j) % n]; // circular wrap
-                let prev = *eq.last().unwrap();
+                // `eq` always starts with base 1.0 before this loop.
+                let prev = eq[eq.len() - 1];
                 eq.push(prev * (1.0 + r));
             }
         }
