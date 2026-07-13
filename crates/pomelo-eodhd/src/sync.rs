@@ -121,8 +121,14 @@ mod tests {
         };
         let dir = std::env::temp_dir().join("pomelo_eodhd_skeleton_ok");
         let _ = std::fs::create_dir_all(&dir);
-        let summary = sync(&NoHttp, "demo", &["AAPL".into(), "MSFT.US".into()], &dir, &cfg)
-            .expect("skeleton ok");
+        let summary = sync(
+            &NoHttp,
+            "demo",
+            &["AAPL".into(), "MSFT.US".into()],
+            &dir,
+            &cfg,
+        )
+        .expect("skeleton ok");
         assert_eq!(summary.symbols_written, 0);
         assert!(summary.failures.is_empty());
     }
