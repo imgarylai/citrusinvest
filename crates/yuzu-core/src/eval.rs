@@ -233,9 +233,7 @@ fn eval_leaf<'a>(expr: &Expr, ctx: &'a EvalContext) -> Result<EvalOut<'a>, Engin
             let p = ctx
                 .panels
                 .get(name)
-                .ok_or_else(|| EngineError::UnknownSeries {
-                    name: name.clone(),
-                })?;
+                .ok_or_else(|| EngineError::UnknownSeries { name: name.clone() })?;
             Ok(EvalOut::Borrowed(p))
         }
         Const { value } => {
@@ -643,9 +641,7 @@ pub fn run_backtest(
             let p = ctx
                 .panels
                 .get(key)
-                .ok_or_else(|| EngineError::UnknownBenchmark {
-                    key: key.clone(),
-                })?;
+                .ok_or_else(|| EngineError::UnknownBenchmark { key: key.clone() })?;
             if p.ncols() == 0 {
                 return Err(EngineError::EmptyBenchmark { key: key.clone() });
             }
