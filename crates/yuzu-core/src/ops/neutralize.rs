@@ -220,8 +220,8 @@ impl Panel {
     /// (the NAV loop's row-normalize takes the book from there). NaN cells stay
     /// NaN and don't count toward a group's gross.
     ///
-    /// Grouping reuses [`group_cols_by_industry`](Self::group_cols_by_industry),
-    /// so symbols missing from `industry` share the single "其他" bucket. With an
+    /// Grouping reuses the internal `group_cols_by_industry` helper, so symbols
+    /// missing from `industry` share the single "其他" bucket. With an
     /// **empty industry map** the whole cross-section is that one bucket, so the
     /// op caps total gross exposure at `max_weight`.
     ///
