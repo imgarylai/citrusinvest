@@ -15,6 +15,7 @@
 - [FMP Starter gaps vs features](docs/fmp-data-source.md): which ops/backtests need which panels when data is short/coarse.
 - [Data sources](docs/data-sources.md): official FMP + EODHD adapters, block map, assemble recipes, gap re-audit.
 - [EODHD data source](docs/eodhd-data-source.md): `eodhd-sync` / `pomelo-eodhd` CLI and honesty notes.
+- [Alpha Vantage data source](docs/alpha-vantage-data-source.md): `av-sync` / `av-symbols` / `pomelo-alpha-vantage` gaps.
 - [Research (factor / event)](docs/research.md): rank-IC/quantile factor reports and event studies — JSON, not lemon ops.
 - [Strategy envelope](docs/strategy-envelope.md): the shareable, versioned strategy document + `lemon check` validation + reproducibility.
 - [Contributing & release flow](CONTRIBUTING.md).

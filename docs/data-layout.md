@@ -18,7 +18,8 @@ comparison table.
 **Multi-vendor stance, assemble recipes, FMP vs EODHD gaps:**
 [`data-sources.md`](data-sources.md).
 **Official syncs:** [`fmp-data-source.md`](fmp-data-source.md) ·
-[`eodhd-data-source.md`](eodhd-data-source.md).
+[`eodhd-data-source.md`](eodhd-data-source.md) ·
+[`alpha-vantage-data-source.md`](alpha-vantage-data-source.md).
 
 ---
 

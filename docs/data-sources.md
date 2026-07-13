@@ -377,7 +377,7 @@ capability**, not free quotas.
 | `pomelo-eodhd` + `eodhd-sync` | [#192](https://github.com/citrusquant/citrusquant/issues/192) (phases #193–#198) — **done** |
 | Re-audit docs after second path | [#186](https://github.com/citrusquant/citrusquant/issues/186) — **done** |
 | Alpha Vantage solo coverage spike | [#207](https://github.com/citrusquant/citrusquant/issues/207) — **done** |
-| `pomelo-alpha-vantage` + CLI | [#209](https://github.com/citrusquant/citrusquant/issues/209) (#213–#216 done; #217 universe helper; #218 snapshot) |
+| `pomelo-alpha-vantage` + CLI | [#209](https://github.com/citrusquant/citrusquant/issues/209) — phases #213–#218 |
 | Finnhub solo coverage spike | [#208](https://github.com/citrusquant/citrusquant/issues/208) — **done** |
 | `pomelo-finnhub` (gated on #208 go) | [#210](https://github.com/citrusquant/citrusquant/issues/210) |
 | Shared `pomelo-*` adapter conventions | [#211](https://github.com/citrusquant/citrusquant/issues/211) |
@@ -390,6 +390,7 @@ capability**, not free quotas.
 
 - [`data-layout.md`](data-layout.md) — on-disk contract (source of truth for shapes)
 - [`eodhd-data-source.md`](eodhd-data-source.md) — EODHD CLI, flags, gaps
+- [`alpha-vantage-data-source.md`](alpha-vantage-data-source.md) — AV CLI, flags, gaps
 - [`fmp-data-source.md`](fmp-data-source.md) — FMP Starter vs feature families + `fmp-sync`
 - [`backtest-engine.md`](backtest-engine.md) — panels / backtest semantics
-- crates `pomelo-fmp`, `pomelo-eodhd` — official one-shot syncs (AV/Finnhub planned)
+- crates `pomelo-fmp`, `pomelo-eodhd`, `pomelo-alpha-vantage` — official one-shot syncs
