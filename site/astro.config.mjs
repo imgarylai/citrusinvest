@@ -100,6 +100,7 @@ export default defineConfig({
             { label: 'lemon language', slug: 'reference/lemon' },
             { label: 'Backtest engine', slug: 'reference/backtest-engine' },
             { label: 'Data layout', slug: 'reference/data-layout' },
+            { label: 'Data sources (WIP)', slug: 'reference/data-sources' },
             { label: 'FMP data source', slug: 'reference/fmp-data-source' },
             { label: 'Research (factor / event)', slug: 'reference/research' },
             { label: 'Strategy envelope', slug: 'reference/strategy-envelope' },

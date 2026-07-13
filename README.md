@@ -20,6 +20,8 @@ contract live in [`docs/backtest-engine.md`](docs/backtest-engine.md).
 [`docs/data-layout.md`](docs/data-layout.md).
 **FMP Starter-tier gaps** (which features need which panels):
 [`docs/fmp-data-source.md`](docs/fmp-data-source.md).
+**Other data sources / assemble without FMP** (WIP):
+[`docs/data-sources.md`](docs/data-sources.md).
 
 ## Crate families
 
