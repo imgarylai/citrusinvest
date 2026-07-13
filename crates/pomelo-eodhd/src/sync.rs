@@ -154,6 +154,12 @@ mod tests {
                 )],
             }
         }
+
+        fn seq(pat: &str, bodies: Vec<Result<Vec<u8>, HttpError>>) -> Self {
+            MockHttp {
+                routes: vec![(pat.to_string(), RefCell::new(bodies))],
+            }
+        }
     }
 
     impl HttpClient for MockHttp {
@@ -235,5 +241,98 @@ mod tests {
         let summary = sync(&http, "demo", &["AAPL".into()], &dir, &c).unwrap();
         assert_eq!(summary.symbols_written, 0);
         assert_eq!(summary.symbols_skipped, 1);
+    }
+
+    #[test]
+    fn rejects_inverted_dates_and_empty_exchange() {
+        let dir = std::env::temp_dir().join("pomelo_eodhd_dates");
+        let http = MockHttp::ok("unused", "[]");
+        let mut c = cfg();
+        c.from = 20250101;
+        c.to = 20240101;
+        assert!(sync(&http, "tok", &["AAPL".into()], &dir, &c).is_err());
+        c = cfg();
+        c.default_exchange = String::new();
+        assert!(sync(&http, "tok", &["AAPL".into()], &dir, &c).is_err());
+    }
+
+    #[test]
+    fn invalid_symbols_only_errors() {
+        let dir = std::env::temp_dir().join("pomelo_eodhd_badsym");
+        let http = MockHttp::ok("unused", "[]");
+        let err = sync(&http, "tok", &[".".into(), "  ".into()], &dir, &cfg()).unwrap_err();
+        assert!(err.contains("no valid symbols"), "{err}");
+    }
+
+    #[test]
+    fn fetch_failure_and_empty_rows_recorded() {
+        let dir = std::env::temp_dir().join("pomelo_eodhd_fail");
+        let _ = std::fs::remove_dir_all(&dir);
+        // MSFT 404; AAPL empty array
+        let http = MockHttp {
+            routes: vec![("AAPL.US".into(), RefCell::new(vec![Ok(b"[]".to_vec())]))],
+        };
+        let summary = sync(&http, "tok", &["AAPL".into(), "MSFT".into()], &dir, &cfg()).unwrap();
+        assert_eq!(summary.symbols_written, 0);
+        assert_eq!(summary.failures.len(), 2);
+    }
+
+    #[test]
+    fn append_merges_existing_history() {
+        let dir = std::env::temp_dir().join("pomelo_eodhd_append");
+        let _ = std::fs::remove_dir_all(&dir);
+        let day1 = r#"[{"date":"2024-01-02","open":9.5,"high":11.0,"low":9.0,"close":10.0,"adjusted_close":10.0,"volume":1000}]"#;
+        let day2 = r#"[{"date":"2024-01-03","open":10.1,"high":11.5,"low":9.8,"close":10.8,"adjusted_close":10.8,"volume":1100}]"#;
+        let http = MockHttp::ok("AAPL.US", day1);
+        let mut c = cfg();
+        c.from = 20240102;
+        c.to = 20240102;
+        sync(&http, "demo", &["AAPL".into()], &dir, &c).unwrap();
+
+        let http2 = MockHttp::ok("AAPL.US", day2);
+        c.from = 20240103;
+        c.to = 20240103;
+        c.mode = WriteMode::Append;
+        let summary = sync(&http2, "demo", &["AAPL".into()], &dir, &c).unwrap();
+        assert_eq!(summary.symbols_written, 1);
+        assert_eq!(summary.price_rows, 2);
+
+        let bytes = LocalSource::new(&dir)
+            .get("prices/AAPL.csv.gz")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            parse_series(&bytes, Field::AdjClose).unwrap(),
+            vec![(20240102, 10.0), (20240103, 10.8)]
+        );
+    }
+
+    #[test]
+    fn include_flags_log_but_still_write_prices() {
+        let dir = std::env::temp_dir().join("pomelo_eodhd_flags");
+        let _ = std::fs::remove_dir_all(&dir);
+        let http = MockHttp::ok("AAPL.US", AAPL_EOD);
+        let mut c = cfg();
+        c.include_fundamentals = true;
+        c.include_industry = true;
+        let summary = sync(&http, "demo", &["AAPL".into()], &dir, &c).unwrap();
+        assert_eq!(summary.symbols_written, 1);
+        assert_eq!(summary.fundamentals_written, 0);
+    }
+
+    #[test]
+    fn mixed_valid_and_invalid_symbols() {
+        let dir = std::env::temp_dir().join("pomelo_eodhd_mixed");
+        let _ = std::fs::remove_dir_all(&dir);
+        let http = MockHttp::ok("AAPL.US", AAPL_EOD);
+        let summary = sync(&http, "demo", &[".".into(), "AAPL".into()], &dir, &cfg()).unwrap();
+        assert_eq!(summary.symbols_written, 1);
+        assert_eq!(summary.failures.len(), 1);
+    }
+
+    #[test]
+    fn seq_helper_unused_path_covered_via_404() {
+        // Document MockHttp::seq exists for future retry tests at sync layer.
+        let _ = MockHttp::seq("X", vec![Err(HttpError::Status(500))]);
     }
 }

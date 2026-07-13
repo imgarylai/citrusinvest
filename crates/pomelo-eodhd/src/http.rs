@@ -176,6 +176,8 @@ impl<'a, H: HttpClient> Fetcher<'a, H> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::Cell;
+    use std::time::Duration;
 
     #[test]
     fn redacts_api_token() {
@@ -186,6 +188,10 @@ mod tests {
         assert_eq!(
             redact("https://eodhd.com/api/eod/AAPL.US?api_token=SECRET"),
             "https://eodhd.com/api/eod/AAPL.US?api_token=***"
+        );
+        assert_eq!(
+            redact("https://x?api_key=SECRET&fmt=json"),
+            "https://x?api_key=***&fmt=json"
         );
         assert_eq!(
             redact("https://eodhd.com/api/eod/AAPL.US"),
@@ -200,5 +206,124 @@ mod tests {
         assert!(HttpError::Transport("reset".into()).retryable());
         assert!(!HttpError::Status(401).retryable());
         assert!(!HttpError::Status(404).retryable());
+    }
+
+    #[test]
+    fn http_error_display() {
+        assert_eq!(HttpError::Status(404).to_string(), "HTTP 404");
+        assert_eq!(
+            HttpError::Transport("boom".into()).to_string(),
+            "transport error: boom"
+        );
+    }
+
+    struct SeqHttp {
+        /// Shared queue of responses consumed in order.
+        seq: Cell<Vec<Result<Vec<u8>, HttpError>>>,
+    }
+
+    impl SeqHttp {
+        fn new(seq: Vec<Result<Vec<u8>, HttpError>>) -> Self {
+            SeqHttp {
+                seq: Cell::new(seq),
+            }
+        }
+    }
+
+    impl HttpClient for SeqHttp {
+        fn get(&self, _url: &str) -> Result<Vec<u8>, HttpError> {
+            let mut q = self.seq.take();
+            let r = if q.is_empty() {
+                Err(HttpError::Status(404))
+            } else {
+                q.remove(0)
+            };
+            self.seq.set(q);
+            r
+        }
+    }
+
+    fn cfg_retry() -> SyncConfig {
+        SyncConfig {
+            rate_limit_per_min: 0,
+            max_retries: 2,
+            backoff_base: Duration::ZERO,
+            ..SyncConfig::default()
+        }
+    }
+
+    #[test]
+    fn fetcher_retries_then_succeeds() {
+        let http = SeqHttp::new(vec![
+            Err(HttpError::Status(429)),
+            Err(HttpError::Transport("blip".into())),
+            Ok(br#"[{"ok":true}]"#.to_vec()),
+        ]);
+        let cfg = cfg_retry();
+        let f = Fetcher::new(&http, &cfg);
+        let body = f.get("https://x?api_token=SECRET").unwrap();
+        assert_eq!(body, br#"[{"ok":true}]"#);
+    }
+
+    #[test]
+    fn fetcher_gives_up_after_retries() {
+        let http = SeqHttp::new(vec![
+            Err(HttpError::Status(503)),
+            Err(HttpError::Status(503)),
+            Err(HttpError::Status(503)),
+        ]);
+        let cfg = cfg_retry();
+        let f = Fetcher::new(&http, &cfg);
+        let err = f.get("https://x").unwrap_err();
+        assert!(err.contains("HTTP 503"), "{err}");
+    }
+
+    #[test]
+    fn fetcher_does_not_retry_client_errors() {
+        let http = SeqHttp::new(vec![Err(HttpError::Status(401))]);
+        let cfg = cfg_retry();
+        let f = Fetcher::new(&http, &cfg);
+        let err = f.get("https://x").unwrap_err();
+        assert!(err.contains("HTTP 401"), "{err}");
+    }
+
+    #[test]
+    fn get_rows_parses_array_and_errors() {
+        let cfg = cfg_retry();
+
+        let ok = SeqHttp::new(vec![Ok(br#"[{"a":1},{"a":2}]"#.to_vec())]);
+        let rows = Fetcher::new(&ok, &cfg).get_rows("https://x").unwrap();
+        assert_eq!(rows.len(), 2);
+
+        let msg = SeqHttp::new(vec![Ok(br#"{"message":"nope"}"#.to_vec())]);
+        let err = Fetcher::new(&msg, &cfg).get_rows("https://x").unwrap_err();
+        assert!(err.contains("EODHD error: nope"), "{err}");
+
+        let obj = SeqHttp::new(vec![Ok(br#"{"foo":1}"#.to_vec())]);
+        let err = Fetcher::new(&obj, &cfg).get_rows("https://x").unwrap_err();
+        assert!(err.contains("expected a JSON array"), "{err}");
+
+        let bad = SeqHttp::new(vec![Ok(br#"not-json"#.to_vec())]);
+        let err = Fetcher::new(&bad, &cfg).get_rows("https://x").unwrap_err();
+        assert!(err.contains("bad JSON"), "{err}");
+
+        let num = SeqHttp::new(vec![Ok(br#"42"#.to_vec())]);
+        let err = Fetcher::new(&num, &cfg).get_rows("https://x").unwrap_err();
+        assert!(err.contains("expected a JSON array"), "{err}");
+    }
+
+    #[test]
+    fn throttle_with_rate_limit_runs() {
+        // Smoke: rate_limit > 0 exercises throttle without asserting sleep.
+        let http = SeqHttp::new(vec![Ok(b"[]".to_vec()), Ok(b"[]".to_vec())]);
+        let cfg = SyncConfig {
+            rate_limit_per_min: 6000, // tiny interval
+            max_retries: 0,
+            backoff_base: Duration::ZERO,
+            ..SyncConfig::default()
+        };
+        let f = Fetcher::new(&http, &cfg);
+        assert!(f.get("https://a").is_ok());
+        assert!(f.get("https://b").is_ok());
     }
 }
