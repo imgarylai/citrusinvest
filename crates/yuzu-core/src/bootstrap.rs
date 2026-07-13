@@ -99,7 +99,7 @@ pub fn bootstrap(
                     break;
                 }
                 let r = rets[(start + j) % n]; // circular wrap
-                // `eq` always starts with base 1.0 before this loop.
+                                               // `eq` always starts with base 1.0 before this loop.
                 let prev = eq[eq.len() - 1];
                 eq.push(prev * (1.0 + r));
             }
