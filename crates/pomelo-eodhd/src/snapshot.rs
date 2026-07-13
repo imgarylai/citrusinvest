@@ -331,7 +331,6 @@ mod tests {
             let mut s = snap.clone();
             s.pe = Some(*pe);
             s.industry = Some("Software".into());
-            // re-tail pe-related not needed
             acc.push(format!("S{i}"), s, &days);
         }
         let dir = std::env::temp_dir().join("pomelo_eodhd_snap");
@@ -342,6 +341,83 @@ mod tests {
             .unwrap();
         assert!(n >= 3);
         let _ = RefCell::new(0);
+    }
+
+    #[test]
+    fn empty_price_days_and_missing_payload() {
+        let http = MockHttp {
+            body: b"{}".to_vec(),
+        };
+        let cfg = SyncConfig {
+            rate_limit_per_min: 0,
+            max_retries: 0,
+            backoff_base: Duration::ZERO,
+            ..SyncConfig::default()
+        };
+        let fetcher = Fetcher::new(&http, &cfg);
+        let empty = compute_symbol(&fetcher, "X.US", "tok", &[], 100.0);
+        assert!(empty.columns[0].is_empty());
+        let sparse = compute_symbol(&fetcher, "X.US", "tok", &[20240102], 0.0);
+        // close 0 → no upside
+        assert!(sparse.columns[0].is_empty());
+    }
+
+    #[test]
+    fn nested_highlights_and_skip_empty_panels() {
+        let payload = br#"{
+          "AnalystRatings": {"TargetPrice": "110", "Rating": "3.0"},
+          "Highlights": {"PERatio": 15.0, "MarketCapitalization": 500.0},
+          "General": {"Industry": "Banks"},
+          "Financials": {"Cash_Flow": {"yearly": {
+            "2023-12-31": {"date":"2023-12-31","freeCashFlow":"50"}
+          }}}
+        }"#;
+        let http = MockHttp {
+            body: payload.to_vec(),
+        };
+        let cfg = SyncConfig {
+            rate_limit_per_min: 0,
+            max_retries: 0,
+            backoff_base: Duration::ZERO,
+            ..SyncConfig::default()
+        };
+        let fetcher = Fetcher::new(&http, &cfg);
+        let days = [20240102];
+        let snap = compute_symbol(&fetcher, "B.US", "tok", &days, 100.0);
+        assert_eq!(snap.columns[0].last().map(|(_, v)| *v), Some(10.0));
+        assert_eq!(snap.pe, Some(15.0));
+        assert!((snap.columns[2].last().unwrap().1 - 0.1).abs() < 1e-9);
+
+        let acc = SnapshotAccum::new();
+        let dir = std::env::temp_dir().join("pomelo_eodhd_snap_empty");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        // no symbols → skip all
+        assert_eq!(
+            acc.write_panels(&pomelo_data::LocalSource::new(&dir))
+                .unwrap(),
+            0
+        );
+    }
+
+    #[test]
+    fn pe_pctile_thin_cohort_skipped() {
+        let mut acc = SnapshotAccum::new();
+        let days = [20240102];
+        for i in 0..3 {
+            acc.push(
+                format!("T{i}"),
+                SymbolSnapshot {
+                    columns: Default::default(),
+                    pe: Some(10.0 + i as f64),
+                    industry: Some("Thin".into()),
+                    as_of: 20240102,
+                },
+                &days,
+            );
+        }
+        let cols = pe_industry_pctile_columns(&acc.pe_inputs);
+        assert!(cols.iter().all(|c| c.is_empty()));
     }
 }
 
