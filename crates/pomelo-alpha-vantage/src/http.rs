@@ -150,7 +150,6 @@ impl<'a, H: HttpClient> Fetcher<'a, H> {
     }
 
     /// GET and parse any JSON value.
-    #[allow(dead_code)] // used by later phases
     pub(crate) fn get_json(&self, url: &str) -> Result<Value, String> {
         let body = self.get(url)?;
         serde_json::from_slice(&body).map_err(|e| format!("bad JSON from {}: {e}", redact(url)))

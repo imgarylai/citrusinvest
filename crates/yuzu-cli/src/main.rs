@@ -560,8 +560,9 @@ enum Cmd {
     },
     /// Sync Alpha Vantage data with YOUR OWN API key into a `data-layout.md` tree.
     ///
-    /// Optional vendor path (epic #209). Skeleton validates config only until
-    /// prices land (#214). Coverage / gaps: docs/data-sources.md § Alpha Vantage.
+    /// Optional vendor path (epic #209). Prices: TIME_SERIES_DAILY_ADJUSTED →
+    /// prices/ with adj OHLC scale (outputsize=full). Fundies/industry later.
+    /// Coverage / gaps: docs/data-sources.md § Alpha Vantage.
     ///
     /// Example:
     ///   yuzu-cli av-sync --api-key "$ALPHA_VANTAGE_API_KEY" --out ./mydata \
@@ -1277,10 +1278,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 eprintln!("  FAILED {sym}: {err}");
             }
             if summary.symbols_written == 0 {
-                return Err(
-                    "no symbols were written (skeleton: price sync lands in a later #209 phase)"
-                        .into(),
-                );
+                return Err("no symbols were written".into());
             }
         }
         #[cfg(feature = "eodhd-sync")]
