@@ -9,6 +9,9 @@
 /// (and the CLI binary) are unchanged after the extraction.
 pub use pomelo_fmp as fmp;
 
+/// EODHD data sync (epic #192), re-exported as `yuzu_cli::eodhd::…`.
+pub use pomelo_eodhd as eodhd;
+
 /// `list_symbols` lives in `pomelo-data` (price-file discovery is a data-layout
 /// concern shared with `pomelo-audit`); re-exported so callers are unchanged.
 pub use pomelo_data::list_symbols;

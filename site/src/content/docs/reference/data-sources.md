@@ -80,7 +80,7 @@ adapter.”
 | **One-shot (official)** | `yuzu-cli fmp-sync …` → data root | Supported |
 | **BYO** | Write the [data-layout](../reference/data-layout) tree yourself | Supported |
 | **Assemble** | Fill blocks from different vendors into **one** data root | Supported as a pattern; recipes below are sketches |
-| **Second full adapter** | Optional `pomelo-eodhd` if product prioritizes it | Coverage gate: **near-FMP w/ accepted gaps** ([#182](https://github.com/citrusquant/citrusquant/issues/182)); not started ([#185](https://github.com/citrusquant/citrusquant/issues/185)) |
+| **Second full adapter** | `pomelo-eodhd` + `yuzu-cli eodhd-sync` (epic [#192](https://github.com/citrusquant/citrusquant/issues/192)) | Coverage gate cleared ([#182](https://github.com/citrusquant/citrusquant/issues/182)); **skeleton landed** ([#193](https://github.com/citrusquant/citrusquant/issues/193)); prices+ in follow-up phases |
 
 Engine / `pomelo-data` only need the finished tree (local or S3 via
 `pomelo-s3`). Optional quality pass: `yuzu-cli data-audit`.
@@ -233,7 +233,7 @@ EODHD uses `{CODE}.{EXCHANGE}` (e.g. `AAPL.US`). citrusquant layout keys are bar
 | This doc + recipes | [#188](https://github.com/citrusquant/citrusquant/issues/188) (merged baseline) |
 | EODHD block coverage gate | [#182](https://github.com/citrusquant/citrusquant/issues/182) — **mapping landed here** |
 | Finnhub free partial blocks | [#183](https://github.com/citrusquant/citrusquant/issues/183) |
-| Optional `pomelo-eodhd` | [#185](https://github.com/citrusquant/citrusquant/issues/185) — optional; coverage gate cleared with accepted gaps |
+| `pomelo-eodhd` + `eodhd-sync` epic | [#192](https://github.com/citrusquant/citrusquant/issues/192) (phases #193–#198); #185 superseded |
 | Re-audit docs after paths mature | [#186](https://github.com/citrusquant/citrusquant/issues/186) |
 | Parent research / stance | [#180](https://github.com/citrusquant/citrusquant/issues/180) |
 

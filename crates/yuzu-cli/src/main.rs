@@ -452,6 +452,58 @@ enum Cmd {
         #[arg(long, default_value_t = 4)]
         max_retries: u32,
     },
+    /// Sync EODHD data with YOUR OWN API token into a `data-layout.md` tree.
+    ///
+    /// Second official vendor path (epic #192) so users are not FMP-only.
+    /// Direct HTTP (no third-party EODHD SDK); the token stays on this machine.
+    /// Coverage map: docs/data-sources.md § EODHD.
+    ///
+    /// Skeleton (#193): validates args and symbol normalization; price fetch
+    /// lands in a follow-up. Example:
+    ///   yuzu-cli eodhd-sync --api-token "$EODHD_API_TOKEN" --out ./mydata \
+    ///     --symbols AAPL,MSFT --from 20200101 --to 20251231
+    #[cfg(feature = "eodhd-sync")]
+    EodhdSync {
+        /// EODHD API token (kept local). Falls back to $EODHD_API_TOKEN or
+        /// $EODHD_API_KEY if unset.
+        #[arg(long)]
+        api_token: Option<String>,
+        /// Output data root — local path or `s3://bucket[/prefix]` (same
+        /// credential chain as fmp-sync --out).
+        #[arg(long)]
+        out: String,
+        /// Comma-separated tickers (`AAPL` or `AAPL.US`). Or use --symbols-file.
+        #[arg(long, value_delimiter = ',')]
+        symbols: Vec<String>,
+        /// Read symbols from a file (one per line, or comma-separated; `#` comments).
+        #[arg(long)]
+        symbols_file: Option<PathBuf>,
+        /// Default exchange when a bare ticker is given (default: US → `AAPL.US`).
+        #[arg(long, default_value = yuzu_cli::eodhd::DEFAULT_EXCHANGE)]
+        exchange: String,
+        #[arg(long, default_value_t = 20000101)]
+        from: i32,
+        #[arg(long, default_value_t = 20991231)]
+        to: i32,
+        /// Also fetch fundamentals (not yet implemented — reserved for #196).
+        #[arg(long)]
+        include_fundamentals: bool,
+        /// Also fetch sector map (not yet implemented — reserved for #195).
+        #[arg(long)]
+        include_industry: bool,
+        /// Max requests per minute (0 = no throttle).
+        #[arg(long, default_value_t = 0)]
+        rate_limit: u32,
+        /// Retries on 429 / 5xx / transport errors.
+        #[arg(long, default_value_t = 4)]
+        max_retries: u32,
+        /// Merge fetched rows into existing files instead of overwriting.
+        #[arg(long)]
+        append: bool,
+        /// Skip symbols that already have a price file.
+        #[arg(long)]
+        resume: bool,
+    },
 }
 
 fn emit(out: &Option<PathBuf>, json: String) -> std::io::Result<()> {
@@ -902,6 +954,85 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             std::fs::write(&out, body).map_err(|e| format!("writing {}: {e}", out.display()))?;
             eprintln!("wrote {} symbols to {}", syms.len(), out.display());
+        }
+        #[cfg(feature = "eodhd-sync")]
+        Cmd::EodhdSync {
+            api_token,
+            out,
+            symbols,
+            symbols_file,
+            exchange,
+            from,
+            to,
+            include_fundamentals,
+            include_industry,
+            rate_limit,
+            max_retries,
+            append,
+            resume,
+        } => {
+            let api_token = api_token
+                .or_else(|| std::env::var("EODHD_API_TOKEN").ok())
+                .or_else(|| std::env::var("EODHD_API_KEY").ok())
+                .filter(|k| !k.trim().is_empty())
+                .ok_or("provide --api-token or set EODHD_API_TOKEN (or EODHD_API_KEY)")?;
+            let mut explicit: Vec<String> = symbols
+                .into_iter()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            if let Some(path) = symbols_file {
+                let text = std::fs::read_to_string(&path)
+                    .map_err(|e| format!("reading {}: {e}", path.display()))?;
+                explicit.extend(yuzu_cli::eodhd::parse_symbols_list(&text));
+            }
+            // De-dupe while preserving order.
+            let mut seen = std::collections::HashSet::new();
+            explicit.retain(|s| seen.insert(s.clone()));
+            if explicit.is_empty() {
+                return Err("provide --symbols and/or --symbols-file".into());
+            }
+            let mode = if resume {
+                yuzu_cli::eodhd::WriteMode::Resume
+            } else if append {
+                yuzu_cli::eodhd::WriteMode::Append
+            } else {
+                yuzu_cli::eodhd::WriteMode::Overwrite
+            };
+            let cfg = yuzu_cli::eodhd::SyncConfig {
+                from,
+                to,
+                default_exchange: exchange,
+                include_fundamentals,
+                include_industry,
+                rate_limit_per_min: rate_limit,
+                max_retries,
+                backoff_base: std::time::Duration::from_secs(2),
+                mode,
+            };
+            let client = yuzu_cli::eodhd::UreqClient::new();
+            let out_store = pomelo_s3::OutStore::parse(&out)?;
+            let summary =
+                yuzu_cli::eodhd::sync_into(&client, &api_token, &explicit, &out_store, &cfg)?;
+            eprintln!(
+                "done: {} written, {} skipped, {} filtered, {} price rows, {} fundamentals, {} failures",
+                summary.symbols_written,
+                summary.symbols_skipped,
+                summary.symbols_filtered,
+                summary.price_rows,
+                summary.fundamentals_written,
+                summary.failures.len(),
+            );
+            for (sym, err) in &summary.failures {
+                eprintln!("  FAILED {sym}: {err}");
+            }
+            // Skeleton (#193): zero writes is expected — do not fail the process.
+            if summary.symbols_written == 0 {
+                eprintln!(
+                    "note: pomelo-eodhd skeleton — no price files written yet \
+                     (prices land in #194; epic #192)"
+                );
+            }
         }
     }
     Ok(())
