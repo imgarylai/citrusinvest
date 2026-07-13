@@ -588,4 +588,121 @@ mod tests {
         let err = parse("frobnicate(close)").unwrap_err();
         assert!(err.message.contains("frobnicate"), "{}", err.message);
     }
+
+    // ---- edge / adversarial inputs (must not panic; parse error is OK) ----
+
+    #[test]
+    fn empty_and_whitespace_only_error() {
+        assert!(parse("").is_err());
+        assert!(parse("   \n\t  ").is_err());
+        assert!(parse("// just a comment").is_err());
+    }
+
+    #[test]
+    fn trailing_junk_is_rejected() {
+        assert!(parse("close > 1 extra").is_err());
+        assert!(parse("sma(close, 2))").is_err());
+    }
+
+    #[test]
+    fn mismatched_delimiters_error_without_panic() {
+        assert!(parse("(close > 1").is_err());
+        assert!(parse("close > 1)").is_err());
+        assert!(parse("sma((close, 2)").is_err());
+        assert!(parse("sma(close, 2]]").is_err());
+        assert!(parse("[close]").is_err()); // list only valid as call arg
+    }
+
+    #[test]
+    fn deep_nesting_parses() {
+        // nested parentheses / calls — depth modest but above typical strategies
+        let mut s = String::from("close");
+        for _ in 0..40 {
+            s = format!("({s})");
+        }
+        let v = parse(&s).unwrap();
+        assert_eq!(v["op"], "Data");
+        assert_eq!(v["name"], "close");
+
+        let nested = "sma(sma(sma(sma(close, 2), 2), 2), 2)";
+        let v = parse(nested).unwrap();
+        assert_eq!(v["op"], "Average");
+    }
+
+    #[test]
+    fn unicode_identifiers_and_strings() {
+        // Identifiers are ASCII-only at the lexer; non-ASCII is an error, not a panic.
+        let err = parse("αβγ > 1").unwrap_err();
+        assert!(
+            err.message.contains("unexpected character") || err.message.contains("α"),
+            "{}",
+            err.message
+        );
+
+        // String literals may hold unicode (sector names, etc.).
+        let v = parse(r#"in_sector(close, "科技")"#).unwrap();
+        assert_eq!(v["op"], "InSector");
+        assert_eq!(v["name"], "科技");
+    }
+
+    #[test]
+    fn large_numeric_literals() {
+        let v = parse("close > 1e308").unwrap();
+        assert_eq!(v["op"], "Gt");
+        let n = v["r"]["value"].as_f64().unwrap();
+        assert!(n.is_finite() || n.is_infinite());
+        // Oversized digit run: either parses (lossy) or rejects — never panics.
+        let _ = parse("close > 999999999999999999999999");
+    }
+
+    #[test]
+    fn let_edge_cases() {
+        // unused let is still a valid parse (linter flags separately)
+        let a = parse_analyzed("let x = close\npe > 1").unwrap();
+        assert_eq!(a.unused_lets.len(), 1);
+        assert_eq!(a.unused_lets[0].0, "x");
+
+        // let without following expression
+        assert!(parse("let x = close").is_err());
+        // expression with no lets is fine
+        assert_eq!(parse("close").unwrap()["op"], "Data");
+    }
+
+    #[test]
+    fn keyword_and_boolean_surface() {
+        // `and` is an infix keyword, not a callable
+        assert!(parse("and(close, pe)").is_err());
+        let v = parse("close > 0 and pe < 20").unwrap();
+        assert_eq!(v["op"], "And");
+        let v = parse("rank(close, ascending=true)").unwrap();
+        assert_eq!(v["ascending"], true);
+        let v = parse("rank(close, ascending=false)").unwrap();
+        assert_eq!(v["ascending"], false);
+    }
+
+    #[test]
+    fn random_byte_like_inputs_do_not_panic() {
+        // Representative garbage / partial UTF-8 recovery paths via &str (always valid UTF-8).
+        let samples = [
+            "\0",
+            "\u{0}close",
+            "(((((",
+            "))))",
+            "let let = close\nlet",
+            "sma(,,,,,,,)",
+            "close == 1", // no `==` in lemon
+            "close != 1",
+            "close & pe",
+            "close | pe",
+            "!close",
+            "close > > 1",
+            "........",
+            "/* not a block comment in lemon */ close",
+            &"x".repeat(10_000),
+            &format!("sma(close, {})", "9".repeat(200)),
+        ];
+        for s in samples {
+            let _ = parse(s); // Result either way; must not panic
+        }
+    }
 }
