@@ -650,8 +650,9 @@ enum Cmd {
     },
     /// Sync Finnhub data with YOUR OWN API key into a `data-layout.md` tree.
     ///
-    /// Optional vendor path (epic #210). Skeleton validates config only until
-    /// prices land (#226). Coverage / gaps: docs/data-sources.md § Finnhub.
+    /// Optional vendor path (epic #210). Writes adjusted daily candles →
+    /// `prices/{SYM}.csv.gz` (#226); industry/fundamentals/index/snapshot flags
+    /// are reserved for later phases. Coverage / gaps: docs/data-sources.md § Finnhub.
     ///
     /// Example:
     ///   yuzu-cli finnhub-sync --api-key "$FINNHUB_API_KEY" --out ./mydata \
@@ -1551,10 +1552,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 eprintln!("  FAILED {sym}: {err}");
             }
             if summary.symbols_written == 0 {
-                return Err(
-                    "no symbols were written (skeleton: price sync lands in a later #210 phase)"
-                        .into(),
-                );
+                return Err("no symbols were written".into());
             }
         }
     }

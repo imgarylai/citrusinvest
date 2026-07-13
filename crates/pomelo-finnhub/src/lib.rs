@@ -7,7 +7,7 @@
 //! contract as `pomelo-fmp` / `pomelo-eodhd` / `pomelo-alpha-vantage`:
 //!
 //! ```text
-//! <out>/prices/{SYM}.csv.gz        adjusted OHLCV                 (later #226)
+//! <out>/prices/{SYM}.csv.gz        adjusted OHLCV                 (#226)
 //! <out>/fundamentals/{SYM}.csv.gz  dense forward-filled factors   (later #228)
 //! <out>/tracked/universe.csv.gz    symbol,sector,market_cap       (later #227)
 //! <out>/panels/{name}.csv.gz       membership / snapshot panels   (later #229–#230)
@@ -21,17 +21,24 @@
 //! The key never leaves the machine; we neither host nor redistribute Finnhub
 //! data. Finnhub stays **out** of `yuzu-core` / `pomelo-data` / WASM.
 //!
-//! ## Status (skeleton #225)
+//! ## Status
 //!
-//! Crate shape + CLI stub only: validates config/symbols; does **not** fetch
-//! prices yet. Coverage / accepted gaps: spike
+//! - **Skeleton (#225):** crate + `HttpClient` + CLI `finnhub-sync`.
+//! - **Prices (#226):** `/stock/candle` (`resolution=D`, `adjusted=true`) →
+//!   `prices/{SYM}.csv.gz`; resume/append modes. Adjusted OHLC map straight
+//!   through (no `adj_close/close` rescale). Unadjusted risk when a plan
+//!   ignores `adjusted`, plus per-request range caps, are documented honestly.
+//!
+//! Coverage / accepted gaps: spike
 //! [#208](https://github.com/citrusquant/citrusquant/issues/208) and
 //! [`docs/data-sources.md`](../../../docs/data-sources.md) § Finnhub.
 
 mod config;
 mod http;
+mod price;
 mod symbol;
 mod sync;
+mod util;
 
 pub use config::{SyncConfig, SyncSummary, WriteMode};
 /// The real ureq-backed client — only with the `finnhub-sync` feature.
