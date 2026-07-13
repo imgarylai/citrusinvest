@@ -5,12 +5,13 @@ sourceFile: docs/data-sources.md
 ---
 
 <!-- Imported from docs/data-sources.md by site/scripts/import-reference-docs.mjs — edit the source, then re-run `npm run import:docs`. -->
-> **Status: current** — re-audited after epic
-> [#192](https://github.com/citrusquant/citrusquant/issues/192) (`pomelo-eodhd` /
-> `eodhd-sync`) landed. Parent stance: [#180](https://github.com/citrusquant/citrusquant/issues/180).
+> **Status: current** — official adapters FMP + EODHD (#192); AV/Finnhub **solo
+> backtest spikes** [#207](https://github.com/citrusquant/citrusquant/issues/207) /
+> [#208](https://github.com/citrusquant/citrusquant/issues/208) documented below
+> (gaps → impact only; no pricing advice). Parent: [#180](https://github.com/citrusquant/citrusquant/issues/180).
 >
 > Vendor coverage is research plus what the in-repo adapters implement — not a
-> product promise that numbers match across vendors. APIs, tiers, and pricing
+> product promise that numbers match across vendors. APIs and endpoint shapes
 > change; re-check before you build a pipeline.
 
 ## What is decided
@@ -65,22 +66,24 @@ What **in-repo** CLIs actually write today (not “the vendor has an API somewhe
 Legend for the wider candidate table below: **Y** = typically usable · **P** =
 partial / plan-dependent · **N** = essentially no · **TBD** = not verified here.
 
-| Block | FMP (`fmp-sync`) | EODHD (`eodhd-sync`) | Finnhub | Tiingo | Polygon | Sharadar SF1 | EDGAR DIY |
-|-------|------------------|----------------------|---------|--------|---------|--------------|-----------|
-| Adjusted OHLCV | Y (official) | Y (official\*) | Y | Y | Y | P (separate) | N |
-| Fundamentals | Y (official) | Y / P† (official densify) | Y | P | P | Y | DIY |
-| Industry map | Y (official) | Y (official) | Y | P / TBD | P / TBD | TBD | extra |
-| Delisted | Y (flag) | Y (flag) | P / TBD | TBD | TBD | TBD | partial |
-| Index PIT | Y (flag) | Y (SPX) / P‡ | Y | N / weak | N / weak | N | hard |
-| Screener | Y (`fmp-symbols`) | Y (`eodhd-symbols`) | Y | weak | P | N | N |
-| Snapshot scores | Y (6 panels) | P (4 panels; no piotroski/altman) | P / TBD | weak | weak | N | N |
+| Block | FMP (`fmp-sync`) | EODHD (`eodhd-sync`) | Alpha Vantage | Finnhub | Tiingo | Polygon | Sharadar SF1 | EDGAR DIY |
+|-------|------------------|----------------------|---------------|---------|--------|---------|--------------|-----------|
+| Adjusted OHLCV | Y (official) | Y (official\*) | Y / P§ | Y / P¶ | Y | Y | P (separate) | N |
+| Fundamentals | Y (official) | Y / P† (official densify) | Y / P§ | Y / P¶ | P | P | Y | DIY |
+| Industry map | Y (official) | Y (official) | Y | Y | P / TBD | P / TBD | TBD | extra |
+| Delisted | Y (flag) | Y (flag) | Y | P | TBD | TBD | TBD | partial |
+| Index PIT | Y (flag) | Y (SPX) / P‡ | **P / weak** | Y | N / weak | N / weak | N | hard |
+| Screener | Y (`fmp-symbols`) | Y (`eodhd-symbols`) | P | Y | weak | P | N | N |
+| Snapshot scores | Y (6 panels) | P (4 panels; no piotroski/altman) | P / DIY | P / DIY | weak | weak | N | N |
 
 \* EODHD: full **adj OHLC** via local scale; native feed is raw OHLC + `adjusted_close`.  
 † Dense historical ratios from annual statements; Highlights/Valuation remain **TTM / current** (used for snapshot factors, not fundies history).  
-‡ S&P 500 historical constituents via `GSPC.INDX`; broader index history often Marketplace add-on.
+‡ S&P 500 historical constituents via `GSPC.INDX`; broader index history often Marketplace add-on.  
+§ Alpha Vantage: spike [#207](https://github.com/citrusquant/citrusquant/issues/207) — see [§ Alpha Vantage](#alpha-vantage-mapping-spike-207). No in-repo adapter yet (epic [#209](https://github.com/citrusquant/citrusquant/issues/209)).  
+¶ Finnhub: spike [#208](https://github.com/citrusquant/citrusquant/issues/208) — see [§ Finnhub](#finnhub-mapping-spike-208). No in-repo adapter yet (epic [#210](https://github.com/citrusquant/citrusquant/issues/210)).
 
-**In-repo full sync CLIs:** FMP and EODHD. Other columns mean “you can often
-buy/fetch this block and write the layout yourself,” not “we ship an adapter.”
+**In-repo full sync CLIs today:** FMP and EODHD. AV/Finnhub columns are **API-capable**
+(spike-backed), not “we ship an adapter yet.”
 
 ---
 
@@ -268,6 +271,107 @@ EODHD uses `{CODE}.{EXCHANGE}` (e.g. `AAPL.US`). citrusquant layout keys are bar
 
 ---
 
+## Alpha Vantage mapping (spike #207)
+
+Research ~2026-07 against [Alpha Vantage documentation](https://www.alphavantage.co/documentation/)
+and demo payloads (`INCOME_STATEMENT`, `OVERVIEW`). **No cost advice** — only
+whether a solo AV tree can feed honest citrusquant backtests.
+
+### Gate decision
+
+| | |
+|--|--|
+| **Outcome** | **Go with accepted gaps** → epic [#209](https://github.com/citrusquant/citrusquant/issues/209) (`pomelo-alpha-vantage`) unblocked for phased work |
+| **Solo backtest?** | **Yes** for price / TA, statement-densified factors, industry, and delisted-aware universes |
+| **Not solo-strong** | Index **membership** PIT, rich screener, vendor piotroski/altman |
+
+### Block coverage → layout → backtest impact
+
+| Block | Verdict | Primary endpoint(s) | → layout | What’s incomplete | Backtest impact if you accept the gap |
+|-------|---------|---------------------|----------|-------------------|----------------------------------------|
+| Adjusted OHLCV | **Y / P** | `TIME_SERIES_DAILY_ADJUSTED` | `prices/{SYM}.*` | Returns **raw** O/H/L/C + `adjusted close` + dividend + split coefficient (not FMP-style native adj OHLC). Full multi-decade series needs the premium/full surface (compact ≈ last 100 bars). | Price TA / NAV / stops **OK** after local scale `OHLC * (adj_close/close)` (same pattern as EODHD). Wrong if you load raw OHLC as “adjusted.” Compact-only history → short samples only. |
+| Fundamentals densify | **Y / P** | `INCOME_STATEMENT`, `BALANCE_SHEET`, `CASH_FLOW` (annual + quarterly); TTM multiples from `OVERVIEW` | `fundamentals/{SYM}.*` | Rows keyed by **`fiscalDateEnding` only** — **no `filing_date` / accepted date** in statement payloads (demo IBM). Historical `pe`/`ps`/`pb`/`market_cap` need DIY from price + shares/EPS, or stay NaN like EODHD densify. | Factor strategies on statement ratios / growth **OK** after densify. **`report_event` / PIT visibility degrades** to period-end (optimistic lookahead vs filing-date truth — same class of risk as FMP/EODHD filing fallback). Multiples history weak unless DIY. |
+| Industry map | **Y** | `OVERVIEW` → `Sector`, `Industry` | `tracked/universe.csv.gz` | Sector/industry strings are AV’s taxonomy, not GICS-identical to FMP. | `neutralize_industry` / `industry_rank` **work**; cross-vendor industry labels **not** comparable. |
+| Delisted | **Y** | `LISTING_STATUS` (`state=active` / `delisted`, optional as-of `date`) | truncated `prices/` + universe union | Completeness depends on AV’s delisted CSV; still need EOD history for dead tickers. | Survivorship-honest universes **possible** (#26) if you union delisted names and fetch their bars. Active-only lists → survivor bias. |
+| Index PIT | **P / weak** | Index **price** APIs (premium index suite: SPX, etc.) | hard to get `panels/in_sp500` | Index series ≠ **constituent membership over time**. No first-class “historical SPX members” map comparable to FMP/EODHD/Finnhub. | `mask(signal, in_sp500)`-style **index-honest** backtests **not** available from AV alone without external membership DIY. Price strategies without membership **unaffected**. |
+| Screener | **P** | `SYMBOL_SEARCH`, `TOP_GAINERS_LOSERS`, … | symbol list | Not a full exchange/cap screener like FMP/EODHD. | Universe construction is **manual** or external; engine runs whatever `prices/` you supply. |
+| Snapshot factors | **P / DIY** | `OVERVIEW` (`AnalystTargetPrice`, `AnalystRating*`, TTM PE, …); statements for DIY scores | `panels/*` optional | No vendor piotroski/altman. Ratings are **counts**, not FMP grades-summary labels. Current snapshot semantics only. | Screening-style factors possible with DIY; **deep historical** snapshot panels **no**. Missing panels → those `Data` names NaN (ops no-op / empty), not engine crash. |
+
+### Solo “can I backtest?” matrix (AV only)
+
+| Strategy family | Honest on AV-only? | Notes |
+|-----------------|--------------------|-------|
+| Price TS / OHLCV TA / rotation on price | **Yes** | After adj OHLC reconstruction + full history access |
+| CS on price ranks | **Yes** | |
+| Statement factor densify (roe, margins, growth, …) | **Yes, degraded PIT** | Period-end visibility unless you add external filing dates |
+| Industry neutralize / rank | **Yes** | Taxonomy-specific |
+| Delist haircuts | **Yes** if `LISTING_STATUS` + dead-name prices included | |
+| Index-member-only (SPX PIT) | **No** (without external membership) | Largest structural hole vs FMP/EODHD/Finnhub |
+| Snapshot piotroski/altman/history | **No / DIY only** | |
+
+### Sources (Alpha Vantage)
+
+- [API documentation](https://www.alphavantage.co/documentation/) — daily adjusted, fundamentals, listing status, overview  
+- Demo checks: `OVERVIEW` / `INCOME_STATEMENT` for IBM (fiscal periods present; no filing timestamp on statements)
+
+---
+
+## Finnhub mapping (spike #208)
+
+Research ~2026-07 against [Finnhub API docs](https://finnhub.io/docs/api) and
+public endpoint descriptions. Capability notes may mark free vs paid **access**
+only so implementers know what a key must unlock — **not** product pricing advice.
+
+Widens free-tier demo spike [#183](https://github.com/citrusquant/citrusquant/issues/183)
+to full solo-backtest completeness.
+
+### Gate decision
+
+| | |
+|--|--|
+| **Outcome** | **Go with accepted gaps** → epic [#210](https://github.com/citrusquant/citrusquant/issues/210) (`pomelo-finnhub`) unblocked |
+| **Solo backtest?** | **Yes** for prices (with adjust care), fundies (stronger filing dates via as-reported), industry, **index historical constituents**, screener |
+| **Watch** | Candle **adjust** semantics; delisted path thinner than AV `LISTING_STATUS`; free-tier history windows force multi-call stitching |
+
+### Block coverage → layout → backtest impact
+
+| Block | Verdict | Primary endpoint(s) | → layout | What’s incomplete | Backtest impact if you accept the gap |
+|-------|---------|---------------------|----------|-------------------|----------------------------------------|
+| Adjusted OHLCV | **Y / P** | `stock/candle` (`resolution=D`, `from`/`to`; optional **adjusted** flag on the candle API) | `prices/{SYM}.*` | Unadjusted candles if flag omitted. Free/low tiers often **cap range per request** (commonly ~1y daily — stitch windows). International depth/latency differs from US. | Price/TA **OK** when adjusted series is requested and windows stitched. Using unadjusted OHLC → split-distorted returns, stops, TA. Short free windows → incomplete history if not looped. |
+| Fundamentals densify | **Y / P** | Standardized `stock/financials`; **`stock/financials-reported`** (as-reported + **filedDate**); `stock/metric` / basic financials for TTM / series | `fundamentals/{SYM}.*` | Standardized vs as-reported field names differ; some deep series are plan-gated. Need local ratio/YoY math into `FUNDAMENTAL_FIELDS`. | Factor densify **OK**. **`report_event` can track filing** when using as-reported `filedDate` — **better PIT story than AV**. Missing standardized history → thinner factor columns. |
+| Industry map | **Y** | `stock/profile` / `stock/profile2` (`finnhubIndustry`, sector-like fields) | `tracked/universe.csv.gz` | Taxonomy ≠ FMP/AV. | Industry ops **work**; don’t mix vendor industry strings mid-sample. |
+| Delisted | **P** | Exchange symbol lists / profile status; no single “delisted CSV” as clean as AV `LISTING_STATUS` | truncated `prices/` | Harder to enumerate dead names exhaustively from one call. | Survivorship **degrades** unless you maintain an external dead-name list or accept survivor-only universes. |
+| Index PIT | **Y** | `index/constituents` + **`index/historical-constituents`** (e.g. `^GSPC`) | `panels/in_sp500.csv.gz` | Quality/depth can thin further back in time (vendor-dependent). Some access is plan-gated. | **Strong solo fit** for index-member strategies — main reason Finnhub can beat AV for SPX-honest research without FMP/EODHD. |
+| Screener | **Y** | `stock/screener` (filters: exchange, cap, …) | symbol list | Often plan-gated; filter surface differs from FMP. | Universe discovery **OK** when endpoint is unlocked; else BYO symbol file. |
+| Snapshot factors | **P / DIY** | `stock/metric`, recommendation trends, price targets | `panels/*` optional | No drop-in piotroski/altman. Current vs historical metric series varies by field. | DIY current screens possible; not FMP’s six-panel set. |
+
+### Solo “can I backtest?” matrix (Finnhub only)
+
+| Strategy family | Honest on Finnhub-only? | Notes |
+|-----------------|-------------------------|-------|
+| Price TS / OHLCV TA / rotation | **Yes** | Must use **adjusted** candles + stitch ranges |
+| CS on price ranks | **Yes** | |
+| Statement factors + filing-aware `report_event` | **Yes** | Prefer financials-reported for visibility |
+| Industry neutralize / rank | **Yes** | |
+| Delist haircuts | **Partial** | Weaker than AV/FMP/EODHD delist feeds |
+| Index-member-only (SPX PIT) | **Yes** (relative strength) | Best non-FMP/EODHD story for membership |
+| Snapshot score panels | **DIY / partial** | |
+
+### Free-tier demo note (#183)
+
+Free keys can still fill **partial** trees for small US universes (quotes/candles +
+thin fundies) under rate limits and short candle windows — good for demos, not a
+claim of full-market solo production parity. Completeness above is about **API
+capability**, not free quotas.
+
+### Sources (Finnhub)
+
+- [API documentation](https://finnhub.io/docs/api) — candles, financials, profile, screener  
+- [Indices historical constituents](https://finnhub.io/docs/api/indices-historical-constituents)  
+- [Financials as reported](https://finnhub.io/docs/api/financials-reported)
+
+---
+
 ## Open work (track on GitHub)
 
 | Item | Issue |
@@ -275,8 +379,13 @@ EODHD uses `{CODE}.{EXCHANGE}` (e.g. `AAPL.US`). citrusquant layout keys are bar
 | Multi-source stance + assemble docs | [#188](https://github.com/citrusquant/citrusquant/issues/188) — **done** |
 | EODHD block coverage gate | [#182](https://github.com/citrusquant/citrusquant/issues/182) — **done** |
 | `pomelo-eodhd` + `eodhd-sync` | [#192](https://github.com/citrusquant/citrusquant/issues/192) (phases #193–#198) — **done** |
-| Re-audit docs after second path | [#186](https://github.com/citrusquant/citrusquant/issues/186) — **this revision** |
-| Finnhub free partial blocks | [#183](https://github.com/citrusquant/citrusquant/issues/183) |
+| Re-audit docs after second path | [#186](https://github.com/citrusquant/citrusquant/issues/186) — **done** |
+| Alpha Vantage solo coverage spike | [#207](https://github.com/citrusquant/citrusquant/issues/207) — **this revision** |
+| Finnhub solo coverage spike | [#208](https://github.com/citrusquant/citrusquant/issues/208) — **this revision** |
+| `pomelo-alpha-vantage` (gated on #207 go) | [#209](https://github.com/citrusquant/citrusquant/issues/209) |
+| `pomelo-finnhub` (gated on #208 go) | [#210](https://github.com/citrusquant/citrusquant/issues/210) |
+| Shared `pomelo-*` adapter conventions | [#211](https://github.com/citrusquant/citrusquant/issues/211) |
+| Finnhub free partial call-budget demos | [#183](https://github.com/citrusquant/citrusquant/issues/183) |
 | Parent research / stance | [#180](https://github.com/citrusquant/citrusquant/issues/180) |
 
 ---
@@ -284,8 +393,8 @@ EODHD uses `{CODE}.{EXCHANGE}` (e.g. `AAPL.US`). citrusquant layout keys are bar
 ## Related docs
 
 - [`data-layout.md`](../reference/data-layout) — on-disk contract (source of truth for shapes)
-- [`eodhd-data-source.md`](../reference/eodhd-data-source) — EODHD CLI, flags, plans, gaps
+- [`eodhd-data-source.md`](../reference/eodhd-data-source) — EODHD CLI, flags, gaps
 - [`fmp-data-source.md`](../reference/fmp-data-source) — FMP Starter vs feature families + `fmp-sync`
 - [`backtest-engine.md`](../reference/backtest-engine) — panels / backtest semantics
-- crates `pomelo-fmp`, `pomelo-eodhd` — official one-shot syncs
+- crates `pomelo-fmp`, `pomelo-eodhd` — official one-shot syncs (AV/Finnhub planned)
 
