@@ -38,7 +38,7 @@ impl From<HashMap<String, Panel>> for EvalContext {
 
 pub fn run_strategy(spec_json: &str, ctx: &EvalContext) -> Result<Panel, EngineError> {
     let expr: Expr =
-        serde_json::from_str(spec_json).map_err(|e| EngineError::Eval(e.to_string()))?;
+        serde_json::from_str(spec_json).map_err(|e| EngineError::SpecParse(e.to_string()))?;
     eval(&expr, ctx)
 }
 
@@ -114,9 +114,7 @@ fn num_binop<'a>(
     f: impl Fn(f64, f64) -> f64,
 ) -> Result<EvalOut<'a>, EngineError> {
     match (as_const(l), as_const(r)) {
-        (Some(_), Some(_)) => Err(EngineError::Eval(
-            "both operands of a binary op are Const".into(),
-        )),
+        (Some(_), Some(_)) => Err(EngineError::BothOperandsConst),
         (Some(a), None) => Ok(EvalOut::Owned(
             eval_out(r, ctx)?.as_panel().scalar_lhs(a, f),
         )),
@@ -235,14 +233,14 @@ fn eval_leaf<'a>(expr: &Expr, ctx: &'a EvalContext) -> Result<EvalOut<'a>, Engin
             let p = ctx
                 .panels
                 .get(name)
-                .ok_or_else(|| EngineError::Eval(format!("unknown series '{name}'")))?;
+                .ok_or_else(|| EngineError::UnknownSeries {
+                    name: name.clone(),
+                })?;
             Ok(EvalOut::Borrowed(p))
         }
         Const { value } => {
             // Const is only meaningful inside scalar ops, handled by callers.
-            Err(EngineError::Eval(format!(
-                "bare Const {value} not allowed at top level"
-            )))
+            Err(EngineError::BareConst { value: *value })
         }
         _ => unreachable!("eval_leaf: not a leaf"),
     }
@@ -530,10 +528,8 @@ fn eval_portfolio<'a>(expr: &Expr, ctx: &'a EvalContext) -> Result<EvalOut<'a>, 
         Rebalance { of, freq, on } => {
             let p = eval_out(of, ctx)?;
             match (freq.as_deref(), on) {
-                (Some(_), Some(_)) => Err(EngineError::Eval(
-                    "Rebalance takes either freq or on, not both".into(),
-                )),
-                (None, None) => Err(EngineError::Eval("Rebalance needs freq or on".into())),
+                (Some(_), Some(_)) => Err(EngineError::RebalanceBoth),
+                (None, None) => Err(EngineError::RebalanceNeither),
                 (Some(freq), None) => {
                     let f = match freq {
                         "W" => Freq::Weekly,
@@ -541,7 +537,9 @@ fn eval_portfolio<'a>(expr: &Expr, ctx: &'a EvalContext) -> Result<EvalOut<'a>, 
                         "QE" => Freq::QuarterEnd,
                         "YE" => Freq::YearEnd,
                         other => {
-                            return Err(EngineError::Eval(format!("bad freq '{other}'")));
+                            return Err(EngineError::BadFreq {
+                                freq: other.to_string(),
+                            });
                         }
                     };
                     Ok(EvalOut::Owned(p.as_panel().rebalance_freq(f)))
@@ -629,7 +627,9 @@ pub fn run_backtest(
     let prices = ctx
         .panels
         .get(price_key)
-        .ok_or_else(|| EngineError::Eval(format!("unknown price series '{price_key}'")))?;
+        .ok_or_else(|| EngineError::UnknownPriceKey {
+            key: price_key.to_string(),
+        })?;
     let open = ctx.panels.get("open");
     let high = ctx.panels.get("high");
     let low = ctx.panels.get("low");
@@ -643,11 +643,11 @@ pub fn run_backtest(
             let p = ctx
                 .panels
                 .get(key)
-                .ok_or_else(|| EngineError::Eval(format!("unknown benchmark series '{key}'")))?;
+                .ok_or_else(|| EngineError::UnknownBenchmark {
+                    key: key.clone(),
+                })?;
             if p.ncols() == 0 {
-                return Err(EngineError::Eval(format!(
-                    "benchmark series '{key}' has no symbols"
-                )));
+                return Err(EngineError::EmptyBenchmark { key: key.clone() });
             }
             // first column is the benchmark instrument
             let col: Vec<f64> = (0..p.nrows()).map(|r| p.data[[r, 0]]).collect();

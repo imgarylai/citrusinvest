@@ -352,9 +352,9 @@ fn aggregate(agg: &str, vals: &[f64]) -> Result<f64, crate::error::EngineError> 
             var.sqrt()
         }
         other => {
-            return Err(crate::error::EngineError::Eval(format!(
-                "bad groupby agg '{other}'"
-            )));
+            return Err(crate::error::EngineError::BadGroupbyAgg {
+                agg: other.to_string(),
+            });
         }
     })
 }
