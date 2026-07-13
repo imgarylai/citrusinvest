@@ -25,6 +25,7 @@
 //! - **Prices (#194):** EOD → full adj OHLC via `adjusted_close/close` scale.
 //! - **Industry + delisted (#195):** sector map; delisted list for universe union.
 //! - **Fundamentals (#196):** yearly statements → dense `FUNDAMENTAL_FIELDS` + `report_event`.
+//! - **Index PIT + screener (#197):** `in_sp500` panel; `eodhd-symbols` universe helper.
 //!
 //! Coverage map: [`docs/data-sources.md`](../../../docs/data-sources.md).
 
@@ -32,8 +33,10 @@ mod config;
 mod delisted;
 mod fundamentals;
 mod http;
+mod index;
 mod industry;
 mod price;
+mod screener;
 mod symbol;
 mod sync;
 mod util;
@@ -44,7 +47,9 @@ pub use delisted::{fetch_delisted, DelistedSymbol};
 #[cfg(feature = "eodhd-sync")]
 pub use http::UreqClient;
 pub use http::{HttpClient, HttpError};
+pub use index::{write_index_membership, Index, IndexMembership, MEMBERSHIP_SERIES};
 pub use industry::INDUSTRY_KEY;
+pub use screener::{build_symbol_list, parse_market_cap, SymbolFilter};
 pub use symbol::{layout_symbol, parse_symbols_list, split_symbol};
 pub use sync::{sync, sync_into, EODHD_BASE};
 

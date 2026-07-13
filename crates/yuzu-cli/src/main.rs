@@ -126,6 +126,22 @@ impl From<IndexArg> for yuzu_cli::fmp::Index {
     }
 }
 
+/// Index for `eodhd-sync --index` (v1: SPX only).
+#[cfg(feature = "eodhd-sync")]
+#[derive(Clone, Copy, ValueEnum)]
+enum EodhdIndexArg {
+    Sp500,
+}
+
+#[cfg(feature = "eodhd-sync")]
+impl From<EodhdIndexArg> for yuzu_cli::eodhd::Index {
+    fn from(a: EodhdIndexArg) -> Self {
+        match a {
+            EodhdIndexArg::Sp500 => yuzu_cli::eodhd::Index::Sp500,
+        }
+    }
+}
+
 impl CommonArgs {
     fn config(&self) -> yuzu_core::backtest::BacktestConfig {
         use yuzu_core::backtest::{StopConfig, StopFill};
@@ -471,12 +487,16 @@ enum Cmd {
         /// credential chain as fmp-sync --out).
         #[arg(long)]
         out: String,
-        /// Comma-separated tickers (`AAPL` or `AAPL.US`). Or use --symbols-file.
+        /// Comma-separated tickers (`AAPL` or `AAPL.US`). Or use --symbols-file / --index.
         #[arg(long, value_delimiter = ',')]
         symbols: Vec<String>,
         /// Read symbols from a file (one per line, or comma-separated; `#` comments).
         #[arg(long)]
         symbols_file: Option<PathBuf>,
+        /// Sync ever-members of an index over [from,to] and write `panels/in_sp500`
+        /// (local --out only). Mutually exclusive with --symbols / --symbols-file.
+        #[arg(long, value_enum)]
+        index: Option<EodhdIndexArg>,
         /// Default exchange when a bare ticker is given (default: US → `AAPL.US`).
         #[arg(long, default_value = yuzu_cli::eodhd::DEFAULT_EXCHANGE)]
         exchange: String,
@@ -507,6 +527,32 @@ enum Cmd {
         /// Skip symbols that already have a price file.
         #[arg(long)]
         resume: bool,
+    },
+    /// Build a screened symbol universe from EODHD and write it to a file.
+    ///
+    /// Example:
+    ///   yuzu-cli eodhd-symbols --api-token "$EODHD_API_TOKEN" --out ./universe.txt \
+    ///     --min-market-cap 1b --exchange us --limit 200
+    #[cfg(feature = "eodhd-sync")]
+    EodhdSymbols {
+        #[arg(long)]
+        api_token: Option<String>,
+        #[arg(long)]
+        out: PathBuf,
+        /// Only symbols at/above this market cap in USD (0 = no floor).
+        /// Accepts suffixes: 1b, 500m, 10k.
+        #[arg(long, default_value = "0", value_parser = yuzu_cli::eodhd::parse_market_cap)]
+        min_market_cap: f64,
+        /// Exchange filter for the screener (default: us). Pass `all` for none.
+        #[arg(long, default_value = "us")]
+        exchange: String,
+        /// Cap the number of symbols returned.
+        #[arg(long)]
+        limit: Option<usize>,
+        #[arg(long, default_value_t = 0)]
+        rate_limit: u32,
+        #[arg(long, default_value_t = 4)]
+        max_retries: u32,
     },
 }
 
@@ -965,6 +1011,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             out,
             symbols,
             symbols_file,
+            index,
             exchange,
             from,
             to,
@@ -981,6 +1028,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .or_else(|| std::env::var("EODHD_API_KEY").ok())
                 .filter(|k| !k.trim().is_empty())
                 .ok_or("provide --api-token or set EODHD_API_TOKEN (or EODHD_API_KEY)")?;
+            let had_symbols_flag = !symbols.is_empty();
+            let had_file = symbols_file.is_some();
             let mut explicit: Vec<String> = symbols
                 .into_iter()
                 .map(|s| s.trim().to_string())
@@ -994,11 +1043,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // De-dupe while preserving order.
             let mut seen = std::collections::HashSet::new();
             explicit.retain(|s| seen.insert(s.clone()));
-            if explicit.is_empty() && !include_delisted {
-                return Err(
-                    "provide --symbols and/or --symbols-file (or --include-delisted)".into(),
-                );
+
+            if (had_symbols_flag || had_file) && index.is_some() {
+                return Err("choose one of --symbols/--symbols-file or --index (not both)".into());
             }
+
             let mode = if resume {
                 yuzu_cli::eodhd::WriteMode::Resume
             } else if append {
@@ -1018,6 +1067,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 mode,
             };
             let client = yuzu_cli::eodhd::UreqClient::new();
+
+            let membership = if let Some(idx) = index {
+                eprintln!("fetching EODHD index membership…");
+                let m =
+                    yuzu_cli::eodhd::IndexMembership::fetch(&client, &api_token, idx.into(), &cfg)?;
+                explicit = m.ever_members(from, to);
+                seen = explicit.iter().cloned().collect();
+                eprintln!(
+                    "index {}: {} ever-members over [{from},{to}]",
+                    m.series_name(),
+                    explicit.len()
+                );
+                Some(m)
+            } else {
+                None
+            };
+
             if include_delisted {
                 eprintln!("fetching delisted universe from EODHD ({exchange})…");
                 let delisted =
@@ -1031,9 +1097,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 eprintln!("delisted: +{} names unioned in", explicit.len() - before);
             }
             if explicit.is_empty() {
-                return Err("no symbols to sync after filters".into());
+                return Err(
+                    "provide --symbols and/or --symbols-file, or --index, or --include-delisted"
+                        .into(),
+                );
             }
             let out_store = pomelo_s3::OutStore::parse(&out)?;
+            if membership.is_some() && out_store.is_s3() {
+                return Err(
+                    "--index requires a local --out (membership panel write needs a local trading calendar)"
+                        .into(),
+                );
+            }
             let summary =
                 yuzu_cli::eodhd::sync_into(&client, &api_token, &explicit, &out_store, &cfg)?;
             eprintln!(
@@ -1052,6 +1127,59 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if summary.symbols_written == 0 {
                 return Err("no symbols were written".into());
             }
+            if let Some(m) = &membership {
+                let (days, cols) = yuzu_cli::eodhd::write_index_membership(
+                    std::path::Path::new(&out),
+                    m,
+                    from,
+                    to,
+                )?;
+                eprintln!(
+                    "wrote panels/{}.csv.gz: {days} days × {cols} symbols (mask with mask(signal, {}))",
+                    m.series_name(),
+                    m.series_name()
+                );
+            }
+        }
+        #[cfg(feature = "eodhd-sync")]
+        Cmd::EodhdSymbols {
+            api_token,
+            out,
+            min_market_cap,
+            exchange,
+            limit,
+            rate_limit,
+            max_retries,
+        } => {
+            let api_token = api_token
+                .or_else(|| std::env::var("EODHD_API_TOKEN").ok())
+                .or_else(|| std::env::var("EODHD_API_KEY").ok())
+                .filter(|k| !k.trim().is_empty())
+                .ok_or("provide --api-token or set EODHD_API_TOKEN (or EODHD_API_KEY)")?;
+            let cfg = yuzu_cli::eodhd::SyncConfig {
+                rate_limit_per_min: rate_limit,
+                max_retries,
+                backoff_base: std::time::Duration::from_secs(2),
+                ..Default::default()
+            };
+            let filter = yuzu_cli::eodhd::SymbolFilter {
+                min_market_cap,
+                exchange,
+                limit,
+            };
+            let client = yuzu_cli::eodhd::UreqClient::new();
+            eprintln!("building symbol universe from EODHD screener…");
+            let syms = yuzu_cli::eodhd::build_symbol_list(&client, &api_token, &cfg, &filter)?;
+            if syms.is_empty() {
+                return Err("screener returned no symbols (loosen the filters?)".into());
+            }
+            let mut body = String::from("# symbols built by `yuzu-cli eodhd-symbols`\n");
+            for s in &syms {
+                body.push_str(s);
+                body.push('\n');
+            }
+            std::fs::write(&out, body).map_err(|e| format!("writing {}: {e}", out.display()))?;
+            eprintln!("wrote {} symbols to {}", syms.len(), out.display());
         }
     }
     Ok(())
