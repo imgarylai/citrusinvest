@@ -27,6 +27,8 @@
 //! - **Prices (#214):** `TIME_SERIES_DAILY_ADJUSTED` → `prices/` with adj OHLC scale.
 //! - **Industry + delisted (#215):** OVERVIEW sector map; `LISTING_STATUS` delisted union.
 //! - **Fundamentals (#216):** annual IS/BS densify + `report_event` (period-end visibility).
+//! - **Universe helper (#217):** `LISTING_STATUS&state=active` → `av-symbols` (not a cap screener).
+//!   **No index PIT** — AV has no historical constituents; we do not fake `in_sp500`.
 //! - Snapshot: later (#218).
 //!
 //! Coverage / accepted gaps: spike
@@ -39,6 +41,7 @@ mod fundamentals;
 mod http;
 mod industry;
 mod price;
+mod screener;
 mod symbol;
 mod sync;
 mod util;
@@ -50,6 +53,7 @@ pub use delisted::{fetch_delisted, DelistedSymbol};
 pub use http::UreqClient;
 pub use http::{HttpClient, HttpError};
 pub use industry::INDUSTRY_KEY;
+pub use screener::{build_symbol_list, SymbolFilter};
 pub use symbol::{layout_symbol, parse_symbols_list, split_symbol};
 pub use sync::{sync, sync_into, ALPHA_VANTAGE_BASE};
 

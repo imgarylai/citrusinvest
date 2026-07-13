@@ -79,7 +79,7 @@ partial / plan-dependent · **N** = essentially no · **TBD** = not verified her
 \* EODHD: full **adj OHLC** via local scale; native feed is raw OHLC + `adjusted_close`.  
 † Dense historical ratios from annual statements; Highlights/Valuation remain **TTM / current** (used for snapshot factors, not fundies history).  
 ‡ S&P 500 historical constituents via `GSPC.INDX`; broader index history often Marketplace add-on.  
-§ Alpha Vantage: spike [#207](https://github.com/citrusquant/citrusquant/issues/207) — see [§ Alpha Vantage](#alpha-vantage-mapping-spike-207). No in-repo adapter yet (epic [#209](https://github.com/citrusquant/citrusquant/issues/209)).  
+§ Alpha Vantage: spike [#207](https://github.com/citrusquant/citrusquant/issues/207) — see [§ Alpha Vantage](#alpha-vantage-mapping-spike-207). In-repo path: epic [#209](https://github.com/citrusquant/citrusquant/issues/209) (`av-sync` / `av-symbols`).  
 ¶ Finnhub: spike [#208](https://github.com/citrusquant/citrusquant/issues/208) — see [§ Finnhub](#finnhub-mapping-spike-208). No in-repo adapter yet (epic [#210](https://github.com/citrusquant/citrusquant/issues/210)).
 
 **In-repo full sync CLIs today:** FMP and EODHD. AV/Finnhub columns are **API-capable**
@@ -294,7 +294,7 @@ whether a solo AV tree can feed honest citrusquant backtests.
 | Industry map | **Y** | `OVERVIEW` → `Sector`, `Industry` | `tracked/universe.csv.gz` | Sector/industry strings are AV’s taxonomy, not GICS-identical to FMP. | `neutralize_industry` / `industry_rank` **work**; cross-vendor industry labels **not** comparable. |
 | Delisted | **Y** | `LISTING_STATUS` (`state=active` / `delisted`, optional as-of `date`) | truncated `prices/` + universe union | Completeness depends on AV’s delisted CSV; still need EOD history for dead tickers. | Survivorship-honest universes **possible** (#26) if you union delisted names and fetch their bars. Active-only lists → survivor bias. |
 | Index PIT | **P / weak** | Index **price** APIs (premium index suite: SPX, etc.) | hard to get `panels/in_sp500` | Index series ≠ **constituent membership over time**. No first-class “historical SPX members” map comparable to FMP/EODHD/Finnhub. | `mask(signal, in_sp500)`-style **index-honest** backtests **not** available from AV alone without external membership DIY. Price strategies without membership **unaffected**. |
-| Screener | **P** | `SYMBOL_SEARCH`, `TOP_GAINERS_LOSERS`, … | symbol list | Not a full exchange/cap screener like FMP/EODHD. | Universe construction is **manual** or external; engine runs whatever `prices/` you supply. |
+| Screener | **P** | `LISTING_STATUS&state=active` via `yuzu-cli av-symbols` (exchange/assetType filter); no cap screener | symbol list | Not FMP/EODHD-style market-cap screener. | Build a list with `av-symbols`, then `av-sync --symbols-file`. |
 | Snapshot factors | **P / DIY** | `OVERVIEW` (`AnalystTargetPrice`, `AnalystRating*`, TTM PE, …); statements for DIY scores | `panels/*` optional | No vendor piotroski/altman. Ratings are **counts**, not FMP grades-summary labels. Current snapshot semantics only. | Screening-style factors possible with DIY; **deep historical** snapshot panels **no**. Missing panels → those `Data` names NaN (ops no-op / empty), not engine crash. |
 
 ### Solo “can I backtest?” matrix (AV only)
@@ -306,8 +306,9 @@ whether a solo AV tree can feed honest citrusquant backtests.
 | Statement factor densify (roe, margins, growth, …) | **Yes, degraded PIT** | Period-end visibility unless you add external filing dates |
 | Industry neutralize / rank | **Yes** | Taxonomy-specific |
 | Delist haircuts | **Yes** if `LISTING_STATUS` + dead-name prices included | |
-| Index-member-only (SPX PIT) | **No** (without external membership) | Largest structural hole vs FMP/EODHD/Finnhub |
+| Index-member-only (SPX PIT) | **No** (without external membership) | Largest structural hole vs FMP/EODHD/Finnhub; **no** `av-sync --index` (would be dishonest) |
 | Snapshot piotroski/altman/history | **No / DIY only** | |
+| Universe list helper | **Partial** | `yuzu-cli av-symbols` = active `LISTING_STATUS` + filters (#217) |
 
 ### Sources (Alpha Vantage)
 
@@ -380,9 +381,9 @@ capability**, not free quotas.
 | EODHD block coverage gate | [#182](https://github.com/citrusquant/citrusquant/issues/182) — **done** |
 | `pomelo-eodhd` + `eodhd-sync` | [#192](https://github.com/citrusquant/citrusquant/issues/192) (phases #193–#198) — **done** |
 | Re-audit docs after second path | [#186](https://github.com/citrusquant/citrusquant/issues/186) — **done** |
-| Alpha Vantage solo coverage spike | [#207](https://github.com/citrusquant/citrusquant/issues/207) — **this revision** |
-| Finnhub solo coverage spike | [#208](https://github.com/citrusquant/citrusquant/issues/208) — **this revision** |
-| `pomelo-alpha-vantage` (gated on #207 go) | [#209](https://github.com/citrusquant/citrusquant/issues/209) |
+| Alpha Vantage solo coverage spike | [#207](https://github.com/citrusquant/citrusquant/issues/207) — **done** |
+| `pomelo-alpha-vantage` + CLI | [#209](https://github.com/citrusquant/citrusquant/issues/209) (#213–#216 done; #217 universe helper; #218 snapshot) |
+| Finnhub solo coverage spike | [#208](https://github.com/citrusquant/citrusquant/issues/208) — **done** |
 | `pomelo-finnhub` (gated on #208 go) | [#210](https://github.com/citrusquant/citrusquant/issues/210) |
 | Shared `pomelo-*` adapter conventions | [#211](https://github.com/citrusquant/citrusquant/issues/211) |
 | Finnhub free partial call-budget demos | [#183](https://github.com/citrusquant/citrusquant/issues/183) |

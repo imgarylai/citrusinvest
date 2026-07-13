@@ -618,6 +618,35 @@ enum Cmd {
         #[arg(long)]
         resume: bool,
     },
+    /// Build a symbol universe from Alpha Vantage LISTING_STATUS (active).
+    ///
+    /// Not a market-cap screener (AV has none). Filters optional exchange /
+    /// assetType. **No index membership** — AV cannot produce honest
+    /// `panels/in_sp500` (#207 / #217); use FMP/EODHD/Finnhub or BYO for PIT.
+    ///
+    /// Example:
+    ///   yuzu-cli av-symbols --api-key "$ALPHA_VANTAGE_API_KEY" --out ./u.txt \
+    ///     --exchange NASDAQ --asset-type Stock --limit 500
+    #[cfg(feature = "alpha-vantage-sync")]
+    AvSymbols {
+        #[arg(long)]
+        api_key: Option<String>,
+        #[arg(long)]
+        out: PathBuf,
+        /// Exchange filter (`NYSE`, `NASDAQ`, …). Pass `all` for every exchange.
+        #[arg(long, default_value = "all")]
+        exchange: String,
+        /// Asset type filter (default: Stock). Pass `all` for ETFs/funds too.
+        #[arg(long, default_value = "Stock")]
+        asset_type: String,
+        /// Cap the number of symbols returned (after sort).
+        #[arg(long)]
+        limit: Option<usize>,
+        #[arg(long, default_value_t = 0)]
+        rate_limit: u32,
+        #[arg(long, default_value_t = 4)]
+        max_retries: u32,
+    },
 }
 
 fn emit(out: &Option<PathBuf>, json: String) -> std::io::Result<()> {
@@ -1338,6 +1367,57 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 return Err("screener returned no symbols (loosen the filters?)".into());
             }
             let mut body = String::from("# symbols built by `yuzu-cli eodhd-symbols`\n");
+            for s in &syms {
+                body.push_str(s);
+                body.push('\n');
+            }
+            std::fs::write(&out, body).map_err(|e| format!("writing {}: {e}", out.display()))?;
+            eprintln!("wrote {} symbols to {}", syms.len(), out.display());
+        }
+        #[cfg(feature = "alpha-vantage-sync")]
+        Cmd::AvSymbols {
+            api_key,
+            out,
+            exchange,
+            asset_type,
+            limit,
+            rate_limit,
+            max_retries,
+        } => {
+            let api_key = api_key
+                .or_else(|| std::env::var("ALPHA_VANTAGE_API_KEY").ok())
+                .or_else(|| std::env::var("ALPHAVANTAGE_API_KEY").ok())
+                .filter(|k| !k.trim().is_empty())
+                .ok_or(
+                    "provide --api-key or set ALPHA_VANTAGE_API_KEY (or ALPHAVANTAGE_API_KEY)",
+                )?;
+            let cfg = yuzu_cli::alpha_vantage::SyncConfig {
+                rate_limit_per_min: rate_limit,
+                max_retries,
+                backoff_base: std::time::Duration::from_secs(2),
+                ..Default::default()
+            };
+            let filter = yuzu_cli::alpha_vantage::SymbolFilter {
+                exchange,
+                asset_type,
+                limit,
+            };
+            let client = yuzu_cli::alpha_vantage::UreqClient::new();
+            eprintln!(
+                "building symbol universe from Alpha Vantage LISTING_STATUS (active)… \
+                 (not a market-cap screener; no index PIT)"
+            );
+            let syms =
+                yuzu_cli::alpha_vantage::build_symbol_list(&client, &api_key, &cfg, &filter)?;
+            if syms.is_empty() {
+                return Err(
+                    "listing returned no symbols (loosen --exchange / --asset-type?)".into(),
+                );
+            }
+            let mut body = String::from(
+                "# symbols built by `yuzu-cli av-symbols` (LISTING_STATUS active)\n\
+                 # no index membership — AV cannot write honest panels/in_sp500\n",
+            );
             for s in &syms {
                 body.push_str(s);
                 body.push('\n');
