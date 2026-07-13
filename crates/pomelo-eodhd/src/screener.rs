@@ -179,4 +179,43 @@ mod tests {
         let syms = build_symbol_list(&http, "tok", &cfg, &filter).unwrap();
         assert_eq!(syms, vec!["AAPL".to_string(), "MSFT".to_string()]);
     }
+
+    #[test]
+    fn build_symbol_list_rejects_empty_token_and_truncates() {
+        let body = br#"[
+            {"code":"AAA"},{"code":"BBB"},{"code":"CCC"}
+        ]"#;
+        let http = MockHttp {
+            body: RefCell::new(body.to_vec()),
+        };
+        let cfg = SyncConfig {
+            rate_limit_per_min: 0,
+            max_retries: 0,
+            backoff_base: Duration::ZERO,
+            ..SyncConfig::default()
+        };
+        assert!(build_symbol_list(&http, "", &cfg, &SymbolFilter::default()).is_err());
+        let filter = SymbolFilter {
+            min_market_cap: 0.0,
+            exchange: "all".into(),
+            limit: Some(2),
+        };
+        let syms = build_symbol_list(&http, "tok", &cfg, &filter).unwrap();
+        assert_eq!(syms.len(), 2);
+    }
+
+    #[test]
+    fn build_symbol_list_empty_page() {
+        let http = MockHttp {
+            body: RefCell::new(b"[]".to_vec()),
+        };
+        let cfg = SyncConfig {
+            rate_limit_per_min: 0,
+            max_retries: 0,
+            backoff_base: Duration::ZERO,
+            ..SyncConfig::default()
+        };
+        let syms = build_symbol_list(&http, "tok", &cfg, &SymbolFilter::default()).unwrap();
+        assert!(syms.is_empty());
+    }
 }
