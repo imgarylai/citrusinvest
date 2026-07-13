@@ -66,17 +66,11 @@ mod tests {
         };
         assert!(e.to_string().contains("shape mismatch"));
         assert_eq!(
-            EngineError::UnknownSeries {
-                name: "pe".into()
-            }
-            .to_string(),
+            EngineError::UnknownSeries { name: "pe".into() }.to_string(),
             "unknown series 'pe'"
         );
         assert_eq!(
-            EngineError::BadFreq {
-                freq: "X".into()
-            }
-            .to_string(),
+            EngineError::BadFreq { freq: "X".into() }.to_string(),
             "bad freq 'X'"
         );
         assert!(EngineError::Eval("boom".into())
