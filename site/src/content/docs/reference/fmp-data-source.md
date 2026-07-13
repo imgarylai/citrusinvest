@@ -21,9 +21,9 @@ plans (or any other vendor) matter only as “full panels are possible.” The e
 never calls FMP; ops fail only when required series are absent from
 `EvalContext` / your data root. On-disk shape: [`data-layout.md`](../reference/data-layout).
 
-Building a data root **without** FMP (other vendors, multi-step assemble) is
-documented separately and is still **WIP**:
-[`data-sources.md`](../reference/data-sources).
+Building a data root **without** FMP (EODHD one-shot, other vendors, multi-step
+assemble) is documented in [`data-sources.md`](../reference/data-sources). Official
+second path: [`eodhd-data-source.md`](../reference/eodhd-data-source).
 
 ---
 

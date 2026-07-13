@@ -20,9 +20,9 @@ contract live in [`docs/backtest-engine.md`](docs/backtest-engine.md).
 [`docs/data-layout.md`](docs/data-layout.md).
 **FMP Starter-tier gaps** (which features need which panels):
 [`docs/fmp-data-source.md`](docs/fmp-data-source.md).
-**Other data sources / assemble without FMP** (WIP):
+**Data sources (FMP + EODHD + assemble):**
 [`docs/data-sources.md`](docs/data-sources.md).
-**EODHD second official sync path:**
+**EODHD official sync:**
 [`docs/eodhd-data-source.md`](docs/eodhd-data-source.md).
 
 ## Crate families

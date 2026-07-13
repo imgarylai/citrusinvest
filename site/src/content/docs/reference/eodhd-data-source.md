@@ -5,12 +5,12 @@ sourceFile: docs/eodhd-data-source.md
 ---
 
 <!-- Imported from docs/eodhd-data-source.md by site/scripts/import-reference-docs.mjs — edit the source, then re-run `npm run import:docs`. -->
-Bring-your-own-key sync via **`pomelo-eodhd`** / **`yuzu-cli eodhd-sync`** (epic
-[#192](https://github.com/citrusquant/citrusquant/issues/192)).
+Bring-your-own-key sync via **`pomelo-eodhd`** / **`yuzu-cli eodhd-sync`**
+(shipped epic [#192](https://github.com/citrusquant/citrusquant/issues/192)).
 
 The engine never calls EODHD. This crate writes the same
-[`data-layout`](../reference/data-layout) tree as FMP. Multi-vendor / assemble options:
-[`data-sources.md`](../reference/data-sources).
+[`data-layout`](../reference/data-layout) tree as FMP. Stance, block comparison, and
+assemble recipes: [`data-sources.md`](../reference/data-sources) (re-audited in #186).
 
 **Not a commitment that EODHD numbers match FMP.** Definitions and coverage differ.
 

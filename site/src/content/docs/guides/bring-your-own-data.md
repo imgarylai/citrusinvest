@@ -32,9 +32,9 @@ Lay prices and fundamentals out on disk (gzip CSV, plain CSV, or Parquet) under 
 data root and let `pomelo-data` load them into panels. The on-disk tree, series
 names, and point-in-time notes are the canonical contract in
 [Data layout](/reference/data-layout). This is what `yuzu-cli` and
-`yuzu-server` read. Official one-shot sync today is FMP (`fmp-sync`); other
-vendors and multi-step assemble paths are sketched in
-[Data sources (WIP)](/reference/data-sources).
+`yuzu-server` read. Official one-shot syncs are FMP (`fmp-sync`) and EODHD
+(`eodhd-sync`); multi-step assemble and gap tables live in
+[Data sources](/reference/data-sources).
 
 ## Option 2 — build panels in code
 
