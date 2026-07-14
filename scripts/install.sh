@@ -1,7 +1,11 @@
 #!/usr/bin/env sh
 # Install the `lemon` CLI from a prebuilt GitHub Release binary.
 #
-#   curl -fsSL https://raw.githubusercontent.com/citrusquant/citrusquant/main/scripts/install.sh | sh
+#   curl -fsSL https://citrusquant.com/install.sh | sh
+#
+# (citrusquant.com/install.sh is this file, synced into the site's public/ at
+# build time — see site/scripts/sync-public-assets.mjs and issue #247. The
+# raw.githubusercontent.com URL for this path works too.)
 #
 # Environment overrides:
 #   LEMON_INSTALL_DIR  install directory   (default: ~/.local/bin)
