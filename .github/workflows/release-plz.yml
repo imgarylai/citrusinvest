@@ -8,9 +8,11 @@ on:
 # crates.io. That tag/release is created with the default GITHUB_TOKEN, which
 # GitHub's recursion guard stops from firing other workflows' `on: release
 # published` trigger — so instead of relying on that event, the jobs below
-# call the binary/npm-publish workflows directly (`workflow_call`) in this
-# same run. Each callee keeps its `workflow_dispatch` / `release: published`
-# triggers too, as manual / human-published-release fallbacks.
+# invoke the follow-on work themselves: the binaries workflows are called
+# in-run (`workflow_call`), and the npm publish is fired as a separate
+# workflow_dispatch run (OIDC trusted publishing must see publish-wasm-npm.yml
+# as the top-level workflow). Each callee keeps its `workflow_dispatch` /
+# `release: published` triggers too, as manual fallbacks.
 jobs:
   release-plz:
     runs-on: ubuntu-latest
@@ -18,14 +20,31 @@ jobs:
       contents: write
       pull-requests: write
     outputs:
-      releases_created: ${{ steps.release-plz.outputs.releases_created }}
-      releases: ${{ steps.release-plz.outputs.releases }}
+      releases_created: ${{ steps.release.outputs.releases_created || steps.release-pr.outputs.releases_created }}
+      releases: ${{ steps.release.outputs.releases || steps.release-pr.outputs.releases }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
-      - id: release-plz
+      # A release-commit push is the merge of a release PR: run only the
+      # `release` command (tag + publish). Running `release-pr` on that push
+      # too would open the NEXT release PR while this run is still tagging;
+      # if that raced duplicate gets merged, main ends up with two identical
+      # release commits and release-plz then proposes a phantom vX.Y.Z+1
+      # whose only "change" is the release commit itself.
+      - id: release
+        if: "startsWith(github.event.head_commit.message, 'chore: release')"
+        uses: release-plz/action@v0.5
+        with:
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      # Any other push: refresh the rolling release PR (and release, which is
+      # a no-op when everything is already tagged).
+      - id: release-pr
+        if: "${{ !startsWith(github.event.head_commit.message, 'chore: release') }}"
         uses: release-plz/action@v0.5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -69,10 +88,19 @@ jobs:
     with:
       tag: ${{ needs.resolve-lemon-tag.outputs.tag }}
 
+  # npm Trusted Publishing (OIDC) validates the *top-level* workflow file, so
+  # the publish must run as its own workflow_dispatch run of
+  # publish-wasm-npm.yml — invoked as a reusable workflow inside this run, the
+  # OIDC token would name release-plz.yml and fail the trusted-publisher
+  # check. workflow_dispatch is one of the two documented exceptions to the
+  # GITHUB_TOKEN recursion guard, so this dispatch does trigger a run.
   publish-npm:
     needs: release-plz
     if: needs.release-plz.outputs.releases_created == 'true'
+    runs-on: ubuntu-latest
     permissions:
-      contents: read
-      id-token: write
-    uses: ./.github/workflows/publish-wasm-npm.yml
+      actions: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run publish-wasm-npm.yml --repo "$GITHUB_REPOSITORY" --ref main -f package=both

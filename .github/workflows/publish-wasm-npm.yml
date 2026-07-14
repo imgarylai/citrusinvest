@@ -9,16 +9,18 @@ on:
         type: choice
         options: [lemon-wasm, yuzu-wasm, both]
         default: lemon-wasm
-  # Automatic runs: release-plz.yml calls this workflow (`workflow_call`)
-  # right after it cuts a release, so npm stays in lockstep with crates.io.
-  # release-plz's own GITHUB_TOKEN can't fire the `release: published`
-  # trigger below (GitHub's recursion guard), which is why the caller invokes
-  # this in-run instead; `release: published` remains as a fallback for
+  # Automatic runs: release-plz.yml fires a workflow_dispatch of this file
+  # (`gh workflow run … -f package=both`) right after it cuts a release, so
+  # npm stays in lockstep with crates.io. Why dispatch and not workflow_call:
+  # npm Trusted Publishing (OIDC) validates the *top-level* workflow file, so
+  # a reusable-workflow invocation would present release-plz.yml and fail the
+  # trusted-publisher check — and workflow_dispatch is one of the two
+  # documented exceptions to the GITHUB_TOKEN recursion guard, so the
+  # dispatch does trigger. `release: published` remains as a fallback for
   # manually-published releases. Either way the per-package "already
   # published?" guard makes repeat/overlapping runs no-op cleanly.
   release:
     types: [published]
-  workflow_call:
 
 permissions:
   contents: read
@@ -32,12 +34,15 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    # On a release or workflow_call run there are no `inputs.package`, so
-    # default to all packages that are onboarded on npm (published once +
-    # Trusted Publisher configured): lemon-wasm and yuzu-wasm. The per-step
-    # "already published?" guard skips any that are already at this version.
+    # `inputs.package` is only set on workflow_dispatch (where its choice
+    # default guarantees it's non-empty); on a release event it's empty, so
+    # fall back to all packages that are onboarded on npm (published once +
+    # Trusted Publisher configured): lemon-wasm and yuzu-wasm. NOTE: do not
+    # branch on `github.event_name` here — inside a called/reused workflow it
+    # reports the *caller's* trigger (e.g. `push`), which is exactly how the
+    # first automated run skipped both publishes with an empty PACKAGE.
     env:
-      PACKAGE: ${{ (github.event_name == 'release' || github.event_name == 'workflow_call') && 'both' || inputs.package }}
+      PACKAGE: ${{ inputs.package || 'both' }}
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
