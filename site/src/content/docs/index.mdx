@@ -1,6 +1,6 @@
 ---
 title: A readable open-source backtest engine
-description: yuzu is an open-source Rust backtest engine; lemon is a one-expression strategy DSL. The demo on this page runs the real engine on real market data, in your browser.
+description: yuzu is an open-source Rust backtest engine; lemon is a strategy language you write in a .lemon file and run with one command. Install the lemon CLI in one line (curl … | sh) and `lemon run` it, or embed the engine in Rust, Python, or WASM. The demo on this page runs the real engine on real market data, in your browser.
 template: splash
 hero:
   title: '<span class="lp-kicker">Open source · MIT · Rust</span><code class="lp-code">is_largest(sma(close,&nbsp;2),&nbsp;3)</code>'
@@ -94,7 +94,42 @@ entry/exit rotation. [The whole spec fits on one page](reference/lemon).
 
 ## Get it
 
+**Use the tool, or embed the engine.** The `lemon` CLI runs a `.lemon` file
+end-to-end from your terminal; the language bindings drop the *same* engine into
+your Rust, Python, or JS/WASM code.
+
 <Tabs>
+  <TabItem label="CLI">
+    Install the `lemon` binary with one line — macOS / Linux (on Windows, grab
+    the [release asset](https://github.com/citrusquant/citrusquant/releases)):
+
+    ```bash
+    curl -fsSL https://citrusquant.com/install.sh | sh
+    ```
+
+    A strategy is a single file. Save this as `momentum.lemon`:
+
+    ```text
+    #! universe: 20180101..20241231
+    #! symbols: AAPL, MSFT, NVDA, AMZN, GOOGL, META, JPM, XOM
+    #! config: { "fee_ratio": 0.001 }
+    #! data-source: fmp
+    is_largest(pct_change(close, 63), 3)
+    ```
+
+    Run it. `--sync` fetches the declared names' daily bars from the vendor the
+    file names — bring your own `$FMP_API_KEY`; nothing is fetched without it:
+
+    ```bash
+    export FMP_API_KEY=…          # your key; the file declares the vendor
+    lemon momentum.lemon --sync
+    ```
+
+    It prints the full `Report` as JSON — the same metrics, equity curve, and
+    trades the playground draws, from the same engine. The front-matter keys
+    (`universe`, `symbols`, `index`, `config`, `data-source`, …) are in the
+    [lemon reference](/reference/lemon).
+  </TabItem>
   <TabItem label="Rust">
     ```bash
     cargo add yuzu-core lemon-lang
