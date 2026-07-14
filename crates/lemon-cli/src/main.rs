@@ -500,6 +500,12 @@ fn is_runnable_file(arg: &str) -> bool {
     arg.ends_with(".lemon") || arg.ends_with(".json")
 }
 
+/// `lemon --version` output. `scripts/install.sh` runs this to verify an
+/// install, so keep the `lemon <semver>` shape stable.
+fn version_line() -> String {
+    format!("lemon {}", env!("CARGO_PKG_VERSION"))
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
@@ -507,10 +513,14 @@ fn main() -> ExitCode {
         Some("lint") => run_lint(args[1..].to_vec()),
         Some("check") => run_check(args[1..].to_vec()),
         Some("run") => run_run(args[1..].to_vec()),
+        Some("--version") | Some("-V") => {
+            println!("{}", version_line());
+            ExitCode::SUCCESS
+        }
         Some(f) if is_runnable_file(f) => run_run(args),
         _ => {
             eprintln!(
-                "usage: lemon <strategy.lemon|envelope.json> [run flags]   (short for `lemon run ...`)\n       lemon fmt [-w] [file...]\n       lemon lint [--series a,b,c] [--series-file path] [file...]\n       lemon check [file...]\n       lemon run [--data <dir>] [--from N] [--to N] [--fee-ratio F] [--slippage-ratio F] [--price-key K] [--benchmark SYM] [--symbols A,B] [--out path] [file]\n       (no file = read stdin; --data falls back to $CITRUS_DATA)"
+                "usage: lemon <strategy.lemon|envelope.json> [run flags]   (short for `lemon run ...`)\n       lemon fmt [-w] [file...]\n       lemon lint [--series a,b,c] [--series-file path] [file...]\n       lemon check [file...]\n       lemon run [--data <dir>] [--from N] [--to N] [--fee-ratio F] [--slippage-ratio F] [--price-key K] [--benchmark SYM] [--symbols A,B] [--out path] [file]\n       lemon --version\n       (no file = read stdin; --data falls back to $CITRUS_DATA)"
             );
             ExitCode::FAILURE
         }
@@ -879,5 +889,14 @@ mod tests {
         assert!(is_runnable_file("envelope.json"));
         assert!(!is_runnable_file("fmt"));
         assert!(!is_runnable_file("notes.md"));
+    }
+
+    #[test]
+    fn version_line_has_the_shape_the_installer_greps() {
+        let v = super::version_line();
+        let rest = v.strip_prefix("lemon ").expect("starts with `lemon `");
+        // A dotted version number, e.g. `0.11.0` — what install.sh reports.
+        assert!(rest.split('.').count() >= 2, "{v}");
+        assert!(rest.chars().next().unwrap().is_ascii_digit(), "{v}");
     }
 }

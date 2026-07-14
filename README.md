@@ -63,6 +63,20 @@ module `yuzu`) — see [`crates/yuzu-py/README.md`](crates/yuzu-py/README.md).
 
 The `wasm`/`cli`/`server` crates are not published.
 
+## Install the lemon CLI
+
+One command gets you the `lemon` binary — write a strategy, `lemon
+strategy.lemon`, read the report (Linux / macOS; checksum-verified prebuilt
+binaries from GitHub Releases):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/citrusquant/citrusquant/main/scripts/install.sh | sh
+```
+
+See [`docs/lemon.md`](docs/lemon.md) for the language and the runner
+(`fmt` / `lint` / `check` / `run`). From source:
+`cargo install --path crates/lemon-cli`.
+
 ## Build
 
 ```bash
