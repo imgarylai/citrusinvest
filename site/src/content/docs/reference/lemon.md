@@ -533,10 +533,16 @@ close > sma(close, 20) and rsi(close, 14) < 70
   are loaded, so cross-sectional ops (`rank`, `is_largest`, `zscore`, …) see
   exactly this universe. Every listed symbol must exist in the data tree —
   a missing one is an error, never a silent drop. **Survivorship caveat**: a
-  list frozen today implies survivorship bias in a historical run; for an
-  unbiased index universe use point-in-time membership
-  (`mask(signal, in_sp500)` today; named `symbols_hint` universes are
-  [#245](https://github.com/citrusquant/citrusquant/issues/245)).
+  list frozen today implies survivorship bias in a historical run.
+- `index` is a **named point-in-time universe** (`#! index: sp500` /
+  envelope `universe.symbols_hint`), resolved against the tree's `in_sp500`
+  membership panel. The run is scoped to the window's *ever-members*, and the
+  strategy is wrapped so you hold only each day's members and **flatten a name
+  the day it leaves the index**. Cross-sectional ops rank across the
+  ever-members; for a per-day-exact cross-section, mask the ranking input
+  (`is_largest(rank(mask(-pe, in_sp500)), 30)`). `index` and `symbols` are
+  mutually exclusive; a missing membership panel is an actionable error. See
+  [data-layout.md §8](../reference/data-layout) for the hold-vs-mask subtlety.
 - `config` is the engine config object, with the same flat knob names as the
   `yuzu-server` request (`fee_ratio`, `slippage_ratio`, `initial_capital`,
   `delist_after`, `stop_loss`, `take_profit`, `trail_stop`, `stop_fill`,

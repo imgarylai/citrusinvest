@@ -87,15 +87,20 @@ lemon run strategy.json --data ~/qdata     # or set $CITRUS_DATA
 ```
 
 The runner takes `config` (flat engine knobs — `fee_ratio`, `stop_loss`, …;
-unknown knobs are rejected), the `universe` date window, and the explicit
-`universe.symbols` list from the document; CLI flags override it. Scoping
-matters for correctness: cross-sectional ops see exactly the listed universe,
-and a listed symbol missing from the data tree is an error, never a silent
-drop. Note that a static list frozen today implies survivorship bias in a
-historical run. `symbols_hint` (a named point-in-time universe) is not
-consumed yet — the runner refuses it rather than silently running the wrong
-universe ([#245](https://github.com/citrusquant/citrusquant/issues/245));
-mask on a membership panel (`mask(signal, in_sp500)`) in the meantime.
+unknown knobs are rejected), the `universe` date window, and the universe
+(`universe.symbols` **or** `universe.symbols_hint`, not both) from the
+document; CLI flags override it. Scoping matters for correctness: cross-sectional
+ops see exactly the run's universe, and a listed symbol missing from the data
+tree is an error, never a silent drop. Note that a static `symbols` list frozen
+today implies survivorship bias in a historical run.
+
+`universe.symbols_hint` is a **named point-in-time index** (`"sp500"` /
+`"nasdaq"` / `"dowjones"`) — the same concept as front-matter `#! index:`. The
+runner scopes to the window's ever-members from the `in_sp500` membership panel
+and wraps the strategy so you hold only each day's members, flattening a name
+the day it leaves the index (a missing panel is an actionable error). See
+[data-layout.md §8](../reference/data-layout) for the semantics and the hold-vs-mask
+subtlety.
 
 ## Reproducibility
 

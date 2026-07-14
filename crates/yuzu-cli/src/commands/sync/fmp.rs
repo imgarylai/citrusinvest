@@ -34,7 +34,7 @@ pub(crate) struct FmpSyncArgs {
     /// Reconstruct a point-in-time index universe: sync every name that was
     /// ever a member over [from,to] (survivorship-honest, incl. names that
     /// later left), and write a `in_<index>` 0/1 membership panel to
-    /// panels/. Backtest with `mask(signal, in_sp500)`. Index-scoped and
+    /// panels/. Backtest with `signal * in_sp500`. Index-scoped and
     /// degrades for very old dates (#125). Mutually exclusive with the other
     /// universe sources.
     #[arg(long, value_enum)]

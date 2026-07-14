@@ -78,8 +78,9 @@ pub(crate) fn load_ctx(
         panels.insert("volume".to_string(), volume);
     }
     // Auto-load index membership panels (in_sp500, …) from panels/ when present,
-    // so a strategy can `mask(signal, in_sp500)` on the CLI path. Columns absent
-    // from the file become NaN (i.e. "not a member"). Missing file → skipped.
+    // so a strategy can scope holdings with `signal * in_sp500` on the CLI path.
+    // Columns absent from the file become NaN (i.e. "not a member"). Missing
+    // file → skipped.
     for name in pomelo_fmp::MEMBERSHIP_SERIES {
         if panels.contains_key(*name) {
             continue;

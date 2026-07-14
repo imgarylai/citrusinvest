@@ -383,7 +383,7 @@ Universe & screening (from #52 review):
   (`sp-500`) + change log (`historical-sp-500`): it syncs every name that was
   **ever** a member over `[from,to]` (survivorship-honest, incl. names that later
   left) and writes a `panels/in_sp500.csv.gz` 0/1 membership panel. Backtest with
-  `mask(signal, in_sp500)` to hold a name only while it was a member; the CLI
+  `signal * in_sp500` to hold a name only while it was a member; the CLI
   `run` / `sweep` auto-loads `in_sp500` from `panels/`. **Honest weakness:**
   reconstruction is index-scoped and **drifts the further back you go** (older
   change-log rows drop the removed ticker / reason), so it's reliable in recent

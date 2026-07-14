@@ -14,7 +14,7 @@
 //! - **`ever_members(from, to)`** — every symbol that was a member at any point
 //!   in the window; the sync universe (so leavers/delistings get priced too).
 //! - **`membership_panel(calendar, columns)`** — a `dates × symbols` 0/1 panel
-//!   (`in_sp500`) written to `panels/` for `mask(signal, in_sp500)`.
+//!   (`in_sp500`) written to `panels/` for `signal * in_sp500`.
 //!
 //! ## Honest weakness
 //!
@@ -46,7 +46,7 @@ pub enum Index {
 }
 
 /// Membership series names auto-loaded by the CLI (`load_ctx`) from `panels/`,
-/// so `mask(signal, in_sp500)` works on the `run` / `sweep` path.
+/// so `signal * in_sp500` works on the `run` / `sweep` path.
 pub const MEMBERSHIP_SERIES: &[&str] = &["in_sp500"];
 
 impl Index {
