@@ -26,8 +26,19 @@ The `lemon` command-line tool for the lemon strategy DSL — part of
 
 The language itself lives in [`lemon-lang`](../lemon-lang) (imported as
 `lemon`), which stays pure and I/O-free; this crate is the thin native shim
-that wires the parser to `yuzu-research`'s backtest runner. Not published to
-crates.io — install from a checkout:
+that wires the parser to `yuzu-research`'s backtest runner.
+
+## Install
+
+Prebuilt binaries (Linux / macOS; checksum-verified):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/citrusquant/citrusquant/main/scripts/install.sh | sh
+```
+
+Windows: grab `lemon-x86_64-pc-windows-msvc.exe` from the
+[releases page](https://github.com/citrusquant/citrusquant/releases). The crate
+is not published to crates.io — from source, install from a checkout:
 
 ```bash
 cargo install --path crates/lemon-cli
