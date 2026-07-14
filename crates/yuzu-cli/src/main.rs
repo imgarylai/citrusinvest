@@ -142,6 +142,22 @@ impl From<EodhdIndexArg> for yuzu_cli::eodhd::Index {
     }
 }
 
+/// Index for `finnhub-sync --index` (v1: SPX only).
+#[cfg(feature = "finnhub-sync")]
+#[derive(Clone, Copy, ValueEnum)]
+enum FinnhubIndexArg {
+    Sp500,
+}
+
+#[cfg(feature = "finnhub-sync")]
+impl From<FinnhubIndexArg> for yuzu_cli::finnhub::Index {
+    fn from(a: FinnhubIndexArg) -> Self {
+        match a {
+            FinnhubIndexArg::Sp500 => yuzu_cli::finnhub::Index::Sp500,
+        }
+    }
+}
+
 impl CommonArgs {
     fn config(&self) -> yuzu_core::backtest::BacktestConfig {
         use yuzu_core::backtest::{StopConfig, StopFill};
@@ -671,6 +687,11 @@ enum Cmd {
         /// Read symbols from a file (one per line, or comma-separated; `#` comments).
         #[arg(long)]
         symbols_file: Option<PathBuf>,
+        /// Reconstruct a point-in-time index universe: sync every name that was
+        /// an S&P 500 member over [from,to] and write `panels/in_sp500.csv.gz`
+        /// (local --out only). Combines with --symbols / --symbols-file.
+        #[arg(long, value_enum)]
+        index: Option<FinnhubIndexArg>,
         /// Default exchange hint for bare tickers.
         #[arg(long, default_value = yuzu_cli::finnhub::DEFAULT_EXCHANGE)]
         exchange: String,
@@ -699,6 +720,34 @@ enum Cmd {
         /// Skip symbols that already have a price file.
         #[arg(long)]
         resume: bool,
+    },
+    /// Build an exchange's symbol universe from Finnhub and write it to a file.
+    ///
+    /// Not a market-cap screener — the full `/stock/symbol` listing, filtered by
+    /// security type. For point-in-time index membership use `finnhub-sync --index`.
+    ///
+    /// Example:
+    ///   yuzu-cli finnhub-symbols --api-key "$FINNHUB_API_KEY" --out ./universe.txt \
+    ///     --exchange US --security-type "Common Stock" --limit 500
+    #[cfg(feature = "finnhub-sync")]
+    FinnhubSymbols {
+        #[arg(long)]
+        api_key: Option<String>,
+        #[arg(long)]
+        out: PathBuf,
+        /// Finnhub exchange/country code to list (default: US).
+        #[arg(long, default_value = "US")]
+        exchange: String,
+        /// Security type filter (default: `Common Stock`). Pass `all` for none.
+        #[arg(long, default_value = "Common Stock")]
+        security_type: String,
+        /// Cap the number of symbols returned.
+        #[arg(long)]
+        limit: Option<usize>,
+        #[arg(long, default_value_t = 0)]
+        rate_limit: u32,
+        #[arg(long, default_value_t = 4)]
+        max_retries: u32,
     },
 }
 
@@ -1484,6 +1533,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             out,
             symbols,
             symbols_file,
+            index,
             exchange,
             from,
             to,
@@ -1511,9 +1561,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             let mut seen = std::collections::HashSet::new();
             explicit.retain(|s| seen.insert(s.clone()));
-            if explicit.is_empty() {
-                return Err("provide --symbols and/or --symbols-file".into());
-            }
             let mode = if resume {
                 yuzu_cli::finnhub::WriteMode::Resume
             } else if append {
@@ -1534,7 +1581,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 mode,
             };
             let client = yuzu_cli::finnhub::UreqClient::new();
+
+            let membership = if let Some(idx) = index {
+                eprintln!("fetching Finnhub index membership…");
+                let m =
+                    yuzu_cli::finnhub::IndexMembership::fetch(&client, &api_key, idx.into(), &cfg)?;
+                let before = explicit.len();
+                for s in m.ever_members(from, to) {
+                    if seen.insert(s.clone()) {
+                        explicit.push(s);
+                    }
+                }
+                eprintln!(
+                    "index {}: {} ever-members over [{from},{to}] (+{} new)",
+                    m.series_name(),
+                    explicit.len(),
+                    explicit.len() - before
+                );
+                Some(m)
+            } else {
+                None
+            };
+            if explicit.is_empty() {
+                return Err("provide --symbols and/or --symbols-file, or --index".into());
+            }
+
             let out_store = pomelo_s3::OutStore::parse(&out)?;
+            if membership.is_some() && out_store.is_s3() {
+                return Err(
+                    "--index requires a local --out (membership panel write needs a local trading calendar)"
+                        .into(),
+                );
+            }
             let summary =
                 yuzu_cli::finnhub::sync_into(&client, &api_key, &explicit, &out_store, &cfg)?;
             eprintln!(
@@ -1554,6 +1632,64 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if summary.symbols_written == 0 {
                 return Err("no symbols were written".into());
             }
+            if let Some(m) = &membership {
+                let (days, cols) = yuzu_cli::finnhub::write_index_membership(
+                    std::path::Path::new(&out),
+                    m,
+                    from,
+                    to,
+                )?;
+                eprintln!(
+                    "wrote panels/{}.csv.gz: {days} days × {cols} symbols (mask with mask(signal, {}))",
+                    m.series_name(),
+                    m.series_name()
+                );
+            }
+        }
+        #[cfg(feature = "finnhub-sync")]
+        Cmd::FinnhubSymbols {
+            api_key,
+            out,
+            exchange,
+            security_type,
+            limit,
+            rate_limit,
+            max_retries,
+        } => {
+            let api_key = api_key
+                .or_else(|| std::env::var("FINNHUB_API_KEY").ok())
+                .filter(|k| !k.trim().is_empty())
+                .ok_or("provide --api-key or set FINNHUB_API_KEY")?;
+            let cfg = yuzu_cli::finnhub::SyncConfig {
+                rate_limit_per_min: rate_limit,
+                max_retries,
+                backoff_base: std::time::Duration::from_secs(2),
+                ..Default::default()
+            };
+            let filter = yuzu_cli::finnhub::SymbolFilter {
+                security_type,
+                limit,
+            };
+            let client = yuzu_cli::finnhub::UreqClient::new();
+            eprintln!(
+                "building symbol universe from Finnhub /stock/symbol ({exchange})… \
+                 (not a market-cap screener; for index PIT use finnhub-sync --index)"
+            );
+            let syms =
+                yuzu_cli::finnhub::build_symbol_list(&client, &api_key, &exchange, &cfg, &filter)?;
+            if syms.is_empty() {
+                return Err("listing returned no symbols (loosen --security-type?)".into());
+            }
+            let mut body = String::from(
+                "# symbols built by `yuzu-cli finnhub-symbols` (/stock/symbol listing)\n\
+                 # for point-in-time SPX membership use `finnhub-sync --index sp500`\n",
+            );
+            for s in &syms {
+                body.push_str(s);
+                body.push('\n');
+            }
+            std::fs::write(&out, body).map_err(|e| format!("writing {}: {e}", out.display()))?;
+            eprintln!("wrote {} symbols to {}", syms.len(), out.display());
         }
     }
     Ok(())
