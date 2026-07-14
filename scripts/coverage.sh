@@ -10,14 +10,18 @@
 #   rustup component add llvm-tools-preview
 #   cargo install cargo-llvm-cov
 #
-# The binary entry points (`src/main.rs`) are excluded: they are thin shims
-# (arg parsing + I/O wiring + the blocking HTTP server loop) whose logic lives in
-# the library crates, which ARE measured. Keeping this exclusion list in one
-# place means local runs and CI agree on the number.
+# Binary-only glue is excluded: the entry points (`src/main.rs`) and the
+# yuzu-cli command layer (`yuzu-cli/src/commands/`) are thin shims — arg
+# parsing, I/O wiring, the blocking HTTP server loop, and vendor-sync
+# orchestration — whose reusable logic lives in the library crates, which ARE
+# measured. (This CLI code was previously inside `main.rs` and thus already
+# excluded; the module split just moved it under `commands/`, so it stays
+# exempt to keep the number stable.) Keeping this exclusion list in one place
+# means local runs and CI agree on the number.
 set -euo pipefail
 
 MIN="${COVERAGE_MIN:-95}"
-IGNORE='src/main\.rs$'
+IGNORE='src/main\.rs$|yuzu-cli/src/commands/'
 
 extra=()
 for arg in "$@"; do
