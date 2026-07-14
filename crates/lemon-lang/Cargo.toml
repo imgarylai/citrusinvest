@@ -13,10 +13,6 @@ categories = ["finance", "parser-implementations"]
 [lib]
 name = "lemon"
 
-[[bin]]
-name = "lemon"
-path = "src/main.rs"
-
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }

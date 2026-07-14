@@ -29,6 +29,7 @@ It's a layered stack, not parallel silos: `pomelo-*` → `yuzu-core` → `lemon`
 - `pomelo-audit` — read-only data-quality audit of a data-layout tree (`run_data_audit` → an `OK`/`WARN`/`FAIL` report). Exposed as `yuzu-cli data-audit`; the CLI is a thin caller.
 - `lemon` / `lemon-lang` — the **strategy DSL**. Strategies are written in lemon and lowered to a JSON `Expr` tree the engine evaluates. Its `services` module provides pure editor language services (diagnostics/hover/completions).
 - `lemon-lsp` — a thin `tower-lsp` language server over `lemon::services` (hover, completion, live diagnostics). Editor integration (incl. a VS Code extension + TextMate grammar) lives under `editors/`.
+- `lemon-cli` — the `lemon` binary: `fmt` / `lint` / `check` plus `run`, which lowers a `.lemon` file and backtests it over a local data tree (`lemon run strategy.lemon --data …`). Lives outside `lemon-lang` because `yuzu-core` depends on the language crate — the engine wiring for `run` would be a dependency cycle there; `lemon-lang` stays pure and I/O-free.
 
 ## Build · test · lint
 
