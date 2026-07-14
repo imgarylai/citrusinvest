@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0](https://github.com/citrusquant/citrusquant/compare/lemon-lang-v0.10.0...lemon-lang-v0.11.0) - 2026-07-14
+
+### Added
+
+- *(pomelo-finnhub)* crate skeleton + yuzu-cli finnhub-sync ([#225](https://github.com/citrusquant/citrusquant/pull/225))
+- *(pomelo-alpha-vantage)* snapshot factors + alpha-vantage-data-source docs ([#218](https://github.com/citrusquant/citrusquant/pull/218))
+- *(pomelo-alpha-vantage)* crate skeleton + yuzu-cli av-sync ([#213](https://github.com/citrusquant/citrusquant/pull/213)) ([#219](https://github.com/citrusquant/citrusquant/pull/219))
+
+### Other
+
+- re-audit multi-source gaps after EODHD path ([#186](https://github.com/citrusquant/citrusquant/pull/186))
+
 ## [0.10.0](https://github.com/citrusquant/citrusquant/compare/lemon-lang-v0.9.0...lemon-lang-v0.10.0) - 2026-07-13
 
 ### Added
