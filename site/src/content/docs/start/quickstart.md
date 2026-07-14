@@ -1,10 +1,11 @@
 ---
 title: Quickstart
-description: Install the engine, run the bundled example, and read your first backtest report.
+description: Run a real backtest three ways — in your browser, with the lemon CLI on your own data, or embedded as a Rust/Python/WASM library.
 ---
 
-You have two ways to run a backtest: **in your browser** (zero install) or
-**natively in Rust**. Start with whichever fits.
+Three ways to run a backtest, fastest first: **in your browser** (zero install),
+with the **`lemon` CLI** on your own machine, or **embedded** as a library in
+Rust, Python, or JS/WASM. Start with whichever fits.
 
 ## Option A — the browser playground (0 minutes)
 
@@ -14,40 +15,63 @@ backtest locally — nothing is sent to a server. Edit the strategy, press
 **Run**, and read the equity curve and metrics. This is the fastest way to get
 a feel for lemon.
 
-## Option B — native Rust (a few minutes)
+## Option B — install the CLI and `lemon run` (a few minutes)
 
-You need a recent stable Rust toolchain (the workspace pins **Rust 1.86+**; run
-`rustup update` if `cargo` complains).
+The native path is a one-line install and a `.lemon` file you run on your own
+data — no repo clone. One command installs the `lemon` binary (macOS / Linux;
+on Windows, grab the [release asset](https://github.com/citrusquant/citrusquant/releases)):
 
 ```bash
-git clone https://github.com/citrusquant/citrusquant
-cd citrusquant
-cargo run -p yuzu-core --example basic_backtest
+curl -fsSL https://citrusquant.com/install.sh | sh
 ```
 
-That example is self-contained and readable top to bottom: it builds a tiny
-price panel, authors a strategy in lemon, runs the backtest, and prints headline
-metrics — the best thing in the repo to read first. A successful run prints:
+It installs to `~/.local/bin` (override with `$LEMON_INSTALL_DIR`), verifies the
+download against its checksum, and prints the installed `lemon --version`.
+
+### A strategy is a single file
+
+Save this as `momentum.lemon`:
 
 ```text
-Strategy: is_largest(sma(close, 2), 1)
-Days simulated: 6
-Final equity (base 1.0): 1.3123
-
-Headline metrics
-  total return :    31.23%
-  Sharpe       :    16.04
-  max drawdown :     0.00%
-  # trades     :        1
-  win rate     :   100.00%
+#! universe: 20180101..20241231
+#! symbols: AAPL, MSFT, NVDA, AMZN, GOOGL, META, JPM, XOM
+#! config: { "fee_ratio": 0.001 }
+#! data-source: fmp
+is_largest(pct_change(close, 63), 3)
 ```
 
-(The numbers are large because the built-in panel is a tiny 6-day toy — swap in
-real data and they come back to earth.)
+The `#!` lines are **front-matter**: the backtest window, the universe, the
+fee, and which vendor *may* fill data gaps. They're plain comments to the
+language itself — a `.lemon` file never makes a network request on its own.
+(`lemon check momentum.lemon` validates the front-matter and syntax without
+running anything.)
 
-### Use it as a library
+### Run it
 
-Add the core crate:
+`--sync` fetches the declared names' daily bars from the vendor the file names.
+Bring your own `$FMP_API_KEY`; nothing is fetched without it, and only the
+missing names are downloaded:
+
+```bash
+export FMP_API_KEY=…            # your key; the file declares the vendor
+lemon momentum.lemon --sync
+```
+
+`lemon` prints the full `Report` as JSON — the headline metrics, the equity
+curve (`dates` + `equity`), and the trade list — the same structure the
+playground draws, computed by the same engine. Write it to a file with
+`--out report.json`.
+
+Already have a local data tree? Drop `--sync` and point `lemon` at it:
+`lemon momentum.lemon --data ~/qdata` (or set `$CITRUS_DATA`) runs fully
+offline. The complete front-matter keys and run flags — including the named
+point-in-time `#! index: sp500` universe — are in the
+[lemon reference](/reference/lemon); to sync your own data see
+[Bring your own data](/guides/bring-your-own-data).
+
+## Option C — use it as a library
+
+The same engine embeds anywhere. In **Rust**, add the core crate:
 
 ```bash
 cargo add yuzu-core lemon-lang
@@ -65,8 +89,17 @@ yuzu_core::run_backtest(spec_json, ctx, price_key, cfg) -> Result<Report, Engine
 - `price_key` — which series the backtest marks off (usually `"close"`).
 - `cfg` — a `BacktestConfig` (fees, slippage, stops, benchmark, …).
 
-See [Your first strategy](/start/first-strategy) to build the `spec`, and
-[Bring your own data](/guides/bring-your-own-data) to build the `ctx`.
+To read the shortest end-to-end example first:
+
+```bash
+git clone https://github.com/citrusquant/citrusquant
+cargo run -p yuzu-core --example basic_backtest
+```
+
+The same core ships for **Python** (`pip install yuzu-backtest` — abi3 wheels,
+Python ≥ 3.9) and **browsers / Cloudflare Workers**
+(`npm install @citrusquant/yuzu-wasm @citrusquant/lemon-wasm`). See the landing
+page's [Get it](/#get-it) tabs and the [API reference](/reference/api) for each.
 
 ## What you get back
 
@@ -78,4 +111,5 @@ by the engine; the frontend only renders it.
 
 - [Your first strategy](/start/first-strategy) — learn lemon by building one up.
 - [Reading a report](/guides/reading-a-report) — decode every metric.
-- [lemon language reference](/reference/lemon) — the complete DSL.
+- [Bring your own data](/guides/bring-your-own-data) — assemble a data tree for `lemon run`.
+- [lemon language reference](/reference/lemon) — the complete DSL and front-matter.
