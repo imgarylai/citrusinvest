@@ -681,7 +681,7 @@ enum Cmd {
         /// Also densify statement factors (later phase).
         #[arg(long)]
         include_fundamentals: bool,
-        /// Also fetch sector map (later phase).
+        /// Also fetch `/stock/profile2` sector/market-cap → tracked/universe.csv.gz.
         #[arg(long)]
         include_industry: bool,
         /// Best-effort snapshot panels (later phase).
