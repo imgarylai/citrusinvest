@@ -28,7 +28,7 @@
 //! ranks each P/E within its cohort (mirroring the web builder). The web app
 //! draws the cohort from its *entire* stored universe; a one-shot CLI run only
 //! has **this run's symbols**, so the cohort is the intersection of the run
-//! universe with each industry. Thin cohorts (< [`MIN_COHORT`](super::factors::MIN_COHORT)
+//! universe with each industry. Thin cohorts (< [`MIN_COHORT`](pomelo_data::factors::MIN_COHORT)
 //! finite, positive P/Es) are suppressed. Sync a broad universe for meaningful
 //! percentiles.
 //!
@@ -42,12 +42,13 @@ use serde_json::Value;
 
 use pomelo_data::{assemble, write_combined_panel, ObjectSink, PANELS_DIR};
 
-use super::factors::{analyst_upside_pct, consensus_to_rating, pe_industry_pctile};
+use super::factors::consensus_to_rating;
 use super::fundamentals::{annual_url, FILING_DATE_KEYS};
 use super::http::Fetcher;
 use super::util::{iso_to_i32, num};
 use super::HttpClient;
 use super::FMP_BASE;
+use pomelo_data::factors::{analyst_upside_pct, pe_industry_pctile};
 
 /// The five **per-symbol** snapshot series, in `FACTOR_PANEL_FIELDS` order. The
 /// cross-sectional `pe_industry_pctile` is written separately by

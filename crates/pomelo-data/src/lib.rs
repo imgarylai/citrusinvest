@@ -8,6 +8,7 @@ pub mod combined;
 pub mod csv_io;
 mod date;
 pub mod error;
+pub mod factors;
 pub mod format;
 pub mod fundamentals;
 pub mod industry;

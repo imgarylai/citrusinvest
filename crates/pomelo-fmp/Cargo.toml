@@ -10,17 +10,14 @@ description = "Bring-your-own-key FMP data sync + snapshot-factor formulas for t
 [dependencies]
 yuzu-core = { path = "../yuzu-core", version = "0.10.0" }
 pomelo-data = { path = "../pomelo-data", version = "0.10.0" }
+# Shared HTTP client / retry Fetcher / WriteMode (no vendor logic).
+pomelo-http = { path = "../pomelo-http", version = "0.10.0", default-features = false }
 serde_json = { workspace = true }
 flate2 = { workspace = true }
-# Direct HTTP for the real FMP client (no third-party FMP SDK). Optional +
-# behind the default-on `fmp-sync` feature so the pure factor math + panel
-# writers can be used without pulling a TLS stack (e.g. a service that fetches
-# with its own client and only calls the formulas). default-features=false
-# drops ureq's transparent gzip (FMP JSON is read verbatim), matching pomelo-s3.
-ureq = { version = "3.3.0", default-features = false, features = ["rustls"], optional = true }
 
 [features]
 default = ["fmp-sync"]
-# The real ureq-backed `UreqClient`. Disable for a networking-free dependent
-# that supplies its own `HttpClient` (the sync/build fns are generic over it).
-fmp-sync = ["dep:ureq"]
+# The real ureq-backed `UreqClient` (via pomelo-http). Disable for a
+# networking-free dependent that supplies its own `HttpClient` (the sync/build
+# fns are generic over it).
+fmp-sync = ["pomelo-http/ureq"]
