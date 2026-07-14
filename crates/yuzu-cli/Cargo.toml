@@ -17,30 +17,30 @@ name = "yuzu-cli"
 path = "src/main.rs"
 
 [dependencies]
-yuzu-core = { path = "../yuzu-core", version = "0.12.0" }
-pomelo-data = { path = "../pomelo-data", version = "0.12.0" }
+yuzu-core = { path = "../yuzu-core", version = "0.12.1" }
+pomelo-data = { path = "../pomelo-data", version = "0.12.1" }
 # Multi-run research orchestration (sweep/grid/walk-forward/lookahead), re-exported
 # so the run_* handlers live in the library layer, not the binary.
-yuzu-research = { path = "../yuzu-research", version = "0.12.0" }
+yuzu-research = { path = "../yuzu-research", version = "0.12.1" }
 # Read-only data-quality audit (yuzu-cli data-audit) — the logic lives in the
 # data-engineering layer; the CLI is a thin caller.
-pomelo-audit = { path = "../pomelo-audit", version = "0.12.0" }
+pomelo-audit = { path = "../pomelo-audit", version = "0.12.1" }
 # FMP data sync + snapshot-factor formulas live in their own crate so a backend
 # service can link the same logic (and write to S3/R2 via the ObjectSink core).
 # default-features=false keeps the pure parts (index membership, factor math)
 # available without a TLS stack; the CLI's `fmp-sync` feature turns on the real
 # ureq client via pomelo-fmp/fmp-sync.
-pomelo-fmp = { path = "../pomelo-fmp", version = "0.12.0", default-features = false }
+pomelo-fmp = { path = "../pomelo-fmp", version = "0.12.1", default-features = false }
 # EODHD second official sync path (epic #192). default-features=false keeps the
 # pure symbol helpers without TLS; `eodhd-sync` turns on ureq.
-pomelo-eodhd = { path = "../pomelo-eodhd", version = "0.12.0", default-features = false }
+pomelo-eodhd = { path = "../pomelo-eodhd", version = "0.12.1", default-features = false }
 # Alpha Vantage path (epic #209). default-features=false keeps pure helpers
 # without TLS; `alpha-vantage-sync` turns on ureq.
-pomelo-alpha-vantage = { path = "../pomelo-alpha-vantage", version = "0.12.0", default-features = false }
+pomelo-alpha-vantage = { path = "../pomelo-alpha-vantage", version = "0.12.1", default-features = false }
 # Finnhub path (epic #210). default-features=false keeps pure helpers without TLS.
-pomelo-finnhub = { path = "../pomelo-finnhub", version = "0.12.0", default-features = false }
+pomelo-finnhub = { path = "../pomelo-finnhub", version = "0.12.1", default-features = false }
 # S3/R2 output for vendor-sync `--out s3://…` (optional; enabled by vendor-sync features).
-pomelo-s3 = { path = "../pomelo-s3", version = "0.12.0", optional = true }
+pomelo-s3 = { path = "../pomelo-s3", version = "0.12.1", optional = true }
 clap = { workspace = true }
 rayon = { workspace = true }
 serde = { workspace = true }
