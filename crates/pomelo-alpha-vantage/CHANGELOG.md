@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.2](https://github.com/citrusquant/citrusquant/compare/pomelo-alpha-vantage-v0.12.1...pomelo-alpha-vantage-v0.12.2) - 2026-07-14
+
+### Other
+
+- release v0.12.1
+
 ## [0.12.1](https://github.com/citrusquant/citrusquant/compare/pomelo-alpha-vantage-v0.12.0...pomelo-alpha-vantage-v0.12.1) - 2026-07-14
 
 ### Other
