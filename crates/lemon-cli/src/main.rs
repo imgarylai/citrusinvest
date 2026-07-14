@@ -11,7 +11,7 @@
 //! lemon check [file...]                             (envelopes + .lemon front-matter)
 //! lemon run   [--data <dir>] [--from N] [--to N] [--fee-ratio F]
 //!             [--slippage-ratio F] [--price-key K] [--benchmark SYM]
-//!             [--symbols A,B] [--out path] [file]
+//!             [--symbols A,B] [--sync] [--out path] [file]
 //! ```
 //!
 //! `run` accepts a `.lemon` file (with optional `#!` front-matter, see
@@ -22,6 +22,7 @@
 //! depends on it, so the engine wiring for `run` has to live out here.
 
 mod frontmatter;
+mod sync;
 
 use std::io::Read;
 use std::path::PathBuf;
@@ -173,6 +174,10 @@ fn run_lint(args: Vec<String>) -> ExitCode {
 
     let mut dirty = false;
     for (path, src) in &sources {
+        // With no explicit --series list, a file's own `#! require:`
+        // declaration supplies the known-series set (issue #246).
+        let required = if have_series { None } else { fm_require(src) };
+        let known = known.or(required.as_deref());
         match lint_source(path, src, known) {
             Ok(warnings) => {
                 for w in &warnings {
@@ -191,6 +196,11 @@ fn run_lint(args: Vec<String>) -> ExitCode {
     } else {
         ExitCode::SUCCESS
     }
+}
+
+/// A file's `#! require:` series list, if it has valid front-matter with one.
+fn fm_require(src: &str) -> Option<Vec<String>> {
+    frontmatter::parse(src).ok().and_then(|f| f.require)
 }
 
 /// Validate one document: a strategy envelope (JSON, starts with `{`) or a
@@ -276,6 +286,9 @@ struct RunFlags {
     benchmark: Option<String>,
     /// Explicit symbol universe (comma-separated flag / front-matter list).
     symbols: Option<Vec<String>>,
+    /// Fetch missing data via the file's `#! data-source:` before running
+    /// (explicit opt-in; the key comes from the environment).
+    sync: bool,
     /// Report destination; `None` = stdout.
     out: Option<PathBuf>,
 }
@@ -307,6 +320,7 @@ fn parse_run_flags(args: Vec<String>) -> Result<RunFlags, String> {
                         .map_err(|m| format!("--symbols: {m}"))?,
                 )
             }
+            "--sync" => flags.sync = true,
             "--out" => flags.out = Some(PathBuf::from(value("--out", it.next())?)),
             _ if a.starts_with('-') => return Err(format!("unknown flag `{a}`")),
             _ => {
@@ -327,6 +341,8 @@ struct RunDoc {
     from: Option<i32>,
     to: Option<i32>,
     symbols: Option<Vec<String>>,
+    require: Option<Vec<String>>,
+    data_source: Option<frontmatter::DataSource>,
     price_key: Option<String>,
     cfg: yuzu_core::backtest::BacktestConfig,
 }
@@ -341,6 +357,8 @@ fn lemon_doc(path: &str, src: &str) -> Result<RunDoc, String> {
         from: fm.from,
         to: fm.to,
         symbols: fm.symbols,
+        require: fm.require,
+        data_source: fm.data_source,
         price_key: fm.price_key,
         cfg: fm
             .config
@@ -388,6 +406,8 @@ fn envelope_doc(path: &str, src: &str) -> Result<RunDoc, String> {
         from,
         to,
         symbols,
+        require: None,
+        data_source: None,
         price_key: None,
         cfg,
     })
@@ -434,7 +454,44 @@ fn run_strategy(
     if let Some(b) = &flags.benchmark {
         cfg.benchmark_key = Some(b.clone());
     }
-    let symbols = flags.symbols.clone().or(doc.symbols);
+    let symbols = flags.symbols.clone().or_else(|| doc.symbols.clone());
+
+    // Gap-check the declared universe; `--sync` (and only `--sync`) may fetch
+    // what's missing via the file's declared vendor (see the sync module).
+    if let Some(syms) = &symbols {
+        let missing = sync::missing_symbols(&data, syms);
+        if !missing.is_empty() {
+            if !flags.sync {
+                return Err(format!(
+                    "lemon: missing price data for: {} — re-run with --sync (uses the file's `#! data-source:` and your $FMP_API_KEY), or sync manually: yuzu-cli fmp-sync --symbols {} --out {}",
+                    missing.join(", "),
+                    missing.join(","),
+                    data.display()
+                ));
+            }
+            let Some(source) = doc.data_source else {
+                return Err(
+                    "lemon: --sync needs a `#! data-source:` declaration in the strategy file (supported: fmp)"
+                        .into(),
+                );
+            };
+            let req = sync::SyncRequest {
+                source,
+                missing: &missing,
+                from,
+                to,
+                include_fundamentals: sync::wants_fundamentals(&doc.spec, doc.require.as_deref()),
+                root: &data,
+            };
+            let note = sync::sync_live(&req).map_err(|e| format!("lemon: {e}"))?;
+            eprintln!("lemon: {note}");
+        }
+    } else if flags.sync {
+        return Err(
+            "lemon: --sync needs an explicit universe (`#! symbols:` or --symbols) to know what to fetch"
+                .into(),
+        );
+    }
 
     let report = yuzu_research::run_single(
         &data,
@@ -520,7 +577,7 @@ fn main() -> ExitCode {
         Some(f) if is_runnable_file(f) => run_run(args),
         _ => {
             eprintln!(
-                "usage: lemon <strategy.lemon|envelope.json> [run flags]   (short for `lemon run ...`)\n       lemon fmt [-w] [file...]\n       lemon lint [--series a,b,c] [--series-file path] [file...]\n       lemon check [file...]\n       lemon run [--data <dir>] [--from N] [--to N] [--fee-ratio F] [--slippage-ratio F] [--price-key K] [--benchmark SYM] [--symbols A,B] [--out path] [file]\n       lemon --version\n       (no file = read stdin; --data falls back to $CITRUS_DATA)"
+                "usage: lemon <strategy.lemon|envelope.json> [run flags]   (short for `lemon run ...`)\n       lemon fmt [-w] [file...]\n       lemon lint [--series a,b,c] [--series-file path] [file...]\n       lemon check [file...]\n       lemon run [--data <dir>] [--from N] [--to N] [--fee-ratio F] [--slippage-ratio F] [--price-key K] [--benchmark SYM] [--symbols A,B] [--sync] [--out path] [file]\n       lemon --version\n       (no file = read stdin; --data falls back to $CITRUS_DATA)"
             );
             ExitCode::FAILURE
         }
@@ -889,6 +946,52 @@ mod tests {
         assert!(is_runnable_file("envelope.json"));
         assert!(!is_runnable_file("fmt"));
         assert!(!is_runnable_file("notes.md"));
+    }
+
+    #[test]
+    fn missing_data_asks_for_sync_and_sync_needs_its_declarations() {
+        let dir = fixture("syncflow");
+        // BBB exists in the fixture; ZZZ does not. Without --sync the run
+        // stops with an actionable pointer instead of fetching anything.
+        let src = "#! symbols: BBB, ZZZ\nis_largest(close, 1)";
+        let err = run_strategy("s.lemon", src, &flags_for(&dir), None).unwrap_err();
+        assert!(err.contains("ZZZ") && err.contains("--sync"), "{err}");
+
+        // --sync without a `#! data-source:` declaration is refused.
+        let mut flags = flags_for(&dir);
+        flags.sync = true;
+        let err = run_strategy("s.lemon", src, &flags, None).unwrap_err();
+        assert!(err.contains("data-source"), "{err}");
+
+        // --sync with no explicit universe has nothing to gap-check against.
+        let err = run_strategy("s.lemon", "is_largest(close, 1)", &flags, None).unwrap_err();
+        assert!(err.contains("--sync") && err.contains("symbols"), "{err}");
+
+        // A complete tree makes --sync a no-op: the run just proceeds.
+        let mut ok_flags = flags_for(&dir);
+        ok_flags.sync = true;
+        let out = run_strategy(
+            "s.lemon",
+            "#! symbols: AAA, BBB\n#! data-source: fmp\nis_largest(close, 1)",
+            &ok_flags,
+            None,
+        )
+        .unwrap();
+        assert!(out.contains("equity"), "{out}");
+    }
+
+    #[test]
+    fn lint_uses_the_files_require_declaration() {
+        // `#! require:` doubles as the lint series list (no --series needed).
+        assert_eq!(
+            super::fm_require("#! require: close, pe\nclose > 1").as_deref(),
+            Some(&["close".to_string(), "pe".into()][..])
+        );
+        assert!(super::fm_require("close > 1").is_none());
+        let known = super::fm_require("#! require: close\nclsoe > 1").unwrap();
+        let out = lint_source("x.lemon", "#! require: close\nclsoe > 1", Some(&known)).unwrap();
+        assert_eq!(out.len(), 1);
+        assert!(out[0].contains("unknown series `clsoe`"), "{}", out[0]);
     }
 
     #[test]

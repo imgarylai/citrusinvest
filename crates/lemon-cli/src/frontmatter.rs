@@ -8,6 +8,8 @@
 //! #! name: Momentum v2
 //! #! universe: 20180101..20241231
 //! #! symbols: AAPL, MSFT, NVDA
+//! #! require: close, pe
+//! #! data-source: fmp
 //! #! config: { "fee_ratio": 0.001, "stop_loss": 0.08 }
 //! #! price-key: close
 //! ```
@@ -28,6 +30,14 @@
 //!   then see exactly these names. Beware: a list frozen *today* implies
 //!   survivorship bias in a historical run; point-in-time index universes
 //!   (`symbols_hint`) are issue #245.
+//! - `require` names the series the strategy needs (`close, pe`). It feeds
+//!   `lemon lint` as the known-series list, and tells `--sync` whether
+//!   fundamentals are needed.
+//! - `data-source` declares which vendor **may** fill data gaps (`fmp`). It is
+//!   a capability hint, never an instruction: fetching only ever happens when
+//!   the person running the file passes `--sync` and supplies their own API
+//!   key via the environment (issue #246 — a shared strategy file must never
+//!   be able to trigger network activity by itself).
 //!
 //! CLI flags override front-matter; front-matter overrides built-in defaults.
 
@@ -116,6 +126,13 @@ impl ConfigDoc {
     }
 }
 
+/// A vendor that `--sync` may fetch missing data from. Declared, never
+/// executed — see the module docs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DataSource {
+    Fmp,
+}
+
 /// Parsed front-matter. Every field is optional — an absent key means "use the
 /// flag or the default".
 #[derive(Debug, Default)]
@@ -124,6 +141,8 @@ pub struct FrontMatter {
     pub from: Option<i32>,
     pub to: Option<i32>,
     pub symbols: Option<Vec<String>>,
+    pub require: Option<Vec<String>>,
+    pub data_source: Option<DataSource>,
     pub config: Option<ConfigDoc>,
     pub price_key: Option<String>,
 }
@@ -182,13 +201,17 @@ pub fn parse(src: &str) -> Result<FrontMatter, FmError> {
             "symbols" => {
                 fm.symbols = Some(parse_symbol_list(value).map_err(|m| FmError::new(lineno, m))?)
             }
+            "require" => {
+                fm.require = Some(parse_name_list(value).map_err(|m| FmError::new(lineno, m))?)
+            }
+            "data-source" => fm.data_source = Some(parse_data_source(lineno, value)?),
             "config" => fm.config = Some(parse_config(lineno, value)?),
             "price-key" => fm.price_key = Some(parse_price_key(lineno, value)?),
             _ => {
                 return Err(FmError::new(
                     lineno,
                     format!(
-                        "unknown front-matter key `{key}` (expected `name`, `universe`, `symbols`, `config`, or `price-key`)"
+                        "unknown front-matter key `{key}` (expected `name`, `universe`, `symbols`, `require`, `data-source`, `config`, or `price-key`)"
                     ),
                 ));
             }
@@ -250,6 +273,32 @@ pub fn parse_symbol_list(value: &str) -> Result<Vec<String>, String> {
         out.push(sym.to_string());
     }
     Ok(out)
+}
+
+/// Parse a comma-separated series-name list (`close, pe`) for `require`.
+fn parse_name_list(value: &str) -> Result<Vec<String>, String> {
+    let mut out: Vec<String> = Vec::new();
+    for part in value.split(',') {
+        let name = part.trim();
+        if name.is_empty() {
+            return Err(format!("empty series name in list `{value}`"));
+        }
+        if out.iter().any(|s| s == name) {
+            return Err(format!("duplicate series name `{name}`"));
+        }
+        out.push(name.to_string());
+    }
+    Ok(out)
+}
+
+fn parse_data_source(line: usize, value: &str) -> Result<DataSource, FmError> {
+    match value {
+        "fmp" => Ok(DataSource::Fmp),
+        _ => Err(FmError::new(
+            line,
+            format!("unsupported `data-source` `{value}` (supported: fmp)"),
+        )),
+    }
 }
 
 fn parse_price_key(line: usize, value: &str) -> Result<String, FmError> {
@@ -378,6 +427,24 @@ close > 1"#;
         assert!(err.message.contains("empty symbol"), "{}", err.message);
         let err = parse("#! symbols: AAPL, AAPL\nclose > 1").unwrap_err();
         assert!(err.message.contains("duplicate symbol"), "{}", err.message);
+    }
+
+    #[test]
+    fn require_and_data_source_parse_and_reject_junk() {
+        let fm = parse("#! require: close, pe\n#! data-source: fmp\nclose > 1").unwrap();
+        assert_eq!(
+            fm.require.as_deref(),
+            Some(&["close".to_string(), "pe".into()][..])
+        );
+        assert_eq!(fm.data_source, Some(DataSource::Fmp));
+        let err = parse("#! require: close,,pe\nclose > 1").unwrap_err();
+        assert!(err.message.contains("empty series name"), "{}", err.message);
+        let err = parse("#! data-source: bloomberg\nclose > 1").unwrap_err();
+        assert!(
+            err.message.contains("unsupported `data-source`"),
+            "{}",
+            err.message
+        );
     }
 
     #[test]

@@ -555,6 +555,37 @@ columns — and the `tracked/` industry map feeds the industry ops. A name not
 in the tree still fails at engine evaluation with `unknown series` (the
 classic typo case `lemon lint` catches earlier).
 
+### Declaring data needs — `#! require` and `--sync`
+
+Two more front-matter keys make a strategy file state its data needs:
+
+```text
+#! symbols: AAPL, MSFT, NVDA
+#! require: close, pe
+#! data-source: fmp
+```
+
+- `require` names the series the strategy needs. It doubles as the
+  known-series list for `lemon lint` (typos are caught without passing
+  `--series`), and tells `--sync` whether fundamentals must be fetched.
+- `data-source` declares which vendor **may** fill gaps (`fmp` for now). It
+  is a capability hint, never an instruction: a strategy file can never
+  trigger network activity by itself.
+
+On a machine whose data tree is missing some of the declared `symbols`,
+`lemon run` stops with an error listing exactly what's missing. Passing
+`--sync` — an explicit opt-in, with your own key in `$FMP_API_KEY` — fetches
+**only the missing names** through the declared vendor and then runs:
+
+```sh
+export FMP_API_KEY=...
+lemon strategy.lemon --sync
+```
+
+When the tree is already complete, `--sync` is a no-op (zero requests).
+Existing files are never rewritten. Offline builds
+(`--no-default-features`) refuse `--sync` with a build hint.
+
 ---
 
 ## See also

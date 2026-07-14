@@ -22,7 +22,17 @@ serde_json = { workspace = true }
 # must NOT depend on these — yuzu-core depends on it, so the runner lives here.
 yuzu-core = { path = "../yuzu-core", version = "0.11.0" }
 yuzu-research = { path = "../yuzu-research", version = "0.11.0" }
-
-[dev-dependencies]
-# Test fixtures: write gzip CSV price files into a temp data-layout tree.
+# Gap checks for `--sync` (which symbols have price files, which series are
+# fundamentals) and test fixtures.
 pomelo-data = { path = "../pomelo-data", version = "0.11.0" }
+# `lemon run --sync` (#246). default-features=false keeps the pure sync core
+# (tests inject a mock HttpClient); the `fmp-sync` feature turns on the real
+# ureq TLS client, mirroring yuzu-cli's setup.
+pomelo-fmp = { path = "../pomelo-fmp", version = "0.11.0", default-features = false }
+
+[features]
+default = ["fmp-sync"]
+# `lemon run --sync` against FMP with the user's own key over HTTPS. Pulls the
+# ureq TLS stack (via pomelo-fmp); disable with --no-default-features for an
+# offline-only build.
+fmp-sync = ["pomelo-fmp/fmp-sync"]
