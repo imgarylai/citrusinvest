@@ -82,11 +82,15 @@ lemon run strategy.json --data ~/qdata     # or set $CITRUS_DATA
 ```
 
 The runner takes `config` (flat engine knobs — `fee_ratio`, `stop_loss`, …;
-unknown knobs are rejected) and the `universe` date window from the document;
-explicit CLI flags override it. `universe.symbols` / `symbols_hint` are not
-consumed yet — the runner refuses them rather than silently running the wrong
-universe (filtering is
-[#245](https://github.com/citrusquant/citrusquant/issues/245)).
+unknown knobs are rejected), the `universe` date window, and the explicit
+`universe.symbols` list from the document; CLI flags override it. Scoping
+matters for correctness: cross-sectional ops see exactly the listed universe,
+and a listed symbol missing from the data tree is an error, never a silent
+drop. Note that a static list frozen today implies survivorship bias in a
+historical run. `symbols_hint` (a named point-in-time universe) is not
+consumed yet — the runner refuses it rather than silently running the wrong
+universe ([#245](https://github.com/citrusquant/citrusquant/issues/245));
+mask on a membership panel (`mask(signal, in_sp500)`) in the meantime.
 
 ## Reproducibility
 

@@ -174,7 +174,7 @@ pub fn run_walkforward(
             .max()
             .unwrap_or(0),
     };
-    let ctx = load_ctx(root, from, to, cfg, "close")?;
+    let ctx = load_ctx(root, from, to, cfg, "close", None)?;
     let dates = ctx
         .panels
         .get("close")

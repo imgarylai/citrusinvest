@@ -25,21 +25,23 @@ pub(crate) fn field_for_price_key(key: &str) -> Result<Field, String> {
     }
 }
 
-/// Load the close panel for every symbol under `root` into an `EvalContext`,
-/// plus the execution/return panel named by `price_key` when it isn't `close`
-/// (so e.g. a close-signal strategy can fill at the open — `--price-key open`).
-/// (Scope a run to a subset by syncing only those files into the data dir.)
-/// Adds the volume panel when the config's liquidity cap is active, and a
-/// "benchmark" panel (that symbol's closes) when `cfg.benchmark_key` names a
-/// symbol that isn't already a loaded panel.
+/// Load the close panel into an `EvalContext` — for every symbol under `root`,
+/// or only for `symbols` when given (the explicit-universe path; cross-sectional
+/// ops then see exactly that universe). Also loads the execution/return panel
+/// named by `price_key` when it isn't `close` (so e.g. a close-signal strategy
+/// can fill at the open — `--price-key open`), the volume panel when the
+/// config's liquidity cap is active, and a "benchmark" panel (that symbol's
+/// closes) when `cfg.benchmark_key` names a symbol that isn't already a loaded
+/// panel (the benchmark does not need to be in `symbols`).
 pub(crate) fn load_ctx(
     root: &Path,
     from: i32,
     to: i32,
     cfg: &BacktestConfig,
     price_key: &str,
+    symbols: Option<&[String]>,
 ) -> Result<EvalContext, String> {
-    let syms = list_symbols(root).map_err(|e| e.to_string())?;
+    let syms = scoped_symbols(root, symbols)?;
     let src = LocalSource::new(root);
     let mut panels = HashMap::new();
     let close = load_panel(&src, &syms, Field::AdjClose, from, to, PRICES_DIR)
@@ -119,4 +121,35 @@ pub(crate) fn load_ctx(
         panels,
         industry: HashMap::new(),
     })
+}
+
+/// Resolve the run's symbol universe: everything under `prices/`, or the
+/// explicit `symbols` list validated against it. A requested symbol with no
+/// price file is an error, never a silent drop — a quietly shrunken universe
+/// changes every cross-sectional op. The list is deduplicated and sorted so a
+/// reordered request loads the same panels.
+fn scoped_symbols(root: &Path, symbols: Option<&[String]>) -> Result<Vec<String>, String> {
+    let available = list_symbols(root).map_err(|e| e.to_string())?;
+    let Some(requested) = symbols else {
+        return Ok(available);
+    };
+    if requested.is_empty() {
+        return Err("the symbols list is empty — omit it to run the full universe".into());
+    }
+    let have: std::collections::HashSet<&str> = available.iter().map(String::as_str).collect();
+    let missing: Vec<&str> = requested
+        .iter()
+        .map(String::as_str)
+        .filter(|s| !have.contains(s))
+        .collect();
+    if !missing.is_empty() {
+        return Err(format!(
+            "symbols not in the data tree (no prices/<sym>.csv.gz): {}",
+            missing.join(", ")
+        ));
+    }
+    let mut syms: Vec<String> = requested.to_vec();
+    syms.sort();
+    syms.dedup();
+    Ok(syms)
 }

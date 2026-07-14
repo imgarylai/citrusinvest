@@ -16,6 +16,12 @@ pub(crate) struct RunArgs {
     /// (`shift(signal, 1)`), then set `--price-key open`.
     #[arg(long, default_value = "close")]
     price_key: String,
+    /// Restrict the universe to these symbols (comma-separated, e.g.
+    /// AAPL,MSFT). Cross-sectional ops then see exactly this universe.
+    /// Every listed symbol must exist in the data tree. Beware: a list
+    /// frozen today implies survivorship bias in a historical run.
+    #[arg(long, value_delimiter = ',')]
+    symbols: Option<Vec<String>>,
 }
 
 pub(crate) fn run(args: RunArgs) -> Result<(), Box<dyn std::error::Error>> {
@@ -23,6 +29,7 @@ pub(crate) fn run(args: RunArgs) -> Result<(), Box<dyn std::error::Error>> {
         common,
         spec,
         price_key,
+        symbols,
     } = args;
     let cfg = common.config();
     let spec_json = std::fs::read_to_string(&spec)?;
@@ -33,6 +40,7 @@ pub(crate) fn run(args: RunArgs) -> Result<(), Box<dyn std::error::Error>> {
         common.to,
         &cfg,
         &price_key,
+        symbols.as_deref(),
     )?;
     emit(&common.out, serde_json::to_string_pretty(&report)?)?;
     Ok(())

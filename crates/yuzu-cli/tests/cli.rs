@@ -76,7 +76,16 @@ fn lists_symbols_and_runs_a_single_backtest() {
 
     // is_largest(close, 1), rebalanced — always holds one name; just assert it runs + shapes.
     let spec = r#"{"op":"IsLargest","of":{"op":"Data","name":"close"},"n":1}"#;
-    let report = run_single(&dir, spec, 20240102, 20240104, &Default::default(), "close").unwrap();
+    let report = run_single(
+        &dir,
+        spec,
+        20240102,
+        20240104,
+        &Default::default(),
+        "close",
+        None,
+    )
+    .unwrap();
     assert_eq!(report.equity.len(), 3);
     assert!(report.metrics.total_return.is_finite());
     assert!(report.live.is_none()); // no live block by default
@@ -86,11 +95,72 @@ fn lists_symbols_and_runs_a_single_backtest() {
         live_performance_start: Some(20240103),
         ..Default::default()
     };
-    let report = run_single(&dir, spec, 20240102, 20240104, &cfg, "close").unwrap();
+    let report = run_single(&dir, spec, 20240102, 20240104, &cfg, "close", None).unwrap();
     let seg = report.live.as_ref().unwrap();
     assert_eq!(seg.start, 20240103);
     assert_eq!(seg.days, 2);
     assert!(seg.total_return.is_finite());
+}
+
+#[test]
+fn scopes_the_universe_to_an_explicit_symbol_list() {
+    let dir = fixture("scoped");
+    let spec = r#"{"op":"IsLargest","of":{"op":"Data","name":"close"},"n":1}"#;
+    // Unscoped, is_largest holds AAA (10→11→12); scoped to BBB alone it must
+    // ride BBB's 5→4→6 path — the dip to 0.8 proves the universe shrank.
+    let bbb = ["BBB".to_string()];
+    let scoped = run_single(
+        &dir,
+        spec,
+        20240102,
+        20240104,
+        &Default::default(),
+        "close",
+        Some(&bbb),
+    )
+    .unwrap();
+    for (got, want) in scoped.equity.iter().zip([1.0, 0.8, 1.2]) {
+        assert!((got - want).abs() < 1e-9, "{:?}", scoped.equity);
+    }
+    let full = run_single(
+        &dir,
+        spec,
+        20240102,
+        20240104,
+        &Default::default(),
+        "close",
+        None,
+    )
+    .unwrap();
+    assert_ne!(full.equity, scoped.equity);
+
+    // A requested symbol with no price file is an error, never a silent drop.
+    let bad = ["BBB".to_string(), "ZZZ".to_string()];
+    match run_single(
+        &dir,
+        spec,
+        20240102,
+        20240104,
+        &Default::default(),
+        "close",
+        Some(&bad),
+    ) {
+        Err(e) => assert!(e.contains("ZZZ"), "{e}"),
+        Ok(_) => panic!("expected an error for a symbol missing from the tree"),
+    }
+    // An empty list is a mistake, not "no filter".
+    match run_single(
+        &dir,
+        spec,
+        20240102,
+        20240104,
+        &Default::default(),
+        "close",
+        Some(&[]),
+    ) {
+        Err(e) => assert!(e.contains("empty"), "{e}"),
+        Ok(_) => panic!("expected an error for an empty symbols list"),
+    }
 }
 
 #[test]
@@ -119,15 +189,40 @@ fn price_key_selects_the_execution_and_return_series() {
     // Hold the single name every day; signal references close but fills follow
     // the chosen price series.
     let spec = r#"{"op":"Data","name":"close"}"#;
-    let on_close =
-        run_single(&dir, spec, 20240102, 20240104, &Default::default(), "close").unwrap();
+    let on_close = run_single(
+        &dir,
+        spec,
+        20240102,
+        20240104,
+        &Default::default(),
+        "close",
+        None,
+    )
+    .unwrap();
     assert!((on_close.metrics.total_return - (-0.2)).abs() < 1e-9); // 8/10 - 1
 
-    let on_open = run_single(&dir, spec, 20240102, 20240104, &Default::default(), "open").unwrap();
+    let on_open = run_single(
+        &dir,
+        spec,
+        20240102,
+        20240104,
+        &Default::default(),
+        "open",
+        None,
+    )
+    .unwrap();
     assert!((on_open.metrics.total_return - 0.4).abs() < 1e-9); // 14/10 - 1
 
     // An unknown price series fails fast with a clear message.
-    match run_single(&dir, spec, 20240102, 20240104, &Default::default(), "bogus") {
+    match run_single(
+        &dir,
+        spec,
+        20240102,
+        20240104,
+        &Default::default(),
+        "bogus",
+        None,
+    ) {
         Err(e) => assert!(e.contains("price-key must be one of"), "{e}"),
         Ok(_) => panic!("expected an error for an unknown price-key"),
     }
@@ -415,7 +510,7 @@ fn run_single_loads_volume_panel_for_the_liquidity_cap() {
         ..Default::default()
     };
     let spec = r#"{"op":"IsLargest","of":{"op":"Data","name":"close"},"n":1}"#;
-    let report = run_single(&dir, spec, 20240102, 20240104, &cfg, "close").unwrap();
+    let report = run_single(&dir, spec, 20240102, 20240104, &cfg, "close", None).unwrap();
     assert_eq!(report.equity.len(), 3);
 }
 
@@ -429,7 +524,7 @@ fn run_single_loads_a_benchmark_symbol_panel() {
         ..Default::default()
     };
     let spec = r#"{"op":"IsLargest","of":{"op":"Data","name":"close"},"n":1}"#;
-    let report = run_single(&dir, spec, 20240102, 20240104, &cfg, "close").unwrap();
+    let report = run_single(&dir, spec, 20240102, 20240104, &cfg, "close", None).unwrap();
     assert!(report.benchmark.is_some());
 }
 

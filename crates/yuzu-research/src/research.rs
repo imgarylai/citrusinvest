@@ -21,7 +21,7 @@ pub fn run_factor(
     quantiles: usize,
     neutralize_industry: bool,
 ) -> Result<yuzu_core::research::FactorReport, String> {
-    let ctx = load_ctx(root, from, to, &BacktestConfig::default(), "close")?;
+    let ctx = load_ctx(root, from, to, &BacktestConfig::default(), "close", None)?;
     let mut factor = yuzu_core::run_strategy(spec_json, &ctx).map_err(|e| e.to_string())?;
     if neutralize_industry {
         factor = factor.neutralize_industry(&ctx.industry, true);
@@ -42,7 +42,7 @@ pub fn run_event(
     pre: usize,
     post: usize,
 ) -> Result<yuzu_core::research::EventStudy, String> {
-    let ctx = load_ctx(root, from, to, &BacktestConfig::default(), "close")?;
+    let ctx = load_ctx(root, from, to, &BacktestConfig::default(), "close", None)?;
     let events = yuzu_core::run_strategy(spec_json, &ctx).map_err(|e| e.to_string())?;
     let close = ctx.panels.get("close").ok_or("no close panel")?;
     let rets = yuzu_core::research::daily_returns(close);
