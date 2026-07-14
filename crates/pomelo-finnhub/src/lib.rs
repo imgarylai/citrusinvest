@@ -11,6 +11,7 @@
 //! <out>/fundamentals/{SYM}.csv.gz  dense forward-filled factors   (#228)
 //! <out>/tracked/universe.csv.gz    symbol,sector,market_cap       (#227)
 //! <out>/panels/in_sp500.csv.gz     point-in-time SPX membership   (#229)
+//! <out>/panels/{factor}.csv.gz     best-effort snapshot factors   (#230)
 //! ```
 //!
 //! ## Reuse across CLI and service
@@ -39,18 +40,23 @@
 //!   `index/constituents` + `index/historical-constituents` → `panels/in_sp500.csv.gz`
 //!   (the Finnhub strength AV lacked); `finnhub-symbols` lists an exchange's
 //!   universe via `/stock/symbol` (not a cap screener).
+//! - **Snapshot factors (#230):** best-effort current-as-of `panels/` from
+//!   recommendation trends, price targets, and `/stock/metric` (plan-gated bits
+//!   simply absent, never faked). Full writeup: `docs/finnhub-data-source.md`.
 //!
 //! Coverage / accepted gaps: spike
 //! [#208](https://github.com/citrusquant/citrusquant/issues/208) and
 //! [`docs/data-sources.md`](../../../docs/data-sources.md) § Finnhub.
 
 mod config;
+mod factors;
 mod fundamentals;
 mod http;
 mod index;
 mod industry;
 mod price;
 mod screener;
+mod snapshot;
 mod symbol;
 mod sync;
 mod util;

@@ -80,10 +80,9 @@ partial / plan-dependent · **N** = essentially no · **TBD** = not verified her
 † Dense historical ratios from annual statements; Highlights/Valuation remain **TTM / current** (used for snapshot factors, not fundies history).  
 ‡ S&P 500 historical constituents via `GSPC.INDX`; broader index history often Marketplace add-on.  
 § Alpha Vantage: spike [#207](https://github.com/citrusquant/citrusquant/issues/207) — see [§ Alpha Vantage](#alpha-vantage-mapping-spike-207). In-repo path: epic [#209](https://github.com/citrusquant/citrusquant/issues/209) (`av-sync` / `av-symbols`).  
-¶ Finnhub: spike [#208](https://github.com/citrusquant/citrusquant/issues/208) — see [§ Finnhub](#finnhub-mapping-spike-208). No in-repo adapter yet (epic [#210](https://github.com/citrusquant/citrusquant/issues/210)).
+¶ Finnhub: spike [#208](https://github.com/citrusquant/citrusquant/issues/208) — see [§ Finnhub](#finnhub-mapping-spike-208). In-repo path: epic [#210](https://github.com/citrusquant/citrusquant/issues/210) (`finnhub-sync` / `finnhub-symbols`, incl. `--index sp500`). See [`finnhub-data-source.md`](../reference/finnhub-data-source).
 
-**In-repo full sync CLIs today:** FMP and EODHD. AV/Finnhub columns are **API-capable**
-(spike-backed), not “we ship an adapter yet.”
+**In-repo full sync CLIs today:** FMP, EODHD, Alpha Vantage, and Finnhub.
 
 ---
 
@@ -396,6 +395,7 @@ capability**, not free quotas.
 - [`data-layout.md`](../reference/data-layout) — on-disk contract (source of truth for shapes)
 - [`eodhd-data-source.md`](../reference/eodhd-data-source) — EODHD CLI, flags, gaps
 - [`alpha-vantage-data-source.md`](../reference/alpha-vantage-data-source) — AV CLI, flags, gaps
+- [`finnhub-data-source.md`](../reference/finnhub-data-source) — Finnhub CLI, flags, index PIT, gaps
 - [`fmp-data-source.md`](../reference/fmp-data-source) — FMP Starter vs feature families + `fmp-sync`
 - [`backtest-engine.md`](../reference/backtest-engine) — panels / backtest semantics
 - crates `pomelo-fmp`, `pomelo-eodhd`, `pomelo-alpha-vantage` — official one-shot syncs

@@ -8,8 +8,10 @@
 //!
 //! Fundamentals (#228): `--include-fundamentals` densifies annual
 //! `/stock/financials-reported` (filing-date visibility) → `fundamentals/{SYM}.csv.gz`.
-//! Index / snapshot land in later epic #210 phases; those config flags are
-//! accepted but inert for now.
+//!
+//! Snapshot factors (#230): `--include-snapshot-factors` writes best-effort
+//! `panels/{analyst_upside_pct,consensus_rating,fcf_yield,pe_industry_pctile}`.
+//! Index membership is driven from the CLI via `--index` (see `index` module).
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -22,6 +24,7 @@ use super::fundamentals::sync_fundamentals;
 use super::http::{Fetcher, HttpClient};
 use super::industry::{encode_industry, fetch_profile, load_existing_industry, INDUSTRY_KEY};
 use super::price::{parse_price_payload, price_url, read_existing_prices};
+use super::snapshot::{compute_symbol, SnapshotAccum};
 use super::symbol::split_symbol;
 
 /// Finnhub API root (no trailing slash).
@@ -46,8 +49,8 @@ pub fn sync<H: HttpClient>(
 /// `WriteMode::Append` merges the fetched window into the existing file. With
 /// `include_industry`, also builds `tracked/universe.csv.gz` from
 /// `/stock/profile2`; with `include_fundamentals`, densifies annual
-/// `/stock/financials-reported` into `fundamentals/{SYM}.csv.gz`. The remaining
-/// `include_*` flags are reserved for later #210 phases and have no effect yet.
+/// `/stock/financials-reported` into `fundamentals/{SYM}.csv.gz`; with
+/// `include_snapshot_factors`, writes best-effort `panels/` factors.
 pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
     http: &H,
     api_key: &str,
@@ -76,6 +79,7 @@ pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
     } else {
         BTreeMap::new()
     };
+    let mut snapshots = cfg.include_snapshot_factors.then(SnapshotAccum::new);
 
     for raw in symbols {
         let Some((layout, fh)) = split_symbol(raw, &cfg.default_exchange) else {
@@ -141,8 +145,9 @@ pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
             }
         }
 
+        let price_days: Vec<i32> = rows.iter().map(|r| r.day).collect();
+
         if cfg.include_fundamentals {
-            let price_days: Vec<i32> = rows.iter().map(|r| r.day).collect();
             match sync_fundamentals(&fetcher, store, &layout, &fh, api_key, &price_days) {
                 Ok(true) => summary.fundamentals_written += 1,
                 Ok(false) => eprintln!("{layout}: no annual filings"),
@@ -159,6 +164,12 @@ pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
             collect_industry(&fetcher, &fh, api_key, &layout, &mut industry, &mut summary);
         }
 
+        if let Some(acc) = snapshots.as_mut() {
+            let last_close = rows.last().map(|r| r.adj_close).unwrap_or(f64::NAN);
+            let snap = compute_symbol(&fetcher, &fh, api_key, &price_days, last_close);
+            acc.push(layout.clone(), snap, &price_days);
+        }
+
         summary.symbols_written += 1;
         summary.price_rows += rows.len();
         eprintln!("{layout}: wrote {} price rows", rows.len());
@@ -169,6 +180,10 @@ pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
         store.put(INDUSTRY_KEY, &bytes).map_err(|e| e.to_string())?;
         summary.industry_written = true;
         eprintln!("wrote {} industry rows to {INDUSTRY_KEY}", industry.len());
+    }
+
+    if let Some(acc) = snapshots {
+        summary.snapshot_factor_panels = acc.write_panels(store).map_err(|e| e.to_string())?;
     }
 
     if !any_valid {
@@ -512,6 +527,36 @@ mod tests {
         assert_eq!(summary.symbols_written, 1);
         assert_eq!(summary.fundamentals_written, 1);
         assert!(dir.join("fundamentals/AAPL.csv.gz").exists());
+    }
+
+    #[test]
+    fn snapshot_factors_flag_writes_panels() {
+        let dir = std::env::temp_dir().join("pomelo_fh_snap_flag");
+        let _ = std::fs::remove_dir_all(&dir);
+        let rec =
+            br#"[{"period":"2024-03-01","strongBuy":2,"buy":3,"hold":0,"sell":0,"strongSell":0}]"#;
+        let pt = br#"{"targetMean":120.0}"#;
+        let metric =
+            br#"{"metric":{"peTTM":25.0,"marketCapitalization":1000.0,"freeCashFlowTTM":100.0}}"#;
+        let http = RouteHttp {
+            routes: vec![
+                ("stock/candle", candle(&[T2, T3, T4])),
+                ("stock/recommendation", rec.to_vec()),
+                ("stock/price-target", pt.to_vec()),
+                ("stock/metric", metric.to_vec()),
+                ("stock/profile2", PROFILE2.as_bytes().to_vec()),
+            ],
+            default: b"{}".to_vec(),
+        };
+        let mut c = cfg();
+        c.include_snapshot_factors = true;
+        // Five symbols so the pe_industry_pctile cohort meets MIN_COHORT.
+        let syms: Vec<String> = (0..5).map(|i| format!("S{i}")).collect();
+        let summary = sync(&http, "demo", &syms, &dir, &c).unwrap();
+        assert_eq!(summary.symbols_written, 5);
+        assert!(summary.snapshot_factor_panels >= 3);
+        assert!(dir.join("panels/consensus_rating.csv.gz").exists());
+        assert!(dir.join("panels/pe_industry_pctile.csv.gz").exists());
     }
 
     #[test]

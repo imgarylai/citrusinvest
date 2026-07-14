@@ -705,7 +705,8 @@ enum Cmd {
         /// Also fetch `/stock/profile2` sector/market-cap → tracked/universe.csv.gz.
         #[arg(long)]
         include_industry: bool,
-        /// Best-effort snapshot panels (later phase).
+        /// Best-effort snapshot panels (analyst upside / consensus / fcf_yield /
+        /// pe_industry_pctile) from recommendation, price-target, and metric endpoints.
         #[arg(long)]
         include_snapshot_factors: bool,
         /// Max requests per minute (0 = no throttle).
