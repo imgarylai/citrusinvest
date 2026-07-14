@@ -21,6 +21,7 @@ It's a layered stack, not parallel silos: `pomelo-*` → `yuzu-core` → `lemon`
 - `yuzu-research` — multi-run research over the engine: sweeps, grids, walk-forward, lookahead-bias detection (`run_sweep`/`run_walkforward`/…). Composes `yuzu-core::research` primitives; the CLI re-exports it.
 - `pomelo-data` — native data loading (reads gzip CSV price/fundamental files into panels).
 - `pomelo-s3` — an S3-backed data source (an `ObjectSource`/`ObjectSink` impl; `LocalSource` reads/writes local files).
+- `pomelo-http` — shared HTTP client, rate-limit/retry `Fetcher`, and `WriteMode` for the vendor sync crates (#211). **No vendor logic**; the `pomelo-*` adapters build on it instead of re-copying the plumbing.
 - `pomelo-fmp` — bring-your-own-key FMP data sync + snapshot-factor formulas. `sync_into` writes a data-layout tree to any `ObjectSink` (local or S3/R2); the CLI is a thin wrapper. FMP stays out of `yuzu-core`/`pomelo-data`/WASM.
 - `pomelo-eodhd` — bring-your-own-key EODHD data sync (second official vendor path; epic #192). Same data-layout contract as FMP; CLI: `yuzu-cli eodhd-sync`.
 - `pomelo-alpha-vantage` — bring-your-own-key Alpha Vantage data sync (epic #209). Same data-layout contract; CLI: `yuzu-cli av-sync` / `av-symbols`.
@@ -66,12 +67,48 @@ Validate generated lemon with the parser (`lemon::parse(src)` returns `ParseErro
 or the `lemon fmt` binary — feed it back to self-correct. `lemon lint --series close,pe,…`
 additionally flags unknown series names (typos become silent `Data` leaves) and unused `let`s.
 
+## Adding a `pomelo-*` vendor sync crate
+
+New market-data vendors mirror the existing adapters. **`pomelo-finnhub` is the reference
+implementation** (newest, cleanest) — copy its shape. Conventions:
+[#211](https://github.com/citrusquant/citrusquant/issues/211).
+
+**Required surface** (match the other adapters so the CLI stays consistent):
+
+- Build the plumbing on **`pomelo-http`**, don't re-copy it: a thin `src/http.rs` shim
+  (`pub(crate) type Fetcher<'a, H> = pomelo_http::Fetcher<'a, H, SyncConfig>` + re-export
+  `HttpClient` / `HttpError` / feature-gated `UreqClient`), `impl pomelo_http::RetrySettings for
+  SyncConfig`, and `pub use pomelo_http::WriteMode` from `config.rs`. This keeps every
+  `Fetcher::new(http, cfg)` call site and `&Fetcher<H>` signature unchanged.
+- `SyncConfig` (`from`/`to`, `rate_limit_per_min`, `max_retries`, `backoff_base`, `mode`,
+  `include_*` flags) + `SyncSummary`; `sync` / `sync_into` over `ObjectSink + ObjectSource`.
+- Pure scoring math from **`pomelo_data::factors`** (`percentile_rank` / `pe_industry_pctile` /
+  `analyst_upside_pct`); keep only the vendor-specific rating mapper in the crate (vendors take
+  different inputs — a string, a 1–5 score, count buckets — so it can't be shared).
+- The `<vendor>-sync` feature enables `pomelo-http/ureq`; the crate must also build
+  `--no-default-features` (a dependent supplies its own `HttpClient`, no TLS stack).
+
+**Honesty rule (the one a reviewer can't see from a diff):** a **missing block omits its CLI
+flag** rather than shipping a no-op or a fabricated panel. Match flag names + layout outputs to
+the other vendors **only where the block is actually implemented**. Examples: Finnhub ships
+**no** `--include-delisted` (no clean dead-name feed) and Alpha Vantage writes **no**
+`panels/in_sp500` (no real historical constituents) — the gap is documented, never faked.
+
+**Docs:** write `docs/{vendor}-data-source.md` (block table → layout path → **gap → backtest
+impact**; **no pricing advice**). Register it in
+[`site/scripts/import-reference-docs.mjs`](site/scripts/import-reference-docs.mjs) and the
+Starlight sidebar (`site/astro.config.mjs`), run `npm run import:docs`, and link it from
+[`docs/data-sources.md`](docs/data-sources.md).
+
+**CI:** `scripts/coverage.sh` gates **≥95% region coverage** workspace-wide — new adapter code
+needs tests to clear it.
+
 ## Conventions
 
 - **Conventional Commits** — release-plz derives versions/changelog from them. `feat:`→minor,
   `fix:`/`perf:`→patch; `docs`/`chore`/`refactor`/`test`/`ci` don't release.
 - Don't hand-edit crate `version` fields — release-plz owns them.
 - Published library crates: `yuzu-core`, `yuzu-research`, `pomelo-data`, `pomelo-s3`,
-  `pomelo-fmp`, `pomelo-eodhd`, `pomelo-alpha-vantage`, `pomelo-finnhub`, `pomelo-audit`,
-  `lemon-lang` (the `lemon` crate is imported as `lemon`). The wasm/CLI/server crates are
-  `publish = false`.
+  `pomelo-http`, `pomelo-fmp`, `pomelo-eodhd`, `pomelo-alpha-vantage`, `pomelo-finnhub`,
+  `pomelo-audit`, `lemon-lang` (the `lemon` crate is imported as `lemon`). The wasm/CLI/server
+  crates are `publish = false`.
