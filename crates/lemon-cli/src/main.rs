@@ -5,16 +5,23 @@
 //! arg-parsing dep: the surface is small enough for `std::env::args`.
 //!
 //! ```text
+//! lemon <strategy.lemon|envelope.json> [run flags]  (short for `lemon run ...`)
 //! lemon fmt   [-w] [file...]                        (no file = read stdin)
 //! lemon lint  [--series a,b,c] [--series-file p] [file...]
-//! lemon check [file...]                             (validate strategy envelopes)
-//! lemon run   --data <dir> [--from N] [--to N] [--fee-ratio F]
+//! lemon check [file...]                             (envelopes + .lemon front-matter)
+//! lemon run   [--data <dir>] [--from N] [--to N] [--fee-ratio F]
 //!             [--slippage-ratio F] [--price-key K] [--benchmark SYM]
 //!             [--out path] [file]
 //! ```
 //!
+//! `run` accepts a `.lemon` file (with optional `#!` front-matter, see
+//! [`frontmatter`]) or a strategy-envelope JSON document; parameter precedence
+//! is flag > document > `$CITRUS_DATA` env > default.
+//!
 //! The language crate (`lemon-lang`) stays pure and I/O-free — `yuzu-core`
 //! depends on it, so the engine wiring for `run` has to live out here.
+
+mod frontmatter;
 
 use std::io::Read;
 use std::path::PathBuf;
@@ -186,11 +193,27 @@ fn run_lint(args: Vec<String>) -> ExitCode {
     }
 }
 
-/// Validate one strategy-envelope document; returns rendered errors (empty = ok).
+/// Validate one document: a strategy envelope (JSON, starts with `{`) or a
+/// `.lemon` source with optional `#!` front-matter. Returns rendered errors
+/// (empty = ok).
 fn check_source(path: &str, src: &str) -> Result<(), Vec<String>> {
-    lemon::envelope::check(src)
-        .map(|_| ())
-        .map_err(|errs| errs.into_iter().map(|e| format!("{path}: {e}")).collect())
+    if src.trim_start().starts_with('{') {
+        return lemon::envelope::check(src)
+            .map(|_| ())
+            .map_err(|errs| errs.into_iter().map(|e| format!("{path}: {e}")).collect());
+    }
+    let mut errors = Vec::new();
+    if let Err(e) = frontmatter::parse(src) {
+        errors.push(format!("{path}:{}: {}", e.line, e.message));
+    }
+    if let Err(e) = lemon::parse(src) {
+        errors.push(format!("{path}:{}:{}: {}", e.line, e.col, e.message));
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
 }
 
 fn run_check(args: Vec<String>) -> ExitCode {
@@ -234,27 +257,28 @@ fn run_check(args: Vec<String>) -> ExitCode {
     }
 }
 
-/// Arguments for `lemon run`. Flag names mirror `yuzu-cli run` so the two
-/// runners stay interchangeable; this is the subset that covers a plain
-/// single-strategy run (the full stop/delist/bootstrap knob set stays on
-/// `yuzu-cli` until the envelope carries config — see docs/strategy-envelope.md).
-#[derive(Debug)]
-struct RunArgs {
+/// `lemon run` flags. Names mirror `yuzu-cli run` so the two runners stay
+/// interchangeable. Every value is optional: what the user didn't say on the
+/// command line is filled from the document (`#!` front-matter or the
+/// envelope), then the environment, then the defaults —
+/// **flag > document > env > default**.
+#[derive(Debug, Default)]
+struct RunFlags {
     /// Strategy source path; `None` = stdin.
     file: Option<String>,
-    /// Data-layout tree root (docs/data-layout.md).
-    data: PathBuf,
-    from: i32,
-    to: i32,
-    fee_ratio: f64,
-    slippage_ratio: f64,
-    price_key: String,
+    /// Data-layout tree root (docs/data-layout.md); falls back to `$CITRUS_DATA`.
+    data: Option<PathBuf>,
+    from: Option<i32>,
+    to: Option<i32>,
+    fee_ratio: Option<f64>,
+    slippage_ratio: Option<f64>,
+    price_key: Option<String>,
     benchmark: Option<String>,
     /// Report destination; `None` = stdout.
     out: Option<PathBuf>,
 }
 
-fn parse_run_args(args: Vec<String>) -> Result<RunArgs, String> {
+fn parse_run_flags(args: Vec<String>) -> Result<RunFlags, String> {
     fn value(flag: &str, v: Option<String>) -> Result<String, String> {
         v.ok_or_else(|| format!("{flag} needs a value"))
     }
@@ -264,88 +288,156 @@ fn parse_run_args(args: Vec<String>) -> Result<RunArgs, String> {
             .map_err(|_| format!("{flag}: invalid value `{v}`"))
     }
 
-    let mut file: Option<String> = None;
-    let mut data: Option<PathBuf> = None;
-    let mut from: i32 = 20000101;
-    let mut to: i32 = 99991231;
-    let mut fee_ratio: f64 = 0.0;
-    let mut slippage_ratio: f64 = 0.0;
-    let mut price_key = "close".to_string();
-    let mut benchmark: Option<String> = None;
-    let mut out: Option<PathBuf> = None;
-
+    let mut flags = RunFlags::default();
     let mut it = args.into_iter();
     while let Some(a) = it.next() {
         match a.as_str() {
-            "--data" => data = Some(PathBuf::from(value("--data", it.next())?)),
-            "--from" => from = num("--from", it.next())?,
-            "--to" => to = num("--to", it.next())?,
-            "--fee-ratio" => fee_ratio = num("--fee-ratio", it.next())?,
-            "--slippage-ratio" => slippage_ratio = num("--slippage-ratio", it.next())?,
-            "--price-key" => price_key = value("--price-key", it.next())?,
-            "--benchmark" => benchmark = Some(value("--benchmark", it.next())?),
-            "--out" => out = Some(PathBuf::from(value("--out", it.next())?)),
+            "--data" => flags.data = Some(PathBuf::from(value("--data", it.next())?)),
+            "--from" => flags.from = Some(num("--from", it.next())?),
+            "--to" => flags.to = Some(num("--to", it.next())?),
+            "--fee-ratio" => flags.fee_ratio = Some(num("--fee-ratio", it.next())?),
+            "--slippage-ratio" => flags.slippage_ratio = Some(num("--slippage-ratio", it.next())?),
+            "--price-key" => flags.price_key = Some(value("--price-key", it.next())?),
+            "--benchmark" => flags.benchmark = Some(value("--benchmark", it.next())?),
+            "--out" => flags.out = Some(PathBuf::from(value("--out", it.next())?)),
             _ if a.starts_with('-') => return Err(format!("unknown flag `{a}`")),
             _ => {
-                if file.is_some() {
+                if flags.file.is_some() {
                     return Err("expected at most one strategy file".into());
                 }
-                file = Some(a);
+                flags.file = Some(a);
             }
         }
     }
+    Ok(flags)
+}
 
-    let Some(data) = data else {
-        return Err(
-            "--data <dir> is required (a data-layout tree, see docs/data-layout.md)".into(),
-        );
-    };
-    Ok(RunArgs {
-        file,
-        data,
-        from,
-        to,
-        fee_ratio,
-        slippage_ratio,
-        price_key,
-        benchmark,
-        out,
+/// What a runnable document contributes to the run: the lowered spec plus the
+/// parameters it carries (all optional except the spec).
+struct RunDoc {
+    spec: serde_json::Value,
+    from: Option<i32>,
+    to: Option<i32>,
+    price_key: Option<String>,
+    cfg: yuzu_core::backtest::BacktestConfig,
+}
+
+/// A `.lemon` source: `#!` front-matter + strategy text.
+fn lemon_doc(path: &str, src: &str) -> Result<RunDoc, String> {
+    let fm = frontmatter::parse(src).map_err(|e| format!("{path}:{}: {}", e.line, e.message))?;
+    let spec =
+        lemon::parse(src).map_err(|e| format!("{path}:{}:{}: {}", e.line, e.col, e.message))?;
+    Ok(RunDoc {
+        spec,
+        from: fm.from,
+        to: fm.to,
+        price_key: fm.price_key,
+        cfg: fm
+            .config
+            .map(|c| c.to_backtest_config())
+            .unwrap_or_default(),
     })
 }
 
-/// Lower one lemon source and backtest it; returns the pretty Report JSON.
-/// Parse errors are path-labelled (gofmt-style); everything after the parse
-/// (data loading, engine) is prefixed `lemon:`.
-fn run_strategy(path: &str, src: &str, args: &RunArgs) -> Result<String, String> {
-    let spec =
-        lemon::parse(src).map_err(|e| format!("{path}:{}:{}: {}", e.line, e.col, e.message))?;
-    let cfg = yuzu_core::backtest::BacktestConfig {
-        fee_ratio: args.fee_ratio,
-        slippage_ratio: args.slippage_ratio,
-        benchmark_key: args.benchmark.clone(),
-        ..Default::default()
+/// A strategy-envelope JSON document (docs/strategy-envelope.md).
+fn envelope_doc(path: &str, src: &str) -> Result<RunDoc, String> {
+    let checked = lemon::envelope::check(src).map_err(|errs| {
+        errs.iter()
+            .map(|e| format!("{path}: {e}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    })?;
+    // check() validated the shape; deserialize again for config/universe.
+    let env: lemon::envelope::Envelope =
+        serde_json::from_str(src).map_err(|e| format!("{path}: {e}"))?;
+    let cfg = match env.config {
+        Some(v) => serde_json::from_value::<frontmatter::ConfigDoc>(v)
+            .map_err(|e| format!("{path}: invalid `config` object: {e}"))?
+            .to_backtest_config(),
+        None => Default::default(),
     };
-    let report = yuzu_research::run_single(
-        &args.data,
-        &spec.to_string(),
-        args.from,
-        args.to,
-        &cfg,
-        &args.price_key,
-    )
-    .map_err(|e| format!("lemon: {e}"))?;
+    let (mut from, mut to) = (None, None);
+    if let Some(u) = env.universe {
+        if u.symbols.is_some() || u.symbols_hint.is_some() {
+            return Err(format!(
+                "{path}: universe symbol filtering (`symbols`/`symbols_hint`) is not supported by `lemon run` yet (issue #245) — remove the field or scope the data tree instead"
+            ));
+        }
+        let date = |field: &str, v: Option<i64>| -> Result<Option<i32>, String> {
+            v.map(|d| {
+                i32::try_from(d).map_err(|_| format!("{path}: universe.{field} is out of range"))
+            })
+            .transpose()
+        };
+        from = date("from", u.from)?;
+        to = date("to", u.to)?;
+    }
+    Ok(RunDoc {
+        spec: checked.spec,
+        from,
+        to,
+        price_key: None,
+        cfg,
+    })
+}
+
+/// Lower one document and backtest it; returns the pretty Report JSON.
+/// Front-matter and parse errors are path-labelled (gofmt-style); everything
+/// after (data loading, engine) is prefixed `lemon:`. `env_data` is
+/// `$CITRUS_DATA`, injected by the caller so this stays testable.
+fn run_strategy(
+    path: &str,
+    src: &str,
+    flags: &RunFlags,
+    env_data: Option<String>,
+) -> Result<String, String> {
+    // A document starting with `{` is a strategy envelope; anything else is
+    // lemon source ('{' is not valid lemon, so the sniff cannot misfire).
+    let doc = if src.trim_start().starts_with('{') {
+        envelope_doc(path, src)?
+    } else {
+        lemon_doc(path, src)?
+    };
+
+    let Some(data) = flags.data.clone().or_else(|| env_data.map(PathBuf::from)) else {
+        return Err(
+            "lemon: no data tree: pass --data <dir> or set $CITRUS_DATA (see docs/data-layout.md)"
+                .into(),
+        );
+    };
+    let from = flags.from.or(doc.from).unwrap_or(20000101);
+    let to = flags.to.or(doc.to).unwrap_or(99991231);
+    let price_key = flags
+        .price_key
+        .clone()
+        .or(doc.price_key)
+        .unwrap_or_else(|| "close".into());
+    let mut cfg = doc.cfg;
+    if let Some(f) = flags.fee_ratio {
+        cfg.fee_ratio = f;
+    }
+    if let Some(s) = flags.slippage_ratio {
+        cfg.slippage_ratio = s;
+    }
+    if let Some(b) = &flags.benchmark {
+        cfg.benchmark_key = Some(b.clone());
+    }
+
+    let report =
+        yuzu_research::run_single(&data, &doc.spec.to_string(), from, to, &cfg, &price_key)
+            .map_err(|e| format!("lemon: {e}"))?;
     serde_json::to_string_pretty(&report).map_err(|e| format!("lemon: {e}"))
 }
 
 fn run_run(args: Vec<String>) -> ExitCode {
-    let parsed = match parse_run_args(args) {
+    let flags = match parse_run_flags(args) {
         Ok(p) => p,
         Err(e) => {
             eprintln!("lemon: {e}");
             return ExitCode::FAILURE;
         }
     };
-    let (path, src) = match &parsed.file {
+    let (path, src) = match &flags.file {
         Some(p) => match std::fs::read_to_string(p) {
             Ok(s) => (p.clone(), s),
             Err(e) => {
@@ -361,8 +453,8 @@ fn run_run(args: Vec<String>) -> ExitCode {
             }
         },
     };
-    match run_strategy(&path, &src, &parsed) {
-        Ok(json) => match &parsed.out {
+    match run_strategy(&path, &src, &flags, std::env::var("CITRUS_DATA").ok()) {
+        Ok(json) => match &flags.out {
             Some(out) => {
                 if let Err(e) = std::fs::write(out, format!("{json}\n")) {
                     eprintln!("lemon: {}: {e}", out.display());
@@ -382,16 +474,23 @@ fn run_run(args: Vec<String>) -> ExitCode {
     }
 }
 
+/// `lemon strategy.lemon` sugar: a first argument that names a strategy file
+/// (rather than a subcommand) means `run`.
+fn is_runnable_file(arg: &str) -> bool {
+    arg.ends_with(".lemon") || arg.ends_with(".json")
+}
+
 fn main() -> ExitCode {
-    let mut args = std::env::args().skip(1);
-    match args.next().as_deref() {
-        Some("fmt") => run_fmt(args.collect()),
-        Some("lint") => run_lint(args.collect()),
-        Some("check") => run_check(args.collect()),
-        Some("run") => run_run(args.collect()),
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    match args.first().map(String::as_str) {
+        Some("fmt") => run_fmt(args[1..].to_vec()),
+        Some("lint") => run_lint(args[1..].to_vec()),
+        Some("check") => run_check(args[1..].to_vec()),
+        Some("run") => run_run(args[1..].to_vec()),
+        Some(f) if is_runnable_file(f) => run_run(args),
         _ => {
             eprintln!(
-                "usage: lemon fmt [-w] [file...]\n       lemon lint [--series a,b,c] [--series-file path] [file...]\n       lemon check [file...]\n       lemon run --data <dir> [--from N] [--to N] [--fee-ratio F] [--slippage-ratio F] [--price-key K] [--benchmark SYM] [--out path] [file]\n       (no file = read stdin)"
+                "usage: lemon <strategy.lemon|envelope.json> [run flags]   (short for `lemon run ...`)\n       lemon fmt [-w] [file...]\n       lemon lint [--series a,b,c] [--series-file path] [file...]\n       lemon check [file...]\n       lemon run [--data <dir>] [--from N] [--to N] [--fee-ratio F] [--slippage-ratio F] [--price-key K] [--benchmark SYM] [--out path] [file]\n       (no file = read stdin; --data falls back to $CITRUS_DATA)"
             );
             ExitCode::FAILURE
         }
@@ -400,7 +499,10 @@ fn main() -> ExitCode {
 
 #[cfg(test)]
 mod tests {
-    use super::{check_source, format_source, lint_source, parse_run_args, run_strategy};
+    use super::{
+        check_source, format_source, is_runnable_file, lint_source, parse_run_flags, run_strategy,
+        RunFlags,
+    };
     use pomelo_data::csv_io::{write_series, OhlcvRow};
 
     #[test]
@@ -443,16 +545,16 @@ mod tests {
     }
 
     #[test]
-    fn parses_run_args_with_defaults_and_overrides() {
-        let a = parse_run_args(args(&["s.lemon", "--data", "/tmp/d"])).unwrap();
+    fn parses_run_flags_with_absent_and_explicit_values() {
+        let a = parse_run_flags(args(&["s.lemon", "--data", "/tmp/d"])).unwrap();
         assert_eq!(a.file.as_deref(), Some("s.lemon"));
-        assert_eq!(a.data, std::path::PathBuf::from("/tmp/d"));
-        assert_eq!((a.from, a.to), (20000101, 99991231));
-        assert_eq!((a.fee_ratio, a.slippage_ratio), (0.0, 0.0));
-        assert_eq!(a.price_key, "close");
-        assert!(a.benchmark.is_none() && a.out.is_none());
+        assert_eq!(a.data, Some(std::path::PathBuf::from("/tmp/d")));
+        // Unset flags stay None so the document/env/default chain can fill them.
+        assert!(a.from.is_none() && a.to.is_none());
+        assert!(a.fee_ratio.is_none() && a.slippage_ratio.is_none());
+        assert!(a.price_key.is_none() && a.benchmark.is_none() && a.out.is_none());
 
-        let a = parse_run_args(args(&[
+        let a = parse_run_flags(args(&[
             "--data",
             "d",
             "--from",
@@ -472,26 +574,34 @@ mod tests {
         ]))
         .unwrap();
         assert!(a.file.is_none()); // no file = stdin
-        assert_eq!((a.from, a.to), (20240102, 20240104));
-        assert_eq!((a.fee_ratio, a.slippage_ratio), (0.001, 0.0005));
-        assert_eq!(a.price_key, "open");
+        assert_eq!((a.from, a.to), (Some(20240102), Some(20240104)));
+        assert_eq!((a.fee_ratio, a.slippage_ratio), (Some(0.001), Some(0.0005)));
+        assert_eq!(a.price_key.as_deref(), Some("open"));
         assert_eq!(a.benchmark.as_deref(), Some("SPY"));
         assert_eq!(a.out, Some(std::path::PathBuf::from("r.json")));
     }
 
     #[test]
-    fn rejects_bad_run_args() {
+    fn rejects_bad_run_flags() {
         // Every rejection names the offending flag / problem.
-        let err = parse_run_args(args(&["s.lemon"])).unwrap_err();
-        assert!(err.contains("--data <dir> is required"), "{err}");
-        let err = parse_run_args(args(&["--data"])).unwrap_err();
+        let err = parse_run_flags(args(&["--data"])).unwrap_err();
         assert!(err.contains("--data needs a value"), "{err}");
-        let err = parse_run_args(args(&["--data", "d", "--from", "soon"])).unwrap_err();
+        let err = parse_run_flags(args(&["--data", "d", "--from", "soon"])).unwrap_err();
         assert!(err.contains("--from: invalid value `soon`"), "{err}");
-        let err = parse_run_args(args(&["--data", "d", "--frmo", "1"])).unwrap_err();
+        let err = parse_run_flags(args(&["--data", "d", "--frmo", "1"])).unwrap_err();
         assert!(err.contains("unknown flag `--frmo`"), "{err}");
-        let err = parse_run_args(args(&["a.lemon", "b.lemon", "--data", "d"])).unwrap_err();
+        let err = parse_run_flags(args(&["a.lemon", "b.lemon", "--data", "d"])).unwrap_err();
         assert!(err.contains("at most one strategy file"), "{err}");
+    }
+
+    #[test]
+    fn missing_data_dir_is_reported_at_run_time_with_the_env_fallback() {
+        let flags = RunFlags::default();
+        let err = run_strategy("s.lemon", "close > 1", &flags, None).unwrap_err();
+        assert!(
+            err.contains("--data") && err.contains("CITRUS_DATA"),
+            "{err}"
+        );
     }
 
     /// A per-test temp data tree holding prices/<sym>.csv.gz for AAA, BBB.
@@ -525,24 +635,19 @@ mod tests {
         dir
     }
 
-    fn run_args_for(dir: &std::path::Path) -> super::RunArgs {
-        super::RunArgs {
-            file: None,
-            data: dir.to_path_buf(),
-            from: 20240102,
-            to: 20240104,
-            fee_ratio: 0.0,
-            slippage_ratio: 0.0,
-            price_key: "close".to_string(),
-            benchmark: None,
-            out: None,
+    fn flags_for(dir: &std::path::Path) -> RunFlags {
+        RunFlags {
+            data: Some(dir.to_path_buf()),
+            from: Some(20240102),
+            to: Some(20240104),
+            ..Default::default()
         }
     }
 
     #[test]
     fn runs_a_lemon_source_end_to_end() {
         let dir = fixture("run");
-        let out = run_strategy("s.lemon", "is_largest(close, 1)", &run_args_for(&dir)).unwrap();
+        let out = run_strategy("s.lemon", "is_largest(close, 1)", &flags_for(&dir), None).unwrap();
         // The output is the engine Report, byte-identical to lowering by hand
         // and calling the library runner directly.
         let spec = lemon::parse("is_largest(close, 1)").unwrap();
@@ -564,11 +669,151 @@ mod tests {
     fn labels_parse_errors_and_prefixes_engine_errors() {
         let dir = fixture("err");
         // Parse error: gofmt-style path:line:col label.
-        let err = run_strategy("bad.lemon", "sma(close,", &run_args_for(&dir)).unwrap_err();
+        let err = run_strategy("bad.lemon", "sma(close,", &flags_for(&dir), None).unwrap_err();
         assert!(err.starts_with("bad.lemon:"), "{err}");
+        // Front-matter error: path:line label.
+        let err =
+            run_strategy("fm.lemon", "#! nmae: X\nclose > 1", &flags_for(&dir), None).unwrap_err();
+        assert!(err.starts_with("fm.lemon:1:"), "{err}");
         // Engine error (unknown series — the classic silent-Data-leaf typo).
-        let err = run_strategy("typo.lemon", "clsoe > 1", &run_args_for(&dir)).unwrap_err();
+        let err = run_strategy("typo.lemon", "clsoe > 1", &flags_for(&dir), None).unwrap_err();
         assert!(err.starts_with("lemon: "), "{err}");
         assert!(err.contains("clsoe"), "{err}");
+    }
+
+    #[test]
+    fn front_matter_fills_what_flags_leave_unset_and_flags_win() {
+        let dir = fixture("precedence");
+        let src = "#! universe: 20240102..20240104\n#! config: { \"fee_ratio\": 0.01 }\nis_largest(close, 1)";
+        // No from/to/fee flags: the document supplies them.
+        let doc_flags = RunFlags {
+            data: Some(dir.to_path_buf()),
+            ..Default::default()
+        };
+        let out = run_strategy("s.lemon", src, &doc_flags, None).unwrap();
+        let fee_cfg = yuzu_core::backtest::BacktestConfig {
+            fee_ratio: 0.01,
+            ..Default::default()
+        };
+        let spec = lemon::parse(src).unwrap();
+        let expect = yuzu_research::run_single(
+            &dir,
+            &spec.to_string(),
+            20240102,
+            20240104,
+            &fee_cfg,
+            "close",
+        )
+        .unwrap();
+        assert_eq!(out, serde_json::to_string_pretty(&expect).unwrap());
+
+        // An explicit --fee-ratio overrides the document's config.
+        let flag_flags = RunFlags {
+            data: Some(dir.to_path_buf()),
+            fee_ratio: Some(0.0),
+            ..Default::default()
+        };
+        let out = run_strategy("s.lemon", src, &flag_flags, None).unwrap();
+        let expect = yuzu_research::run_single(
+            &dir,
+            &spec.to_string(),
+            20240102,
+            20240104,
+            &Default::default(),
+            "close",
+        )
+        .unwrap();
+        assert_eq!(out, serde_json::to_string_pretty(&expect).unwrap());
+    }
+
+    #[test]
+    fn env_data_fills_in_when_the_flag_is_absent() {
+        let dir = fixture("envdata");
+        let flags = RunFlags {
+            from: Some(20240102),
+            to: Some(20240104),
+            ..Default::default()
+        };
+        let out = run_strategy(
+            "s.lemon",
+            "is_largest(close, 1)",
+            &flags,
+            Some(dir.to_string_lossy().into_owned()),
+        )
+        .unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(parsed["equity"].as_array().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn runs_an_envelope_document() {
+        let dir = fixture("envelope");
+        let doc = r#"{
+            "format": 1,
+            "name": "Top1",
+            "source": "is_largest(close, 1)",
+            "config": { "fee_ratio": 0.01 },
+            "universe": { "from": 20240102, "to": 20240104 }
+        }"#;
+        let flags = RunFlags {
+            data: Some(dir.to_path_buf()),
+            ..Default::default()
+        };
+        let out = run_strategy("s.json", doc, &flags, None).unwrap();
+        let fee_cfg = yuzu_core::backtest::BacktestConfig {
+            fee_ratio: 0.01,
+            ..Default::default()
+        };
+        let spec = lemon::parse("is_largest(close, 1)").unwrap();
+        let expect = yuzu_research::run_single(
+            &dir,
+            &spec.to_string(),
+            20240102,
+            20240104,
+            &fee_cfg,
+            "close",
+        )
+        .unwrap();
+        assert_eq!(out, serde_json::to_string_pretty(&expect).unwrap());
+    }
+
+    #[test]
+    fn envelope_errors_are_actionable() {
+        let dir = fixture("enverr");
+        let flags = flags_for(&dir);
+        // Symbol filtering is not implemented yet — refusing beats silently
+        // running the wrong universe.
+        let doc = r#"{ "format": 1, "name": "X", "source": "close > 1",
+            "universe": { "symbols": ["AAA"] } }"#;
+        let err = run_strategy("s.json", doc, &flags, None).unwrap_err();
+        assert!(err.contains("#245"), "{err}");
+        // A config typo must not become a silent zero-fee run.
+        let doc = r#"{ "format": 1, "name": "X", "source": "close > 1",
+            "config": { "fee_ration": 0.01 } }"#;
+        let err = run_strategy("s.json", doc, &flags, None).unwrap_err();
+        assert!(err.contains("fee_ration"), "{err}");
+        // A malformed envelope reports the check() errors, path-labelled.
+        let err =
+            run_strategy("s.json", r#"{ "format": 1, "name": "X" }"#, &flags, None).unwrap_err();
+        assert!(err.starts_with("s.json: "), "{err}");
+    }
+
+    #[test]
+    fn check_validates_lemon_sources_with_front_matter() {
+        // A clean .lemon file (front-matter + source) passes.
+        assert!(check_source("s.lemon", "#! name: X\nclose > sma(close, 2)").is_ok());
+        // Front-matter and parse problems are both reported, line-labelled.
+        let errs = check_source("s.lemon", "#! nmae: X\nsma(close,").unwrap_err();
+        assert_eq!(errs.len(), 2);
+        assert!(errs[0].starts_with("s.lemon:1:"), "{}", errs[0]);
+        assert!(errs[1].starts_with("s.lemon:2:"), "{}", errs[1]);
+    }
+
+    #[test]
+    fn file_sugar_matches_strategy_files_only() {
+        assert!(is_runnable_file("momentum.lemon"));
+        assert!(is_runnable_file("envelope.json"));
+        assert!(!is_runnable_file("fmt"));
+        assert!(!is_runnable_file("notes.md"));
     }
 }

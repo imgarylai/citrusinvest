@@ -496,10 +496,12 @@ callers as `lemon::lint(src, known_series)`.
 ## Running a strategy
 
 `lemon run` lowers a `.lemon` file and backtests it over a local
-[data-layout tree](../reference/data-layout) in one step:
+[data-layout tree](../reference/data-layout) in one step — and naming a strategy file
+as the first argument is short for it:
 
 ```sh
-lemon run strategy.lemon --data ~/qdata --from 20180101 --to 20241231 --fee-ratio 0.001
+lemon strategy.lemon                  # short for `lemon run strategy.lemon`
+lemon run strategy.lemon --data ~/qdata --from 20180101 --fee-ratio 0.001
 ```
 
 It prints the engine's `Report` JSON (equity curve, trades, metrics — see
@@ -508,11 +510,46 @@ writes a file instead. The flags mirror `yuzu-cli run`: `--slippage-ratio`,
 `--price-key open|high|low|close`, `--benchmark SPY`. With no file it reads
 stdin, like the other subcommands.
 
-Two scope notes, shared with `yuzu-cli`: the CLI data loader reads **close**
+### `#!` front-matter — a self-contained strategy file
+
+Because `#` already starts a comment, lines beginning `#!` at the top of a
+file are invisible to the parser and read by the **runner** instead. They make
+a `.lemon` file carry its own run parameters, so sharing the file reproduces
+the run:
+
+```text
+#! name: Momentum v2
+#! universe: 20180101..20241231
+#! config: { "fee_ratio": 0.001, "stop_loss": 0.08 }
+#! price-key: close
+
+close > sma(close, 20) and rsi(close, 14) < 70
+```
+
+- `universe` is a `FROM..TO` date window (either side may be omitted:
+  `20180101..`). Symbol lists are not accepted here yet (universe filtering
+  is [#245](https://github.com/citrusquant/citrusquant/issues/245)).
+- `config` is the engine config object, with the same flat knob names as the
+  `yuzu-server` request (`fee_ratio`, `slippage_ratio`, `initial_capital`,
+  `delist_after`, `stop_loss`, `take_profit`, `trail_stop`, `stop_fill`,
+  `benchmark`, `bootstrap_samples`, …) — the **full** knob set, not just the
+  flag subset. Unknown knobs are rejected: a typo like `fee_ration` fails
+  loudly instead of silently running fee-free.
+- Precedence is **flag > front-matter > environment > default**. The data
+  tree is machine-specific, so it never goes in the file: pass `--data` or
+  set `$CITRUS_DATA`.
+- Malformed or misplaced directives (unknown keys, duplicates, a `#!` line
+  after the source has started) are line-labelled errors — `lemon check
+  strategy.lemon` validates front-matter and syntax without running anything.
+
+`lemon run strategy.json` runs a [strategy envelope](../reference/strategy-envelope)
+the same way, taking `config` and the `universe` window from the document.
+
+One scope note, shared with `yuzu-cli`: the CLI data loader reads **close**
 (plus **volume** / a **benchmark** symbol when the config needs them) from
 `prices/` — strategies referencing fundamentals (`pe`, …) need `yuzu-server`
-or library code for now (see [`data-layout.md`](../reference/data-layout)); and the
-full stop/delist/bootstrap knob set stays on `yuzu-cli run`.
+or library code for now
+([#248](https://github.com/citrusquant/citrusquant/issues/248)).
 
 ---
 
