@@ -1,9 +1,13 @@
 //! Orchestrate multi-symbol Finnhub → data-layout sync.
 //!
 //! Prices (#226): `/stock/candle` (resolution=D, adjusted) → `prices/{SYM}.csv.gz`
-//! with resume/append modes. Industry / fundamentals / index / snapshot land in
-//! later epic #210 phases; their config flags are accepted but inert for now.
+//! with resume/append modes.
+//!
+//! Industry (#227): `--include-industry` adds `/stock/profile2` sector/market-cap
+//! → `tracked/universe.csv.gz`. Fundamentals / index / snapshot land in later
+//! epic #210 phases; those config flags are accepted but inert for now.
 
+use std::collections::BTreeMap;
 use std::path::Path;
 
 use pomelo_data::csv_io::write_series;
@@ -11,6 +15,7 @@ use pomelo_data::{LocalSource, ObjectSink, ObjectSource, PRICES_DIR};
 
 use super::config::{SyncConfig, SyncSummary, WriteMode};
 use super::http::{Fetcher, HttpClient};
+use super::industry::{encode_industry, fetch_profile, load_existing_industry, INDUSTRY_KEY};
 use super::price::{parse_price_payload, price_url, read_existing_prices};
 use super::symbol::split_symbol;
 
@@ -33,8 +38,10 @@ pub fn sync<H: HttpClient>(
 ///
 /// Fetches adjusted daily candles → `prices/{SYM}.csv.gz` for each symbol.
 /// `WriteMode::Resume` skips symbols that already have a price file;
-/// `WriteMode::Append` merges the fetched window into the existing file. The
-/// `include_*` flags are reserved for later #210 phases and have no effect yet.
+/// `WriteMode::Append` merges the fetched window into the existing file. With
+/// `include_industry`, also builds `tracked/universe.csv.gz` from
+/// `/stock/profile2`. The remaining `include_*` flags are reserved for later
+/// #210 phases and have no effect yet.
 pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
     http: &H,
     api_key: &str,
@@ -58,6 +65,11 @@ pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
     let fetcher = Fetcher::new(http, cfg);
     let mut summary = SyncSummary::default();
     let mut any_valid = false;
+    let mut industry: BTreeMap<String, (String, Option<f64>)> = if cfg.include_industry {
+        load_existing_industry(store)
+    } else {
+        BTreeMap::new()
+    };
 
     for raw in symbols {
         let Some((layout, fh)) = split_symbol(raw, &cfg.default_exchange) else {
@@ -72,6 +84,9 @@ pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
         if cfg.mode == WriteMode::Resume && store.get(&price_key).ok().flatten().is_some() {
             eprintln!("{layout}: already present, skipping (resume)");
             summary.symbols_skipped += 1;
+            if cfg.include_industry && !industry.contains_key(&layout) {
+                collect_industry(&fetcher, &fh, api_key, &layout, &mut industry, &mut summary);
+            }
             continue;
         }
 
@@ -120,15 +135,52 @@ pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
             }
         }
 
+        if cfg.include_industry {
+            collect_industry(&fetcher, &fh, api_key, &layout, &mut industry, &mut summary);
+        }
+
         summary.symbols_written += 1;
         summary.price_rows += rows.len();
         eprintln!("{layout}: wrote {} price rows", rows.len());
+    }
+
+    if cfg.include_industry && !industry.is_empty() {
+        let bytes = encode_industry(&industry).map_err(|e| e.to_string())?;
+        store.put(INDUSTRY_KEY, &bytes).map_err(|e| e.to_string())?;
+        summary.industry_written = true;
+        eprintln!("wrote {} industry rows to {INDUSTRY_KEY}", industry.len());
     }
 
     if !any_valid {
         return Err("no valid symbols after normalization".to_string());
     }
     Ok(summary)
+}
+
+/// Fetch `/stock/profile2` for one symbol and fold its industry/market-cap into
+/// the accumulator. Failures are recorded but never abort the batch.
+fn collect_industry<H: HttpClient>(
+    fetcher: &Fetcher<H>,
+    fh: &str,
+    api_key: &str,
+    layout: &str,
+    industry: &mut BTreeMap<String, (String, Option<f64>)>,
+    summary: &mut SyncSummary,
+) {
+    match fetch_profile(fetcher, fh, api_key) {
+        Ok(Some(p)) => {
+            if let Some(sector) = p.industry {
+                industry.insert(layout.to_string(), (sector, p.market_cap));
+            } else {
+                eprintln!("{layout}: no finnhubIndustry in profile2");
+            }
+        }
+        Ok(None) => eprintln!("{layout}: no profile2 for industry map"),
+        Err(e) => {
+            eprintln!("{layout}: industry fetch failed: {e}");
+            summary.failures.push((format!("{layout} (industry)"), e));
+        }
+    }
 }
 
 #[cfg(test)]
@@ -159,6 +211,24 @@ mod tests {
             Err(HttpError::Status(500))
         }
     }
+
+    /// Routes by URL substring (first match wins), else a default body.
+    struct RouteHttp {
+        routes: Vec<(&'static str, Vec<u8>)>,
+        default: Vec<u8>,
+    }
+    impl HttpClient for RouteHttp {
+        fn get(&self, url: &str) -> Result<Vec<u8>, HttpError> {
+            for (pat, body) in &self.routes {
+                if url.contains(pat) {
+                    return Ok(body.clone());
+                }
+            }
+            Ok(self.default.clone())
+        }
+    }
+
+    const PROFILE2: &str = r#"{"ticker":"AAPL","name":"Apple","finnhubIndustry":"Technology","marketCapitalization":2500000}"#;
 
     fn cfg() -> SyncConfig {
         SyncConfig {
@@ -306,5 +376,87 @@ mod tests {
         };
         let err = sync(&http, "tok", &[".".into(), "  ".into()], &dir, &cfg()).unwrap_err();
         assert!(err.contains("no valid symbols"), "{err}");
+    }
+
+    #[test]
+    fn writes_industry_map_when_flagged() {
+        let dir = std::env::temp_dir().join("pomelo_fh_industry");
+        let _ = std::fs::remove_dir_all(&dir);
+        let http = RouteHttp {
+            routes: vec![
+                ("stock/candle", candle(&[T2, T3, T4])),
+                ("stock/profile2", PROFILE2.as_bytes().to_vec()),
+            ],
+            default: b"{}".to_vec(),
+        };
+        let mut c = cfg();
+        c.include_industry = true;
+        let summary = sync(&http, "demo", &["AAPL".into()], &dir, &c).unwrap();
+        assert_eq!(summary.symbols_written, 1);
+        assert!(summary.industry_written);
+
+        let text = crate::industry::decode_csv_text(
+            &LocalSource::new(&dir).get(INDUSTRY_KEY).unwrap().unwrap(),
+        );
+        // market cap scaled from 2,500,000 million → 2.5e12 absolute
+        assert!(text.contains("AAPL,Technology,2500000000000"), "{text}");
+    }
+
+    #[test]
+    fn industry_absent_without_flag() {
+        let dir = std::env::temp_dir().join("pomelo_fh_no_industry");
+        let _ = std::fs::remove_dir_all(&dir);
+        let http = RouteHttp {
+            routes: vec![
+                ("stock/candle", candle(&[T2, T3, T4])),
+                ("stock/profile2", PROFILE2.as_bytes().to_vec()),
+            ],
+            default: b"{}".to_vec(),
+        };
+        let summary = sync(&http, "demo", &["AAPL".into()], &dir, &cfg()).unwrap();
+        assert_eq!(summary.symbols_written, 1);
+        assert!(!summary.industry_written);
+        assert!(!dir.join("tracked/universe.csv.gz").exists());
+    }
+
+    #[test]
+    fn empty_profile_skips_industry_row() {
+        let dir = std::env::temp_dir().join("pomelo_fh_empty_profile");
+        let _ = std::fs::remove_dir_all(&dir);
+        let http = RouteHttp {
+            routes: vec![
+                ("stock/candle", candle(&[T2, T3, T4])),
+                ("stock/profile2", b"{}".to_vec()),
+            ],
+            default: b"{}".to_vec(),
+        };
+        let mut c = cfg();
+        c.include_industry = true;
+        let summary = sync(&http, "demo", &["AAPL".into()], &dir, &c).unwrap();
+        assert_eq!(summary.symbols_written, 1);
+        assert!(!summary.industry_written);
+    }
+
+    #[test]
+    fn resume_fills_missing_industry() {
+        let dir = std::env::temp_dir().join("pomelo_fh_resume_ind");
+        let _ = std::fs::remove_dir_all(&dir);
+        let http = RouteHttp {
+            routes: vec![
+                ("stock/candle", candle(&[T2, T3, T4])),
+                ("stock/profile2", PROFILE2.as_bytes().to_vec()),
+            ],
+            default: b"{}".to_vec(),
+        };
+        // First pass: prices only.
+        sync(&http, "demo", &["AAPL".into()], &dir, &cfg()).unwrap();
+        // Resume with industry: price file present → skipped, industry still filled.
+        let mut c = cfg();
+        c.mode = WriteMode::Resume;
+        c.include_industry = true;
+        let summary = sync(&http, "demo", &["AAPL".into()], &dir, &c).unwrap();
+        assert_eq!(summary.symbols_skipped, 1);
+        assert!(summary.industry_written);
+        assert!(dir.join("tracked/universe.csv.gz").exists());
     }
 }

@@ -9,7 +9,7 @@
 //! ```text
 //! <out>/prices/{SYM}.csv.gz        adjusted OHLCV                 (#226)
 //! <out>/fundamentals/{SYM}.csv.gz  dense forward-filled factors   (later #228)
-//! <out>/tracked/universe.csv.gz    symbol,sector,market_cap       (later #227)
+//! <out>/tracked/universe.csv.gz    symbol,sector,market_cap       (#227)
 //! <out>/panels/{name}.csv.gz       membership / snapshot panels   (later #229–#230)
 //! ```
 //!
@@ -28,6 +28,10 @@
 //!   `prices/{SYM}.csv.gz`; resume/append modes. Adjusted OHLC map straight
 //!   through (no `adj_close/close` rescale). Unadjusted risk when a plan
 //!   ignores `adjusted`, plus per-request range caps, are documented honestly.
+//! - **Industry (#227):** `/stock/profile2` `finnhubIndustry` + market cap →
+//!   `tracked/universe.csv.gz`. **No delisted feed:** Finnhub has no clean
+//!   `LISTING_STATUS`-style dead-name list, so a Finnhub-only universe is
+//!   survivor-biased — documented, not faked (see `industry` module docs).
 //!
 //! Coverage / accepted gaps: spike
 //! [#208](https://github.com/citrusquant/citrusquant/issues/208) and
@@ -35,6 +39,7 @@
 
 mod config;
 mod http;
+mod industry;
 mod price;
 mod symbol;
 mod sync;
@@ -45,6 +50,7 @@ pub use config::{SyncConfig, SyncSummary, WriteMode};
 #[cfg(feature = "finnhub-sync")]
 pub use http::UreqClient;
 pub use http::{HttpClient, HttpError};
+pub use industry::INDUSTRY_KEY;
 pub use symbol::{layout_symbol, parse_symbols_list, split_symbol};
 pub use sync::{sync, sync_into, FINNHUB_BASE};
 
