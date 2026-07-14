@@ -7,6 +7,7 @@
 //! ```text
 //! #! name: Momentum v2
 //! #! universe: 20180101..20241231
+//! #! symbols: AAPL, MSFT, NVDA
 //! #! config: { "fee_ratio": 0.001, "stop_loss": 0.08 }
 //! #! price-key: close
 //! ```
@@ -22,8 +23,11 @@
 //!   `stop_loss`, `stop_fill`, …). Unknown knobs are rejected (typos like
 //!   `fee_ration` must not silently become a zero-fee run).
 //! - `universe` is a `FROM..TO` date window (`YYYYMMDD..YYYYMMDD`); either side
-//!   may be omitted (`20180101..`). Symbol lists are not accepted here yet —
-//!   universe filtering is issue #245.
+//!   may be omitted (`20180101..`).
+//! - `symbols` is a comma-separated explicit universe — cross-sectional ops
+//!   then see exactly these names. Beware: a list frozen *today* implies
+//!   survivorship bias in a historical run; point-in-time index universes
+//!   (`symbols_hint`) are issue #245.
 //!
 //! CLI flags override front-matter; front-matter overrides built-in defaults.
 
@@ -119,6 +123,7 @@ pub struct FrontMatter {
     pub name: Option<String>,
     pub from: Option<i32>,
     pub to: Option<i32>,
+    pub symbols: Option<Vec<String>>,
     pub config: Option<ConfigDoc>,
     pub price_key: Option<String>,
 }
@@ -174,13 +179,16 @@ pub fn parse(src: &str) -> Result<FrontMatter, FmError> {
         match key {
             "name" => fm.name = Some(value.to_string()),
             "universe" => (fm.from, fm.to) = parse_universe(lineno, value)?,
+            "symbols" => {
+                fm.symbols = Some(parse_symbol_list(value).map_err(|m| FmError::new(lineno, m))?)
+            }
             "config" => fm.config = Some(parse_config(lineno, value)?),
             "price-key" => fm.price_key = Some(parse_price_key(lineno, value)?),
             _ => {
                 return Err(FmError::new(
                     lineno,
                     format!(
-                        "unknown front-matter key `{key}` (expected `name`, `universe`, `config`, or `price-key`)"
+                        "unknown front-matter key `{key}` (expected `name`, `universe`, `symbols`, `config`, or `price-key`)"
                     ),
                 ));
             }
@@ -225,6 +233,23 @@ fn parse_config(line: usize, value: &str) -> Result<ConfigDoc, FmError> {
         return Err(err("expected a JSON object".into()));
     }
     serde_json::from_value::<ConfigDoc>(v).map_err(|e| err(e.to_string()))
+}
+
+/// Parse a comma-separated symbol list (`AAPL, MSFT`). Shared with the
+/// `--symbols` flag, so the error text names the problem, not the source.
+pub fn parse_symbol_list(value: &str) -> Result<Vec<String>, String> {
+    let mut out: Vec<String> = Vec::new();
+    for part in value.split(',') {
+        let sym = part.trim();
+        if sym.is_empty() {
+            return Err(format!("empty symbol in list `{value}`"));
+        }
+        if out.iter().any(|s| s == sym) {
+            return Err(format!("duplicate symbol `{sym}`"));
+        }
+        out.push(sym.to_string());
+    }
+    Ok(out)
 }
 
 fn parse_price_key(line: usize, value: &str) -> Result<String, FmError> {
@@ -340,6 +365,19 @@ close > 1"#;
         // Indented directives count too — they must not silently degrade to comments.
         let err = parse("close > 1\n  #! name: X\n").unwrap_err();
         assert_eq!(err.line, 2);
+    }
+
+    #[test]
+    fn symbols_parse_trimmed_and_reject_junk() {
+        let fm = parse("#! symbols: AAPL, MSFT,NVDA\nclose > 1").unwrap();
+        assert_eq!(
+            fm.symbols.as_deref(),
+            Some(&["AAPL".to_string(), "MSFT".into(), "NVDA".into()][..])
+        );
+        let err = parse("#! symbols: AAPL,,MSFT\nclose > 1").unwrap_err();
+        assert!(err.message.contains("empty symbol"), "{}", err.message);
+        let err = parse("#! symbols: AAPL, AAPL\nclose > 1").unwrap_err();
+        assert!(err.message.contains("duplicate symbol"), "{}", err.message);
     }
 
     #[test]

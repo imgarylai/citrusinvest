@@ -48,7 +48,11 @@ fn failed(name: &str, err: String) -> SweepEntry {
     }
 }
 
-/// Run one strategy over the full (or specified) universe.
+/// Run one strategy over the full universe, or over an explicit `symbols`
+/// subset (`None` = every symbol under `prices/`). Scoping changes what every
+/// cross-sectional op sees, so a requested symbol missing from the data tree
+/// is an error, not a silent drop. Note: a symbol list frozen *today* implies
+/// survivorship bias in a historical run — see `docs/strategy-envelope.md`.
 pub fn run_single(
     root: &Path,
     spec_json: &str,
@@ -56,8 +60,9 @@ pub fn run_single(
     to: i32,
     cfg: &BacktestConfig,
     price_key: &str,
+    symbols: Option<&[String]>,
 ) -> Result<Report, String> {
-    let ctx = load_ctx(root, from, to, cfg, price_key)?;
+    let ctx = load_ctx(root, from, to, cfg, price_key, symbols)?;
     run_backtest(spec_json, &ctx, price_key, cfg).map_err(|e| e.to_string())
 }
 
@@ -74,7 +79,7 @@ pub fn run_sweep(
     price_key: &str,
     sort_by: SortKey,
 ) -> Vec<SweepEntry> {
-    let ctx = match load_ctx(root, from, to, cfg, price_key) {
+    let ctx = match load_ctx(root, from, to, cfg, price_key, None) {
         Ok(v) => v,
         Err(e) => return variants.iter().map(|(n, _)| failed(n, e.clone())).collect(),
     };

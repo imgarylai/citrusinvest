@@ -527,8 +527,16 @@ close > sma(close, 20) and rsi(close, 14) < 70
 ```
 
 - `universe` is a `FROM..TO` date window (either side may be omitted:
-  `20180101..`). Symbol lists are not accepted here yet (universe filtering
-  is [#245](https://github.com/citrusquant/citrusquant/issues/245)).
+  `20180101..`).
+- `symbols` is a comma-separated **explicit universe**
+  (`#! symbols: AAPL, MSFT, NVDA` / `--symbols AAPL,MSFT`): only these names
+  are loaded, so cross-sectional ops (`rank`, `is_largest`, `zscore`, …) see
+  exactly this universe. Every listed symbol must exist in the data tree —
+  a missing one is an error, never a silent drop. **Survivorship caveat**: a
+  list frozen today implies survivorship bias in a historical run; for an
+  unbiased index universe use point-in-time membership
+  (`mask(signal, in_sp500)` today; named `symbols_hint` universes are
+  [#245](https://github.com/citrusquant/citrusquant/issues/245)).
 - `config` is the engine config object, with the same flat knob names as the
   `yuzu-server` request (`fee_ratio`, `slippage_ratio`, `initial_capital`,
   `delist_after`, `stop_loss`, `take_profit`, `trail_stop`, `stop_fill`,

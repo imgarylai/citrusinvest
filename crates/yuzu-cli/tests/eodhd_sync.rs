@@ -104,7 +104,16 @@ fn syncs_prices_and_tree_backtests() {
     );
 
     let spec = r#"{"op":"IsLargest","of":{"op":"Data","name":"close"},"n":1}"#;
-    let report = run_single(&dir, spec, 20240102, 20240104, &Default::default(), "close").unwrap();
+    let report = run_single(
+        &dir,
+        spec,
+        20240102,
+        20240104,
+        &Default::default(),
+        "close",
+        None,
+    )
+    .unwrap();
     assert_eq!(report.equity.len(), 3);
     assert!(report.metrics.total_return.is_finite());
 }

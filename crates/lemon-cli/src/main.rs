@@ -11,7 +11,7 @@
 //! lemon check [file...]                             (envelopes + .lemon front-matter)
 //! lemon run   [--data <dir>] [--from N] [--to N] [--fee-ratio F]
 //!             [--slippage-ratio F] [--price-key K] [--benchmark SYM]
-//!             [--out path] [file]
+//!             [--symbols A,B] [--out path] [file]
 //! ```
 //!
 //! `run` accepts a `.lemon` file (with optional `#!` front-matter, see
@@ -274,6 +274,8 @@ struct RunFlags {
     slippage_ratio: Option<f64>,
     price_key: Option<String>,
     benchmark: Option<String>,
+    /// Explicit symbol universe (comma-separated flag / front-matter list).
+    symbols: Option<Vec<String>>,
     /// Report destination; `None` = stdout.
     out: Option<PathBuf>,
 }
@@ -299,6 +301,12 @@ fn parse_run_flags(args: Vec<String>) -> Result<RunFlags, String> {
             "--slippage-ratio" => flags.slippage_ratio = Some(num("--slippage-ratio", it.next())?),
             "--price-key" => flags.price_key = Some(value("--price-key", it.next())?),
             "--benchmark" => flags.benchmark = Some(value("--benchmark", it.next())?),
+            "--symbols" => {
+                flags.symbols = Some(
+                    frontmatter::parse_symbol_list(&value("--symbols", it.next())?)
+                        .map_err(|m| format!("--symbols: {m}"))?,
+                )
+            }
             "--out" => flags.out = Some(PathBuf::from(value("--out", it.next())?)),
             _ if a.starts_with('-') => return Err(format!("unknown flag `{a}`")),
             _ => {
@@ -318,6 +326,7 @@ struct RunDoc {
     spec: serde_json::Value,
     from: Option<i32>,
     to: Option<i32>,
+    symbols: Option<Vec<String>>,
     price_key: Option<String>,
     cfg: yuzu_core::backtest::BacktestConfig,
 }
@@ -331,6 +340,7 @@ fn lemon_doc(path: &str, src: &str) -> Result<RunDoc, String> {
         spec,
         from: fm.from,
         to: fm.to,
+        symbols: fm.symbols,
         price_key: fm.price_key,
         cfg: fm
             .config
@@ -356,11 +366,11 @@ fn envelope_doc(path: &str, src: &str) -> Result<RunDoc, String> {
             .to_backtest_config(),
         None => Default::default(),
     };
-    let (mut from, mut to) = (None, None);
+    let (mut from, mut to, mut symbols) = (None, None, None);
     if let Some(u) = env.universe {
-        if u.symbols.is_some() || u.symbols_hint.is_some() {
+        if u.symbols_hint.is_some() {
             return Err(format!(
-                "{path}: universe symbol filtering (`symbols`/`symbols_hint`) is not supported by `lemon run` yet (issue #245) — remove the field or scope the data tree instead"
+                "{path}: `universe.symbols_hint` (a named point-in-time universe) is not supported by `lemon run` yet (issue #245) — use an explicit `symbols` list, or mask on a membership panel (e.g. `mask(signal, in_sp500)`)"
             ));
         }
         let date = |field: &str, v: Option<i64>| -> Result<Option<i32>, String> {
@@ -371,11 +381,13 @@ fn envelope_doc(path: &str, src: &str) -> Result<RunDoc, String> {
         };
         from = date("from", u.from)?;
         to = date("to", u.to)?;
+        symbols = u.symbols;
     }
     Ok(RunDoc {
         spec: checked.spec,
         from,
         to,
+        symbols,
         price_key: None,
         cfg,
     })
@@ -422,10 +434,18 @@ fn run_strategy(
     if let Some(b) = &flags.benchmark {
         cfg.benchmark_key = Some(b.clone());
     }
+    let symbols = flags.symbols.clone().or(doc.symbols);
 
-    let report =
-        yuzu_research::run_single(&data, &doc.spec.to_string(), from, to, &cfg, &price_key)
-            .map_err(|e| format!("lemon: {e}"))?;
+    let report = yuzu_research::run_single(
+        &data,
+        &doc.spec.to_string(),
+        from,
+        to,
+        &cfg,
+        &price_key,
+        symbols.as_deref(),
+    )
+    .map_err(|e| format!("lemon: {e}"))?;
     serde_json::to_string_pretty(&report).map_err(|e| format!("lemon: {e}"))
 }
 
@@ -490,7 +510,7 @@ fn main() -> ExitCode {
         Some(f) if is_runnable_file(f) => run_run(args),
         _ => {
             eprintln!(
-                "usage: lemon <strategy.lemon|envelope.json> [run flags]   (short for `lemon run ...`)\n       lemon fmt [-w] [file...]\n       lemon lint [--series a,b,c] [--series-file path] [file...]\n       lemon check [file...]\n       lemon run [--data <dir>] [--from N] [--to N] [--fee-ratio F] [--slippage-ratio F] [--price-key K] [--benchmark SYM] [--out path] [file]\n       (no file = read stdin; --data falls back to $CITRUS_DATA)"
+                "usage: lemon <strategy.lemon|envelope.json> [run flags]   (short for `lemon run ...`)\n       lemon fmt [-w] [file...]\n       lemon lint [--series a,b,c] [--series-file path] [file...]\n       lemon check [file...]\n       lemon run [--data <dir>] [--from N] [--to N] [--fee-ratio F] [--slippage-ratio F] [--price-key K] [--benchmark SYM] [--symbols A,B] [--out path] [file]\n       (no file = read stdin; --data falls back to $CITRUS_DATA)"
             );
             ExitCode::FAILURE
         }
@@ -658,6 +678,7 @@ mod tests {
             20240104,
             &Default::default(),
             "close",
+            None,
         )
         .unwrap();
         assert_eq!(out, serde_json::to_string_pretty(&report).unwrap());
@@ -703,6 +724,7 @@ mod tests {
             20240104,
             &fee_cfg,
             "close",
+            None,
         )
         .unwrap();
         assert_eq!(out, serde_json::to_string_pretty(&expect).unwrap());
@@ -721,6 +743,7 @@ mod tests {
             20240104,
             &Default::default(),
             "close",
+            None,
         )
         .unwrap();
         assert_eq!(out, serde_json::to_string_pretty(&expect).unwrap());
@@ -772,6 +795,7 @@ mod tests {
             20240104,
             &fee_cfg,
             "close",
+            None,
         )
         .unwrap();
         assert_eq!(out, serde_json::to_string_pretty(&expect).unwrap());
@@ -781,12 +805,17 @@ mod tests {
     fn envelope_errors_are_actionable() {
         let dir = fixture("enverr");
         let flags = flags_for(&dir);
-        // Symbol filtering is not implemented yet — refusing beats silently
-        // running the wrong universe.
+        // Named point-in-time universes are not implemented yet — refusing
+        // beats silently running the wrong universe.
         let doc = r#"{ "format": 1, "name": "X", "source": "close > 1",
-            "universe": { "symbols": ["AAA"] } }"#;
+            "universe": { "symbols_hint": "sp500" } }"#;
         let err = run_strategy("s.json", doc, &flags, None).unwrap_err();
         assert!(err.contains("#245"), "{err}");
+        // An explicit symbol missing from the tree is an error, not a drop.
+        let doc = r#"{ "format": 1, "name": "X", "source": "close > 1",
+            "universe": { "symbols": ["AAA", "ZZZ"] } }"#;
+        let err = run_strategy("s.json", doc, &flags, None).unwrap_err();
+        assert!(err.contains("ZZZ"), "{err}");
         // A config typo must not become a silent zero-fee run.
         let doc = r#"{ "format": 1, "name": "X", "source": "close > 1",
             "config": { "fee_ration": 0.01 } }"#;
@@ -796,6 +825,41 @@ mod tests {
         let err =
             run_strategy("s.json", r#"{ "format": 1, "name": "X" }"#, &flags, None).unwrap_err();
         assert!(err.starts_with("s.json: "), "{err}");
+    }
+
+    #[test]
+    fn symbols_scope_the_universe_from_document_or_flag() {
+        let dir = fixture("symbols");
+        // Front-matter list: scoped to BBB, is_largest must ride BBB's
+        // 5→4→6 path (the 0.8 dip proves the universe shrank to one name).
+        let src = "#! symbols: BBB\nis_largest(close, 1)";
+        let out = run_strategy("s.lemon", src, &flags_for(&dir), None).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(parsed["equity"][1], 0.8);
+
+        // The --symbols flag overrides the document's list.
+        let mut flags = flags_for(&dir);
+        flags.symbols = Some(vec!["AAA".to_string()]);
+        let out = run_strategy("s.lemon", src, &flags, None).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(parsed["equity"][1], 1.1); // AAA: 10→11→12
+
+        // An envelope's universe.symbols scopes the run the same way.
+        let doc = r#"{ "format": 1, "name": "B", "source": "is_largest(close, 1)",
+            "universe": { "from": 20240102, "to": 20240104, "symbols": ["BBB"] } }"#;
+        let out = run_strategy("s.json", doc, &flags_for(&dir), None).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(parsed["equity"][1], 0.8);
+
+        // A missing symbol propagates as an actionable engine-side error.
+        let err = run_strategy(
+            "s.lemon",
+            "#! symbols: BBB, ZZZ\nis_largest(close, 1)",
+            &flags_for(&dir),
+            None,
+        )
+        .unwrap_err();
+        assert!(err.contains("ZZZ"), "{err}");
     }
 
     #[test]

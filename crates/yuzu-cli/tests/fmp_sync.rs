@@ -139,7 +139,16 @@ fn syncs_prices_and_the_tree_backtests() {
 
     // Acceptance: yuzu-cli run can backtest a pure price strategy over the tree.
     let spec = r#"{"op":"IsLargest","of":{"op":"Data","name":"close"},"n":1}"#;
-    let report = run_single(&dir, spec, 20240102, 20240104, &Default::default(), "close").unwrap();
+    let report = run_single(
+        &dir,
+        spec,
+        20240102,
+        20240104,
+        &Default::default(),
+        "close",
+        None,
+    )
+    .unwrap();
     assert_eq!(report.equity.len(), 3);
     assert!(report.metrics.total_return.is_finite());
 }
@@ -235,6 +244,7 @@ fn delisted_symbol_price_file_ends_at_delist_date_and_engine_forces_exit() {
         20240104,
         &BacktestConfig::default(),
         "close",
+        None,
     )
     .unwrap();
     let honest = run_single(
@@ -248,6 +258,7 @@ fn delisted_symbol_price_file_ends_at_delist_date_and_engine_forces_exit() {
             ..Default::default()
         },
         "close",
+        None,
     )
     .unwrap();
     assert!(
@@ -318,8 +329,26 @@ fn index_pit_membership_reconstructs_syncs_and_masks_a_backtest() {
     // result vs. the unmasked strategy (which keeps holding DDD after it left).
     let base = r#"{"op":"IsLargest","of":{"op":"Data","name":"close"},"n":3}"#;
     let masked = format!(r#"{{"op":"Mask","of":{base},"by":{{"op":"Data","name":"in_sp500"}}}}"#);
-    let unmasked = run_single(&dir, base, from, to, &BacktestConfig::default(), "close").unwrap();
-    let gated = run_single(&dir, &masked, from, to, &BacktestConfig::default(), "close").unwrap();
+    let unmasked = run_single(
+        &dir,
+        base,
+        from,
+        to,
+        &BacktestConfig::default(),
+        "close",
+        None,
+    )
+    .unwrap();
+    let gated = run_single(
+        &dir,
+        &masked,
+        from,
+        to,
+        &BacktestConfig::default(),
+        "close",
+        None,
+    )
+    .unwrap();
     assert_eq!(gated.equity.len(), 3);
     assert!(gated.metrics.total_return.is_finite());
     assert!(
