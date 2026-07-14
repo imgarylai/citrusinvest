@@ -995,7 +995,7 @@ dependencies = [
 
 [[package]]
 name = "lemon-cli"
-version = "0.12.1"
+version = "0.12.2"
 dependencies = [
  "lemon-lang",
  "pomelo-data",
@@ -1008,7 +1008,7 @@ dependencies = [
 
 [[package]]
 name = "lemon-lang"
-version = "0.12.1"
+version = "0.12.2"
 dependencies = [
  "serde",
  "serde_json",
@@ -1016,7 +1016,7 @@ dependencies = [
 
 [[package]]
 name = "lemon-lsp"
-version = "0.12.1"
+version = "0.12.2"
 dependencies = [
  "lemon-lang",
  "serde_json",
@@ -1026,7 +1026,7 @@ dependencies = [
 
 [[package]]
 name = "lemon-wasm"
-version = "0.12.1"
+version = "0.12.2"
 dependencies = [
  "lemon-lang",
  "serde_json",
@@ -1340,7 +1340,7 @@ checksum = "19f132c84eca552bf34cab8ec81f1c1dcc229b811638f9d283dceabe58c5569e"
 
 [[package]]
 name = "pomelo-alpha-vantage"
-version = "0.12.1"
+version = "0.12.2"
 dependencies = [
  "flate2",
  "pomelo-data",
@@ -1351,7 +1351,7 @@ dependencies = [
 
 [[package]]
 name = "pomelo-audit"
-version = "0.12.1"
+version = "0.12.2"
 dependencies = [
  "flate2",
  "pomelo-data",
@@ -1363,7 +1363,7 @@ dependencies = [
 
 [[package]]
 name = "pomelo-data"
-version = "0.12.1"
+version = "0.12.2"
 dependencies = [
  "arrow-array",
  "arrow-cast",
@@ -1378,7 +1378,7 @@ dependencies = [
 
 [[package]]
 name = "pomelo-eodhd"
-version = "0.12.1"
+version = "0.12.2"
 dependencies = [
  "flate2",
  "pomelo-data",
@@ -1389,7 +1389,7 @@ dependencies = [
 
 [[package]]
 name = "pomelo-finnhub"
-version = "0.12.1"
+version = "0.12.2"
 dependencies = [
  "flate2",
  "pomelo-data",
@@ -1400,7 +1400,7 @@ dependencies = [
 
 [[package]]
 name = "pomelo-fmp"
-version = "0.12.1"
+version = "0.12.2"
 dependencies = [
  "flate2",
  "pomelo-data",
@@ -1411,7 +1411,7 @@ dependencies = [
 
 [[package]]
 name = "pomelo-http"
-version = "0.12.1"
+version = "0.12.2"
 dependencies = [
  "serde_json",
  "ureq",
@@ -1419,7 +1419,7 @@ dependencies = [
 
 [[package]]
 name = "pomelo-s3"
-version = "0.12.1"
+version = "0.12.2"
 dependencies = [
  "flate2",
  "pomelo-data",
@@ -2407,7 +2407,7 @@ dependencies = [
 
 [[package]]
 name = "yuzu-cli"
-version = "0.12.1"
+version = "0.12.2"
 dependencies = [
  "clap",
  "flate2",
@@ -2427,7 +2427,7 @@ dependencies = [
 
 [[package]]
 name = "yuzu-core"
-version = "0.12.1"
+version = "0.12.2"
 dependencies = [
  "chrono",
  "lemon-lang",
@@ -2440,7 +2440,7 @@ dependencies = [
 
 [[package]]
 name = "yuzu-research"
-version = "0.12.1"
+version = "0.12.2"
 dependencies = [
  "pomelo-data",
  "pomelo-fmp",
@@ -2452,7 +2452,7 @@ dependencies = [
 
 [[package]]
 name = "yuzu-server"
-version = "0.12.1"
+version = "0.12.2"
 dependencies = [
  "ndarray",
  "pomelo-data",
@@ -2465,7 +2465,7 @@ dependencies = [
 
 [[package]]
 name = "yuzu-wasm"
-version = "0.12.1"
+version = "0.12.2"
 dependencies = [
  "ndarray",
  "serde",
