@@ -63,10 +63,12 @@ Default key prefixes (override with env on the server: `YUZU_PRICES_DIR`,
 
 Object keys under S3 are the same relative paths (`prices/AAPL.csv.gz`, …).
 
-**CLI note:** `yuzu-cli --data <root>` currently loads **close** (and
-**volume** / a **benchmark** symbol when those config flags need them) from
-`prices/`. It does not auto-load fundamentals or industry. Use `yuzu-server`,
-or build an `EvalContext` in library code, for full series sets.
+**CLI note:** `yuzu-cli --data <root>` (and `lemon run`) loads **close**, plus
+the series the strategy's `Data` nodes actually reference — the combined
+`panels/<name>` file when present, else per-symbol OHLCV or `fundamentals/`
+columns — plus **volume** / a **benchmark** symbol when those config flags
+need them, and the `tracked/` industry map when the tree has one. This matches
+the server's referenced-series loading.
 
 **Server note:** `yuzu-server` loads only series referenced by the strategy
 `Data` nodes (plus always `high`/`low` for MAE/MFE, and `volume` when liquidity

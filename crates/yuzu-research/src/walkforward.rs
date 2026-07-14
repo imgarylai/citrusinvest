@@ -9,7 +9,7 @@ use serde::Serialize;
 use yuzu_core::backtest::BacktestConfig;
 use yuzu_core::EvalContext;
 
-use crate::ctx::load_ctx;
+use crate::ctx::{load_ctx, referenced_series};
 use crate::sweep::SortKey;
 
 /// One walk-forward window: variant selection happened on the train range,
@@ -174,7 +174,16 @@ pub fn run_walkforward(
             .max()
             .unwrap_or(0),
     };
-    let ctx = load_ctx(root, from, to, cfg, "close", None)?;
+    let specs: Vec<&str> = variants.iter().map(|(_, s)| s.as_str()).collect();
+    let ctx = load_ctx(
+        root,
+        from,
+        to,
+        cfg,
+        "close",
+        None,
+        &referenced_series(&specs),
+    )?;
     let dates = ctx
         .panels
         .get("close")
