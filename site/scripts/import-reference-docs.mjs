@@ -24,6 +24,7 @@ const DOCS = [
   ['docs/fmp-data-source.md', 'fmp-data-source', 'FMP data source'],
   ['docs/eodhd-data-source.md', 'eodhd-data-source', 'EODHD data source'],
   ['docs/alpha-vantage-data-source.md', 'alpha-vantage-data-source', 'Alpha Vantage data source'],
+  ['docs/finnhub-data-source.md', 'finnhub-data-source', 'Finnhub data source'],
   ['docs/research.md', 'research', 'Research (factor / event)'],
   ['docs/strategy-envelope.md', 'strategy-envelope', 'Strategy envelope'],
 ];

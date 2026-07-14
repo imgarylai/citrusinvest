@@ -104,6 +104,7 @@ export default defineConfig({
             { label: 'FMP data source', slug: 'reference/fmp-data-source' },
             { label: 'EODHD data source', slug: 'reference/eodhd-data-source' },
             { label: 'Alpha Vantage data source', slug: 'reference/alpha-vantage-data-source' },
+            { label: 'Finnhub data source', slug: 'reference/finnhub-data-source' },
             { label: 'Research (factor / event)', slug: 'reference/research' },
             { label: 'Strategy envelope', slug: 'reference/strategy-envelope' },
             { label: 'API reference (docs.rs)', slug: 'reference/api' },
