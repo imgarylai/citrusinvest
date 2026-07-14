@@ -11,10 +11,10 @@ keywords = ["alpha-vantage", "backtesting", "finance", "market-data"]
 categories = ["finance"]
 
 [dependencies]
-yuzu-core = { path = "../yuzu-core", version = "0.12.0" }
-pomelo-data = { path = "../pomelo-data", version = "0.12.0" }
+yuzu-core = { path = "../yuzu-core", version = "0.12.1" }
+pomelo-data = { path = "../pomelo-data", version = "0.12.1" }
 # Shared HTTP client / retry Fetcher / WriteMode (no vendor logic).
-pomelo-http = { path = "../pomelo-http", version = "0.12.0", default-features = false }
+pomelo-http = { path = "../pomelo-http", version = "0.12.1", default-features = false }
 serde_json = { workspace = true }
 flate2 = { workspace = true }
 

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.1](https://github.com/citrusquant/citrusquant/compare/pomelo-eodhd-v0.12.0...pomelo-eodhd-v0.12.1) - 2026-07-14
+
+### Added
+
+- named point-in-time index universe (`#! index:` / envelope symbols_hint) ([#256](https://github.com/citrusquant/citrusquant/pull/256))
+
 ## [0.12.0](https://github.com/citrusquant/citrusquant/compare/pomelo-eodhd-v0.11.0...pomelo-eodhd-v0.12.0) - 2026-07-14
 
 ### Other
