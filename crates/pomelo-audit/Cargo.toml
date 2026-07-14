@@ -11,8 +11,8 @@ keywords = ["backtesting", "finance", "market-data", "data-quality"]
 categories = ["finance"]
 
 [dependencies]
-pomelo-data = { path = "../pomelo-data", version = "0.11.0" }
-yuzu-core = { path = "../yuzu-core", version = "0.11.0" }
+pomelo-data = { path = "../pomelo-data", version = "0.12.0" }
+yuzu-core = { path = "../yuzu-core", version = "0.12.0" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 flate2 = { workspace = true }

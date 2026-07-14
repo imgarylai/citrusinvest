@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0](https://github.com/citrusquant/citrusquant/compare/lemon-lang-v0.11.0...lemon-lang-v0.12.0) - 2026-07-14
+
+### Added
+
+- [**breaking**] add `lemon run` and move the lemon binary to a new lemon-cli crate ([#243](https://github.com/citrusquant/citrusquant/pull/243))
+
+### Other
+
+- give each crate its own README
+
 ## [0.11.0](https://github.com/citrusquant/citrusquant/compare/lemon-lang-v0.10.0...lemon-lang-v0.11.0) - 2026-07-14
 
 ### Added
