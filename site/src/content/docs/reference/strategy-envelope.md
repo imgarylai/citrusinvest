@@ -77,6 +77,22 @@ resolved `Expr` tree on success — and in the browser via the `lemon-wasm`
 `{"ok":true,"name","spec"}` or `{"ok":false,"errors":[…]}` (never throws), so a
 web app / registry can validate submissions client-side.
 
+## Running
+
+An envelope is directly runnable against a local
+[data-layout tree](../reference/data-layout):
+
+```bash
+lemon run strategy.json --data ~/qdata     # or set $CITRUS_DATA
+```
+
+The runner takes `config` (flat engine knobs — `fee_ratio`, `stop_loss`, …;
+unknown knobs are rejected) and the `universe` date window from the document;
+explicit CLI flags override it. `universe.symbols` / `symbols_hint` are not
+consumed yet — the runner refuses them rather than silently running the wrong
+universe (filtering is
+[#245](https://github.com/citrusquant/citrusquant/issues/245)).
+
 ## Reproducibility
 
 An envelope reproduces **bit-for-bit** only when three things match:
