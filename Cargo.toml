@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/yuzu-core", "crates/yuzu-research", "crates/pomelo-data", "crates/pomelo-audit", "crates/yuzu-wasm", "crates/yuzu-cli", "crates/pomelo-fmp", "crates/pomelo-eodhd", "crates/pomelo-alpha-vantage", "crates/pomelo-finnhub", "crates/pomelo-http", "crates/pomelo-s3", "crates/yuzu-server", "crates/lemon-lang", "crates/lemon-wasm", "crates/lemon-lsp"]
+members = ["crates/yuzu-core", "crates/yuzu-research", "crates/pomelo-data", "crates/pomelo-audit", "crates/yuzu-wasm", "crates/yuzu-cli", "crates/pomelo-fmp", "crates/pomelo-eodhd", "crates/pomelo-alpha-vantage", "crates/pomelo-finnhub", "crates/pomelo-http", "crates/pomelo-s3", "crates/yuzu-server", "crates/lemon-lang", "crates/lemon-wasm", "crates/lemon-lsp", "crates/lemon-cli"]
 # yuzu-py builds via maturin with its own lockfile (PyO3 toolchain), outside
 # the workspace so cargo test/coverage CI never needs a Python toolchain.
 exclude = ["crates/yuzu-py"]

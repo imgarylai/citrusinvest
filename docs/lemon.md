@@ -457,11 +457,11 @@ for size and raw cheapness."
 
 ## <a id="validating"></a>Validating a snippet
 
-The crate ships a `lemon` binary — a formatter that parses first, so it doubles
-as a syntax checker. Pipe source on stdin:
+The `lemon-cli` crate ships the `lemon` binary — a formatter that parses first,
+so it doubles as a syntax checker. Pipe source on stdin:
 
 ```sh
-printf '%s' 'close > sma(close, 2)' | cargo run -q -p lemon-lang --bin lemon -- fmt
+printf '%s' 'close > sma(close, 2)' | cargo run -q -p lemon-cli -- fmt
 ```
 
 It prints the canonical (re-indented) form on success, or `line:col: message` on
@@ -476,7 +476,7 @@ at engine eval) and **unused `let` bindings** (inlined at parse time, so they
 vanish silently):
 
 ```sh
-printf '%s' 'clsoe > 1' | cargo run -q -p lemon-lang --bin lemon -- lint --series close,pe
+printf '%s' 'clsoe > 1' | cargo run -q -p lemon-cli -- lint --series close,pe
 # <stdin>:1:1: warning: unknown series `clsoe` — did you mean `close`?
 ```
 
@@ -485,6 +485,29 @@ name per line, `#` comments); without it only the unused-`let` check runs.
 Exit code is non-zero when there are warnings. The same checks are exposed to
 the web editor via `lemon-wasm`'s `lint(src, series_json)` export and to Rust
 callers as `lemon::lint(src, known_series)`.
+
+---
+
+## Running a strategy
+
+`lemon run` lowers a `.lemon` file and backtests it over a local
+[data-layout tree](./data-layout.md) in one step:
+
+```sh
+lemon run strategy.lemon --data ~/qdata --from 20180101 --to 20241231 --fee-ratio 0.001
+```
+
+It prints the engine's `Report` JSON (equity curve, trades, metrics — see
+[reading a report](./backtest-engine.md)) to stdout; `--out report.json`
+writes a file instead. The flags mirror `yuzu-cli run`: `--slippage-ratio`,
+`--price-key open|high|low|close`, `--benchmark SPY`. With no file it reads
+stdin, like the other subcommands.
+
+Two scope notes, shared with `yuzu-cli`: the CLI data loader reads **close**
+(plus **volume** / a **benchmark** symbol when the config needs them) from
+`prices/` — strategies referencing fundamentals (`pe`, …) need `yuzu-server`
+or library code for now (see [`data-layout.md`](./data-layout.md)); and the
+full stop/delist/bootstrap knob set stays on `yuzu-cli run`.
 
 ---
 
