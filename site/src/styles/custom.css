@@ -400,6 +400,85 @@
   background: var(--sl-color-black);
 }
 
+/* --- "run this locally" handoff (landing widget only) ------------------------ */
+/* Spans both columns of .pg-wrap, sitting under the editor + chart. Turns the
+   demo's ceiling (toy data) into the reason to install: the same strategy,
+   wrapped in front-matter, as a file you run on your own data. */
+.pg-local {
+  grid-column: 1 / -1;
+  margin-top: 0.5rem;
+  padding: 1rem 1.25rem 1.25rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 0.6rem;
+  background: var(--sl-color-gray-6, rgba(255, 255, 255, 0.02));
+}
+.pg-local-title {
+  margin: 0 0 0.25rem;
+  font-size: 1rem;
+}
+.pg-local-lede {
+  margin: 0 0 0.9rem;
+  font-size: 0.9rem;
+  color: var(--sl-color-gray-2);
+}
+.pg-local-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+.pg-local-step {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-family: var(--sl-font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sl-color-gray-3);
+  margin-bottom: 0.3rem;
+}
+.pg-local-code {
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  border-radius: 0.45rem;
+  background: var(--sl-color-black);
+  border: 1px solid var(--sl-color-gray-5);
+  overflow-x: auto;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+.pg-local-code code {
+  font-family: var(--sl-font-mono);
+  white-space: pre;
+  background: none;
+  border: none;
+  padding: 0;
+}
+.pg-local-copy {
+  font-family: var(--sl-font-mono);
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.15rem 0.6rem;
+  border-radius: 0.35rem;
+  border: 1px solid var(--sl-color-gray-4);
+  background: transparent;
+  color: var(--sl-color-gray-2);
+  cursor: pointer;
+}
+.pg-local-copy:hover {
+  border-color: var(--sl-color-accent);
+  color: var(--sl-color-white);
+}
+.pg-local-note {
+  margin: 0.9rem 0 0;
+  font-size: 0.8rem;
+  color: var(--sl-color-gray-3);
+}
+
 /* --- full report (playground page: <Playground full />) ---------------------- */
 
 .pg-more {
