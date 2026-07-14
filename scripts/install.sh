@@ -56,19 +56,24 @@ esac
 asset="lemon-$target"
 
 # ---- 2. Find the release that carries this platform's binary ------------------
+# The binaries are attached to the `lemon-lang-vX.Y.Z` release (the CLI tracks
+# the workspace version and has no tag of its own). Don't scan the /releases
+# list for it: that list is NOT newest-first across the many per-crate tags
+# release-plz cuts, so the lemon-lang release quickly falls off the first
+# page. Instead crates.io tells us the current lemon-lang version — the same
+# version release-plz just tagged — and we go straight to that tag.
 if [ -n "${LEMON_VERSION:-}" ]; then
-  url=$(curl -fsSL "$API/releases/tags/$LEMON_VERSION" \
-    | grep -o "\"browser_download_url\": *\"[^\"]*/$asset\"" \
-    | head -n 1 | grep -o 'https://[^"]*') \
-    || die "release '$LEMON_VERSION' has no $asset — check https://github.com/$REPO/releases"
+  tag="$LEMON_VERSION"
 else
-  # Newest-first scan: release-plz cuts per-crate tags, so the binaries may be
-  # attached to any recent release.
-  url=$(curl -fsSL "$API/releases?per_page=30" \
-    | grep -o "\"browser_download_url\": *\"[^\"]*/$asset\"" \
-    | head -n 1 | grep -o 'https://[^"]*') \
-    || die "no release carrying $asset found yet — run the 'lemon binaries' workflow once, or build from source: cargo install --path crates/lemon-cli"
+  ver=$(curl -fsSL -A "citrusquant-install-sh" "https://crates.io/api/v1/crates/lemon-lang" \
+    | grep -o '"max_stable_version": *"[^"]*"' | head -n 1 | grep -o '[0-9][^"]*') \
+    || die "could not resolve the latest lemon-lang version from crates.io — pass LEMON_VERSION=lemon-lang-vX.Y.Z, or build from source: cargo install --path crates/lemon-cli"
+  tag="lemon-lang-v$ver"
 fi
+url=$(curl -fsSL "$API/releases/tags/$tag" \
+  | grep -o "\"browser_download_url\": *\"[^\"]*/$asset\"" \
+  | head -n 1 | grep -o 'https://[^"]*') \
+  || die "release '$tag' has no $asset — binaries are attached a few minutes after a release is cut; retry shortly, pin a tag with LEMON_VERSION, or build from source: cargo install --path crates/lemon-cli"
 
 # ---- 3. Download + verify the checksum ----------------------------------------
 tmp=$(mktemp -d)

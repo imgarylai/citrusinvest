@@ -2,9 +2,10 @@ name: lemon binaries
 
 # Cross-compile the `lemon` CLI (crates/lemon-cli) for the common desktop
 # targets and attach the binaries to a GitHub Release, so `scripts/install.sh`
-# can fetch a prebuilt binary. The installer scans releases newest-first for
-# the first one carrying its platform's asset, so it does not matter which tag
-# they land on — only that they are attached to some release.
+# can fetch a prebuilt binary. The installer resolves the current lemon-lang
+# version from crates.io and downloads from the matching `lemon-lang-vX.Y.Z`
+# release, so the binaries MUST be attached to that tag — which is what
+# release-plz.yml's resolve-lemon-tag job passes in.
 #
 # Runs automatically: release-plz.yml calls this workflow (`workflow_call`)
 # right after it cuts a release, passing the lemon-lang tag from that same
