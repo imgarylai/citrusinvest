@@ -20,12 +20,14 @@ contract live in [`docs/backtest-engine.md`](docs/backtest-engine.md).
 [`docs/data-layout.md`](docs/data-layout.md).
 **FMP Starter-tier gaps** (which features need which panels):
 [`docs/fmp-data-source.md`](docs/fmp-data-source.md).
-**Data sources (FMP + EODHD + assemble):**
+**Data sources (FMP · EODHD · Alpha Vantage · Finnhub + assemble):**
 [`docs/data-sources.md`](docs/data-sources.md).
 **EODHD official sync:**
 [`docs/eodhd-data-source.md`](docs/eodhd-data-source.md).
 **Alpha Vantage official sync:**
 [`docs/alpha-vantage-data-source.md`](docs/alpha-vantage-data-source.md).
+**Finnhub official sync:**
+[`docs/finnhub-data-source.md`](docs/finnhub-data-source.md).
 
 ## Crate families
 
@@ -49,6 +51,7 @@ It's a layered stack — `pomelo-*` → `yuzu-core` → `lemon` — not parallel
 | [`pomelo-data`](https://crates.io/crates/pomelo-data) | Native I/O: gzip CSV (and read-only Parquet, behind the `parquet` feature) price/fundamental files → panels. |
 | [`pomelo-s3`](https://crates.io/crates/pomelo-s3) | S3-compatible `ObjectSource`/`ObjectSink` for `pomelo-data`. |
 | [`pomelo-audit`](https://crates.io/crates/pomelo-audit) | Read-only data-quality audit of a data-layout tree (`yuzu-cli data-audit`). |
+| [`pomelo-http`](https://crates.io/crates/pomelo-http) | Shared HTTP client, rate-limit/retry `Fetcher`, and `WriteMode` for the `pomelo-*` vendor sync crates (no vendor logic). |
 | [`pomelo-fmp`](https://crates.io/crates/pomelo-fmp) | Bring-your-own-key FMP data sync + snapshot-factor formulas; writes to local disk or S3/R2. |
 | [`pomelo-eodhd`](https://crates.io/crates/pomelo-eodhd) | Bring-your-own-key EODHD data sync (second official path; `yuzu-cli eodhd-sync`). |
 | [`pomelo-alpha-vantage`](https://crates.io/crates/pomelo-alpha-vantage) | Bring-your-own-key Alpha Vantage data sync (epic #209; `yuzu-cli av-sync`). |
