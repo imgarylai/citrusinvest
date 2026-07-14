@@ -9,12 +9,16 @@ on:
         type: choice
         options: [lemon-wasm, yuzu-wasm, both]
         default: lemon-wasm
-  # Automatic runs: when release-plz cuts a release, publish the new version so
-  # npm stays in lockstep with crates.io. release-plz may open one release per
-  # crate, so this can fire several times for a single version bump — the
-  # per-step "already published?" guard makes the extra runs no-op cleanly.
+  # Automatic runs: release-plz.yml calls this workflow (`workflow_call`)
+  # right after it cuts a release, so npm stays in lockstep with crates.io.
+  # release-plz's own GITHUB_TOKEN can't fire the `release: published`
+  # trigger below (GitHub's recursion guard), which is why the caller invokes
+  # this in-run instead; `release: published` remains as a fallback for
+  # manually-published releases. Either way the per-package "already
+  # published?" guard makes repeat/overlapping runs no-op cleanly.
   release:
     types: [published]
+  workflow_call:
 
 permissions:
   contents: read
@@ -28,12 +32,12 @@ concurrency:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    # On a release event there are no inputs, so default to all packages that
-    # are onboarded on npm (published once + Trusted Publisher configured):
-    # lemon-wasm and yuzu-wasm. The per-step "already published?" guard skips
-    # any that are already at this version.
+    # On a release or workflow_call run there are no `inputs.package`, so
+    # default to all packages that are onboarded on npm (published once +
+    # Trusted Publisher configured): lemon-wasm and yuzu-wasm. The per-step
+    # "already published?" guard skips any that are already at this version.
     env:
-      PACKAGE: ${{ github.event_name == 'release' && 'both' || inputs.package }}
+      PACKAGE: ${{ (github.event_name == 'release' || github.event_name == 'workflow_call') && 'both' || inputs.package }}
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable

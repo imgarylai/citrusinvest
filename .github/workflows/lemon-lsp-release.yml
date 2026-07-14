@@ -5,12 +5,15 @@ name: lemon-lsp binaries
 # newest-first for the first one carrying its platform's binary, so it does not
 # matter which tag they land on — only that they are attached to some release.
 #
-# release-plz cuts per-crate releases (e.g. `lemon-lang-v0.2.0`) with the default
-# GITHUB_TOKEN, which does NOT cascade into other workflows (GitHub's recursion
-# guard). So the primary path is:
+# Runs automatically: release-plz.yml calls this workflow (`workflow_call`)
+# right after it cuts a release, passing the lemon-lang tag from that same
+# run — release-plz's own GITHUB_TOKEN can't fire `release: published` here
+# directly (GitHub's recursion guard), so the caller invokes it in-run
+# instead. The other two triggers remain as fallbacks:
 #   - workflow_dispatch — run by hand with an existing release tag (e.g.
 #     `lemon-lang-v0.2.0`); the binaries are built from that tag and uploaded.
-#   - release: published — also handled, for manually-published releases.
+#   - release: published — for manually-published releases (a human token
+#     isn't subject to the recursion guard).
 on:
   release:
     types: [published]
@@ -18,6 +21,12 @@ on:
     inputs:
       tag:
         description: "Release tag to build and attach binaries to (e.g. v0.2.0)"
+        required: true
+        type: string
+  workflow_call:
+    inputs:
+      tag:
+        description: "Release tag to build and attach binaries to"
         required: true
         type: string
 
