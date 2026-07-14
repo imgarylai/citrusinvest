@@ -297,18 +297,38 @@ The engine does **not** maintain historical index constituents.
 | Approach | How |
 |----------|-----|
 | Fixed list | Pass today’s (or any fixed) ticker list as `symbols` — simple, not true PIT |
-| PIT list per run | Your code chooses “listed as of `from`” tickers, then passes that `symbols` | 
-| Membership panel | A `dates×symbols` 0/1 panel named `in_<index>` (e.g. `in_sp500`) in `panels/`; `mask(signal, in_sp500)` in lemon holds a name only while it was a member |
+| PIT list per run | Your code chooses “listed as of `from`” tickers, then passes that `symbols` |
+| Named index (`lemon run`) | `#! index: sp500` / envelope `universe.symbols_hint` — the runner scopes to the window's ever-members and holds only day-members (below) |
+| Membership panel | A `dates×symbols` 0/1 panel named `in_<index>` (e.g. `in_sp500`) in `panels/`; multiply a signal by it (`signal * in_sp500`) to hold a name only while it was a member |
 
 **Membership-panel convention.** A membership panel is a normal combined panel
 (`panels/in_sp500.csv.gz`, wide `day,SYM,…` 0/1). The CLI (`run` / `sweep`)
-auto-loads `in_sp500` / `in_nasdaq` / `in_dowjones` from `panels/` when present,
-so `mask(signal, in_sp500)` works without hand-building the context. The library
-path can insert any such panel directly; `yuzu-server` does **not** auto-load
-custom series (see §"Custom series"). `yuzu-cli fmp-sync --index sp500` produces
-both the panel and the ever-member price universe (see
+auto-loads `in_sp500` / `in_nasdaq` / `in_dowjones` from `panels/` when present.
+The library path can insert any such panel directly; `yuzu-server` does **not**
+auto-load custom series (see §"Custom series"). `yuzu-cli fmp-sync --index sp500`
+produces both the panel and the ever-member price universe (see
 [`fmp-data-source.md`](../reference/fmp-data-source) §6). Reconstruction is index-scoped
 and **degrades for very old dates** (the vendor change log thins out).
+
+**Hold vs mask — flatten on exit.** To hold a name *only while it was a member*,
+multiply the signal by the panel: **`signal * in_sp500`**. A non-member cell is
+`0.0`, so the position drops to a flat `0.0` the day the name leaves the index.
+Do **not** use `mask(signal, in_sp500)` as the outermost op: `mask` NaN-outs
+non-members, and the NAV loop reads a NaN position as "no new instruction, hold"
+(it forward-fills — that's how weights drift between rebalances), so a masked
+name would keep being **held after it leaves the index**. `mask` is still the
+right tool *inside* a cross-sectional op (e.g. `is_largest(rank(mask(-pe,
+in_sp500)), 30)` ranks only among that day's members) because the outer
+`is_largest` emits an explicit `0.0` for the dropped names.
+
+**`#! index:` / `symbols_hint`.** `lemon run` resolves a named index for you:
+it scopes the run to the ever-members over `[from, to]` (the panel columns with
+any membership day) and wraps the strategy as `S * (in_sp500 >= 0.5)`, so you
+hold only day-members and exits flatten. Cross-sectional ops then rank across
+the window's ever-members; for a per-day-exact cross-section, mask the ranking
+input yourself as shown above. `index` and an explicit `symbols` list are
+mutually exclusive; a missing panel is an actionable error, never a silent
+fall back to the whole tree.
 
 Delisted names: keep `prices/{SYM}.*` files that **end** on the last trading
 day. Pair with `BacktestConfig.delist_after` / `delist_haircut` so the NAV loop

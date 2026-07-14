@@ -273,7 +273,7 @@ fn delisted_symbol_price_file_ends_at_delist_date_and_engine_forces_exit() {
 fn index_pit_membership_reconstructs_syncs_and_masks_a_backtest() {
     // #125 acceptance: reconstruct S&P 500 membership from the current snapshot +
     // change log, sync the ever-members, write the in_sp500 panel, and consume it
-    // via mask(signal, in_sp500) in a backtest.
+    // via signal * in_sp500 in a backtest.
     let dir = tmp("pit");
     let from = 20240102;
     let to = 20240104;

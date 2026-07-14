@@ -12,9 +12,13 @@
 //!   in the window; the sync universe (so each one's prices, incl. names that
 //!   later left / delisted, are fetched).
 //! - **`membership_panel(calendar, columns)`** — a `dates × symbols` 0/1 panel
-//!   (`in_sp500`) written to `panels/` and masked against a signal
-//!   (`mask(signal, in_sp500)`) so a strategy only holds a name while it was a
-//!   member.
+//!   (`in_sp500`) written to `panels/`. Multiply a signal by it
+//!   (`signal * in_sp500`) so a strategy holds a name only while it was a
+//!   member and flattens it (to an explicit `0.0`) the day it leaves. (Avoid
+//!   `mask(signal, in_sp500)` as the *outer* op: `mask` NaN-outs non-members
+//!   and the NAV loop forward-fills a NaN position, so a masked name is held
+//!   after it leaves the index — see `docs/data-layout.md` §8. `lemon run
+//!   --index sp500` applies the correct spelling automatically.)
 //!
 //! ## Honest weakness
 //!
@@ -51,7 +55,7 @@ pub enum Index {
 }
 
 /// Membership series names auto-loaded by the CLI (`load_ctx`) from `panels/`,
-/// so `mask(signal, in_sp500)` works on the `run` / `sweep` path. Kept in sync
+/// so `signal * in_sp500` works on the `run` / `sweep` path. Kept in sync
 /// with [`Index::series_name`] (asserted in tests).
 pub const MEMBERSHIP_SERIES: &[&str] = &["in_sp500", "in_nasdaq", "in_dowjones"];
 

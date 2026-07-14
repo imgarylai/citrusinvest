@@ -23,6 +23,7 @@
 
 mod frontmatter;
 mod sync;
+mod universe;
 
 use std::io::Read;
 use std::path::PathBuf;
@@ -341,6 +342,10 @@ struct RunDoc {
     from: Option<i32>,
     to: Option<i32>,
     symbols: Option<Vec<String>>,
+    /// A named point-in-time index universe (`sp500`), from front-matter
+    /// `#! index:` or envelope `universe.symbols_hint`. Resolved at run time
+    /// against the membership panel (see [`universe`]).
+    symbols_hint: Option<String>,
     require: Option<Vec<String>>,
     data_source: Option<frontmatter::DataSource>,
     price_key: Option<String>,
@@ -357,6 +362,7 @@ fn lemon_doc(path: &str, src: &str) -> Result<RunDoc, String> {
         from: fm.from,
         to: fm.to,
         symbols: fm.symbols,
+        symbols_hint: fm.index,
         require: fm.require,
         data_source: fm.data_source,
         price_key: fm.price_key,
@@ -384,13 +390,8 @@ fn envelope_doc(path: &str, src: &str) -> Result<RunDoc, String> {
             .to_backtest_config(),
         None => Default::default(),
     };
-    let (mut from, mut to, mut symbols) = (None, None, None);
+    let (mut from, mut to, mut symbols, mut symbols_hint) = (None, None, None, None);
     if let Some(u) = env.universe {
-        if u.symbols_hint.is_some() {
-            return Err(format!(
-                "{path}: `universe.symbols_hint` (a named point-in-time universe) is not supported by `lemon run` yet (issue #245) — use an explicit `symbols` list, or mask on a membership panel (e.g. `mask(signal, in_sp500)`)"
-            ));
-        }
         let date = |field: &str, v: Option<i64>| -> Result<Option<i32>, String> {
             v.map(|d| {
                 i32::try_from(d).map_err(|_| format!("{path}: universe.{field} is out of range"))
@@ -400,12 +401,14 @@ fn envelope_doc(path: &str, src: &str) -> Result<RunDoc, String> {
         from = date("from", u.from)?;
         to = date("to", u.to)?;
         symbols = u.symbols;
+        symbols_hint = u.symbols_hint;
     }
     Ok(RunDoc {
         spec: checked.spec,
         from,
         to,
         symbols,
+        symbols_hint,
         require: None,
         data_source: None,
         price_key: None,
@@ -454,7 +457,22 @@ fn run_strategy(
     if let Some(b) = &flags.benchmark {
         cfg.benchmark_key = Some(b.clone());
     }
-    let symbols = flags.symbols.clone().or_else(|| doc.symbols.clone());
+    let mut spec = doc.spec.clone();
+    let mut symbols = flags.symbols.clone().or_else(|| doc.symbols.clone());
+
+    // A named index universe (`#! index:` / envelope `symbols_hint`): resolve
+    // to the window's ever-members and wrap the spec so it holds only day-
+    // members. Mutually exclusive with an explicit `symbols` list.
+    if let Some(hint) = &doc.symbols_hint {
+        if symbols.is_some() {
+            return Err(
+                "lemon: provide either an explicit `symbols` list or a `symbols_hint` / `#! index:`, not both".into(),
+            );
+        }
+        let iu = universe::resolve(&data, hint, from, to).map_err(|e| format!("lemon: {e}"))?;
+        spec = universe::hold_mask(spec, iu.series);
+        symbols = Some(iu.symbols);
+    }
 
     // Gap-check the declared universe; `--sync` (and only `--sync`) may fetch
     // what's missing via the file's declared vendor (see the sync module).
@@ -495,7 +513,7 @@ fn run_strategy(
 
     let report = yuzu_research::run_single(
         &data,
-        &doc.spec.to_string(),
+        &spec.to_string(),
         from,
         to,
         &cfg,
@@ -872,12 +890,6 @@ mod tests {
     fn envelope_errors_are_actionable() {
         let dir = fixture("enverr");
         let flags = flags_for(&dir);
-        // Named point-in-time universes are not implemented yet — refusing
-        // beats silently running the wrong universe.
-        let doc = r#"{ "format": 1, "name": "X", "source": "close > 1",
-            "universe": { "symbols_hint": "sp500" } }"#;
-        let err = run_strategy("s.json", doc, &flags, None).unwrap_err();
-        assert!(err.contains("#245"), "{err}");
         // An explicit symbol missing from the tree is an error, not a drop.
         let doc = r#"{ "format": 1, "name": "X", "source": "close > 1",
             "universe": { "symbols": ["AAA", "ZZZ"] } }"#;
@@ -992,6 +1004,154 @@ mod tests {
         let out = lint_source("x.lemon", "#! require: close\nclsoe > 1", Some(&known)).unwrap();
         assert_eq!(out.len(), 1);
         assert!(out[0].contains("unknown series `clsoe`"), "{}", out[0]);
+    }
+
+    /// A tree for the index-universe test: AAA always a member, BBB leaves the
+    /// index on day 3 (2024-01-05), CCC never a member. Prices jump on the last
+    /// day so a held vs flattened position is visible in the equity.
+    fn index_fixture(tag: &str) -> std::path::PathBuf {
+        use pomelo_data::write_combined_panel;
+        use yuzu_core::panel::Panel;
+
+        let dir = std::env::temp_dir().join(format!("lemon_cli_idx_{tag}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        let days = [20240102, 20240103, 20240104, 20240105];
+        // AAA +10% last day, BBB +100% (post-exit), CCC +900% (never a member).
+        for (sym, closes) in [
+            ("AAA", [10.0_f64, 10.0, 10.0, 11.0]),
+            ("BBB", [10.0, 10.0, 10.0, 20.0]),
+            ("CCC", [10.0, 10.0, 10.0, 100.0]),
+        ] {
+            let rows: Vec<OhlcvRow> = closes
+                .iter()
+                .zip(days)
+                .map(|(&c, day)| OhlcvRow {
+                    day,
+                    adj_open: c,
+                    adj_high: c,
+                    adj_low: c,
+                    adj_close: c,
+                    volume: 0.0,
+                })
+                .collect();
+            let p = dir.join("prices");
+            std::fs::create_dir_all(&p).unwrap();
+            std::fs::write(
+                p.join(format!("{sym}.csv.gz")),
+                write_series(&rows).unwrap(),
+            )
+            .unwrap();
+        }
+        // Membership: AAA all days, BBB days 1-2 then out, CCC never.
+        let panel = Panel::from_rows(
+            days.to_vec(),
+            vec!["AAA".into(), "BBB".into(), "CCC".into()],
+            vec![
+                vec![1.0, 1.0, 0.0],
+                vec![1.0, 1.0, 0.0],
+                vec![1.0, 0.0, 0.0],
+                vec![1.0, 0.0, 0.0],
+            ],
+        )
+        .unwrap();
+        let pan = dir.join("panels");
+        std::fs::create_dir_all(&pan).unwrap();
+        std::fs::write(
+            pan.join("in_sp500.csv.gz"),
+            write_combined_panel(&panel).unwrap(),
+        )
+        .unwrap();
+        dir
+    }
+
+    fn idx_flags(dir: &std::path::Path) -> RunFlags {
+        RunFlags {
+            data: Some(dir.to_path_buf()),
+            from: Some(20240102),
+            to: Some(20240105),
+            ..Default::default()
+        }
+    }
+
+    fn last_equity(out: &str) -> f64 {
+        let r: serde_json::Value = serde_json::from_str(out).unwrap();
+        r["equity"]
+            .as_array()
+            .unwrap()
+            .last()
+            .unwrap()
+            .as_f64()
+            .unwrap()
+    }
+
+    #[test]
+    fn symbols_hint_scopes_to_ever_members_and_flattens_on_exit() {
+        let dir = index_fixture("scope");
+        let strat = "normalize_row(is_largest(close, 3))";
+
+        // With `#! index: sp500`: only AAA/BBB are ever-members (CCC excluded),
+        // both held at 0.5; on the last day AAA (+10%) is still in, BBB left and
+        // is flattened. Equity = 1 + 0.5*0.10 = 1.05. CCC's +900% never enters.
+        let out = run_strategy(
+            "s.lemon",
+            &format!("#! index: sp500\n{strat}"),
+            &idx_flags(&dir),
+            None,
+        )
+        .unwrap();
+        assert!((last_equity(&out) - 1.05).abs() < 1e-9, "{out}");
+
+        // Without the hint the full universe holds all three at 1/3; the last
+        // day is dominated by CCC's +900% → a completely different result.
+        let full = run_strategy("s.lemon", strat, &idx_flags(&dir), None).unwrap();
+        assert!(last_equity(&full) > 4.0, "{full}");
+
+        // The envelope `symbols_hint` spelling gives the same scoped result.
+        let env = r#"{"format":1,"name":"i","source":"normalize_row(is_largest(close, 3))",
+            "universe":{"from":20240102,"to":20240105,"symbols_hint":"sp500"}}"#;
+        let out = run_strategy("s.json", env, &idx_flags(&dir), None).unwrap();
+        assert!((last_equity(&out) - 1.05).abs() < 1e-9, "{out}");
+    }
+
+    #[test]
+    fn symbols_hint_errors_are_actionable() {
+        let dir = index_fixture("err");
+        // Missing membership panel → points at fmp-sync --index.
+        let _ = std::fs::remove_file(dir.join("panels/in_sp500.csv.gz"));
+        let err = run_strategy(
+            "s.lemon",
+            "#! index: sp500\nclose > 1",
+            &idx_flags(&dir),
+            None,
+        )
+        .unwrap_err();
+        assert!(err.contains("fmp-sync --index sp500"), "{err}");
+
+        // An explicit symbols list AND a hint is exactly-one-of.
+        let dir = index_fixture("both");
+        let env = r#"{"format":1,"name":"i","source":"close > 1",
+            "universe":{"symbols":["AAA"],"symbols_hint":"sp500"}}"#;
+        let err = run_strategy("s.json", env, &idx_flags(&dir), None).unwrap_err();
+        assert!(err.contains("not both"), "{err}");
+
+        // An envelope hint is not validated at parse time, so an unknown index
+        // surfaces at resolve time (front-matter `#! index:` catches it earlier).
+        let dir = index_fixture("unknown");
+        let env = r#"{"format":1,"name":"i","source":"close > 1",
+            "universe":{"symbols_hint":"ftse100"}}"#;
+        let err = run_strategy("s.json", env, &idx_flags(&dir), None).unwrap_err();
+        assert!(err.contains("unknown index `ftse100`"), "{err}");
+
+        // A panel with no members inside the window is an error, not an empty run.
+        let dir = index_fixture("nowin");
+        let flags = RunFlags {
+            data: Some(dir.clone()),
+            from: Some(20250101),
+            to: Some(20250102),
+            ..Default::default()
+        };
+        let err = run_strategy("s.lemon", "#! index: sp500\nclose > 1", &flags, None).unwrap_err();
+        assert!(err.contains("no members"), "{err}");
     }
 
     #[test]

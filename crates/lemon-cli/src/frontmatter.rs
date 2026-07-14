@@ -8,6 +8,7 @@
 //! #! name: Momentum v2
 //! #! universe: 20180101..20241231
 //! #! symbols: AAPL, MSFT, NVDA
+//! #! index: sp500
 //! #! require: close, pe
 //! #! data-source: fmp
 //! #! config: { "fee_ratio": 0.001, "stop_loss": 0.08 }
@@ -28,8 +29,11 @@
 //!   may be omitted (`20180101..`).
 //! - `symbols` is a comma-separated explicit universe — cross-sectional ops
 //!   then see exactly these names. Beware: a list frozen *today* implies
-//!   survivorship bias in a historical run; point-in-time index universes
-//!   (`symbols_hint`) are issue #245.
+//!   survivorship bias in a historical run.
+//! - `index` is a named point-in-time universe (`sp500` / `nasdaq` /
+//!   `dowjones`) resolved against the tree's membership panel — the envelope
+//!   spells the same concept `universe.symbols_hint`. Mutually exclusive with
+//!   `symbols`; see [`crate::universe`] for the semantics.
 //! - `require` names the series the strategy needs (`close, pe`). It feeds
 //!   `lemon lint` as the known-series list, and tells `--sync` whether
 //!   fundamentals are needed.
@@ -141,6 +145,9 @@ pub struct FrontMatter {
     pub from: Option<i32>,
     pub to: Option<i32>,
     pub symbols: Option<Vec<String>>,
+    /// A named point-in-time index universe (`sp500`); the envelope spells the
+    /// same concept `universe.symbols_hint`. Mutually exclusive with `symbols`.
+    pub index: Option<String>,
     pub require: Option<Vec<String>>,
     pub data_source: Option<DataSource>,
     pub config: Option<ConfigDoc>,
@@ -201,6 +208,7 @@ pub fn parse(src: &str) -> Result<FrontMatter, FmError> {
             "symbols" => {
                 fm.symbols = Some(parse_symbol_list(value).map_err(|m| FmError::new(lineno, m))?)
             }
+            "index" => fm.index = Some(parse_index(lineno, value)?),
             "require" => {
                 fm.require = Some(parse_name_list(value).map_err(|m| FmError::new(lineno, m))?)
             }
@@ -211,7 +219,7 @@ pub fn parse(src: &str) -> Result<FrontMatter, FmError> {
                 return Err(FmError::new(
                     lineno,
                     format!(
-                        "unknown front-matter key `{key}` (expected `name`, `universe`, `symbols`, `require`, `data-source`, `config`, or `price-key`)"
+                        "unknown front-matter key `{key}` (expected `name`, `universe`, `symbols`, `index`, `require`, `data-source`, `config`, or `price-key`)"
                     ),
                 ));
             }
@@ -298,6 +306,20 @@ fn parse_data_source(line: usize, value: &str) -> Result<DataSource, FmError> {
             line,
             format!("unsupported `data-source` `{value}` (supported: fmp)"),
         )),
+    }
+}
+
+/// Validate the index spelling up front so a typo is a line-labelled error
+/// rather than surfacing only at run time. The raw string is kept; the actual
+/// panel lookup happens in the runner (see `universe::resolve`).
+fn parse_index(line: usize, value: &str) -> Result<String, FmError> {
+    if pomelo_fmp::Index::parse(value).is_some() {
+        Ok(value.to_string())
+    } else {
+        Err(FmError::new(
+            line,
+            format!("unknown `index` `{value}` (supported: sp500, nasdaq, dowjones)"),
+        ))
     }
 }
 
@@ -445,6 +467,19 @@ close > 1"#;
             "{}",
             err.message
         );
+    }
+
+    #[test]
+    fn index_key_validates_the_spelling() {
+        let fm = parse("#! index: sp500\nclose > 1").unwrap();
+        assert_eq!(fm.index.as_deref(), Some("sp500"));
+        // Aliases pass through (validated by Index::parse).
+        assert_eq!(
+            parse("#! index: spx\nclose > 1").unwrap().index.as_deref(),
+            Some("spx")
+        );
+        let err = parse("#! index: ftse100\nclose > 1").unwrap_err();
+        assert!(err.message.contains("unknown `index`"), "{}", err.message);
     }
 
     #[test]

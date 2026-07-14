@@ -5,7 +5,7 @@
 //! than FMP's changelog reconstruction: membership on day T is the latest
 //! snapshot with date ≤ T.
 //!
-//! Writes `panels/in_sp500.csv.gz` for `mask(signal, in_sp500)`.
+//! Writes `panels/in_sp500.csv.gz` for `signal * in_sp500`.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
