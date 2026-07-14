@@ -2,16 +2,7 @@
 
 use std::time::Duration;
 
-/// How an already-present symbol tree is treated.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum WriteMode {
-    /// Overwrite each symbol's files with the freshly fetched window (default).
-    Overwrite,
-    /// Merge fetched rows into existing files (extend an existing tree).
-    Append,
-    /// Skip any symbol that already has a `prices/{SYM}.csv.gz`.
-    Resume,
-}
+pub use pomelo_http::WriteMode;
 
 /// Knobs for one [`crate::sync`] run.
 pub struct SyncConfig {
@@ -50,6 +41,18 @@ impl Default for SyncConfig {
             backoff_base: Duration::from_secs(2),
             mode: WriteMode::Overwrite,
         }
+    }
+}
+
+impl pomelo_http::RetrySettings for SyncConfig {
+    fn rate_limit_per_min(&self) -> u32 {
+        self.rate_limit_per_min
+    }
+    fn max_retries(&self) -> u32 {
+        self.max_retries
+    }
+    fn backoff_base(&self) -> Duration {
+        self.backoff_base
     }
 }
 

@@ -3,11 +3,12 @@
 use super::config::SyncConfig;
 use super::delisted::{exchange_filter, keep_exchange, parse_delisted_rows, DelistedSymbol};
 use super::fundamentals::{densify_fundamentals, merge_fundamentals, Snapshot};
-use super::http::{redact, HttpError};
+use super::http::HttpError;
 use super::price::parse_price_rows;
 use super::universe::parse_market_cap;
 use super::util::{i32_to_iso, iso_to_i32};
 use pomelo_data::fundamentals::FUNDAMENTAL_FIELDS;
+use pomelo_http::redact;
 
 #[test]
 fn parse_market_cap_handles_suffixes_and_plain_numbers() {

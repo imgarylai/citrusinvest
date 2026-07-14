@@ -13,11 +13,12 @@ use pomelo_data::fundamentals::FACTOR_PANEL_FIELDS;
 use pomelo_data::{assemble, write_combined_panel, ObjectSink, PANELS_DIR};
 use serde_json::Value;
 
-use super::factors::{analyst_upside_pct, eodhd_rating_to_consensus, pe_industry_pctile};
+use super::factors::eodhd_rating_to_consensus;
 use super::http::Fetcher;
 use super::util::{iso_to_i32, num};
 use super::HttpClient;
 use super::EODHD_BASE;
+use pomelo_data::factors::{analyst_upside_pct, pe_industry_pctile};
 
 /// Per-symbol direct series (order matters for columns).
 pub(crate) const DIRECT_SERIES: &[&str] = &["analyst_upside_pct", "consensus_rating", "fcf_yield"];

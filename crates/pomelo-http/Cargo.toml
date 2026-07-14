@@ -1,0 +1,20 @@
+[package]
+name = "pomelo-http"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+rust-version.workspace = true
+description = "Shared HTTP client, rate-limit/retry Fetcher, and WriteMode for the pomelo-* bring-your-own-key market-data sync crates. No vendor logic."
+keywords = ["http", "backtesting", "finance", "market-data"]
+categories = ["finance"]
+
+[dependencies]
+serde_json = { workspace = true }
+# Real ureq-backed `UreqClient`, behind the default-off `ureq` feature so a
+# networking-free dependent can supply its own `HttpClient` without the TLS stack.
+ureq = { version = "3.3.0", default-features = false, features = ["rustls"], optional = true }
+
+[features]
+ureq = ["dep:ureq"]

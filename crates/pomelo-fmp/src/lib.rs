@@ -44,7 +44,7 @@ mod config;
 mod delisted;
 /// Pure, I/O-free snapshot-factor formulas — the canonical implementation the
 /// CLI, a Rust service, and (later) wasm/PyO3 bindings all share.
-pub mod factors;
+mod factors;
 mod fundamentals;
 mod http;
 mod index;

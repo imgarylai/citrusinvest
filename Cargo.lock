@@ -1331,8 +1331,8 @@ version = "0.10.0"
 dependencies = [
  "flate2",
  "pomelo-data",
+ "pomelo-http",
  "serde_json",
- "ureq",
  "yuzu-core",
 ]
 
@@ -1369,8 +1369,8 @@ version = "0.10.0"
 dependencies = [
  "flate2",
  "pomelo-data",
+ "pomelo-http",
  "serde_json",
- "ureq",
  "yuzu-core",
 ]
 
@@ -1380,8 +1380,8 @@ version = "0.10.0"
 dependencies = [
  "flate2",
  "pomelo-data",
+ "pomelo-http",
  "serde_json",
- "ureq",
  "yuzu-core",
 ]
 
@@ -1391,9 +1391,17 @@ version = "0.10.0"
 dependencies = [
  "flate2",
  "pomelo-data",
+ "pomelo-http",
+ "serde_json",
+ "yuzu-core",
+]
+
+[[package]]
+name = "pomelo-http"
+version = "0.10.0"
+dependencies = [
  "serde_json",
  "ureq",
- "yuzu-core",
 ]
 
 [[package]]
