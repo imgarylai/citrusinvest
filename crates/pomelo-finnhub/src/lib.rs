@@ -10,7 +10,7 @@
 //! <out>/prices/{SYM}.csv.gz        adjusted OHLCV                 (#226)
 //! <out>/fundamentals/{SYM}.csv.gz  dense forward-filled factors   (#228)
 //! <out>/tracked/universe.csv.gz    symbol,sector,market_cap       (#227)
-//! <out>/panels/{name}.csv.gz       membership / snapshot panels   (later #229–#230)
+//! <out>/panels/in_sp500.csv.gz     point-in-time SPX membership   (#229)
 //! ```
 //!
 //! ## Reuse across CLI and service
@@ -35,6 +35,10 @@
 //! - **Fundamentals (#228):** annual `/stock/financials-reported` densified into
 //!   `FUNDAMENTAL_FIELDS` + `report_event`, visible on the real **`filedDate`**
 //!   (period-end fallback when absent) — a truer PIT story than AV's period-end.
+//! - **Index PIT + screener (#229):** reconstruct S&P 500 membership from
+//!   `index/constituents` + `index/historical-constituents` → `panels/in_sp500.csv.gz`
+//!   (the Finnhub strength AV lacked); `finnhub-symbols` lists an exchange's
+//!   universe via `/stock/symbol` (not a cap screener).
 //!
 //! Coverage / accepted gaps: spike
 //! [#208](https://github.com/citrusquant/citrusquant/issues/208) and
@@ -43,8 +47,10 @@
 mod config;
 mod fundamentals;
 mod http;
+mod index;
 mod industry;
 mod price;
+mod screener;
 mod symbol;
 mod sync;
 mod util;
@@ -54,7 +60,9 @@ pub use config::{SyncConfig, SyncSummary, WriteMode};
 #[cfg(feature = "finnhub-sync")]
 pub use http::UreqClient;
 pub use http::{HttpClient, HttpError};
+pub use index::{write_index_membership, Index, IndexMembership, MEMBERSHIP_SERIES};
 pub use industry::INDUSTRY_KEY;
+pub use screener::{build_symbol_list, SymbolFilter};
 pub use symbol::{layout_symbol, parse_symbols_list, split_symbol};
 pub use sync::{sync, sync_into, FINNHUB_BASE};
 
