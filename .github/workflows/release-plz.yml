@@ -4,19 +4,75 @@ on:
   push:
     branches: [main]
 
-# release-plz opens/updates a release PR, and on merge tags + publishes.
+# release-plz opens/updates a release PR, and on merge tags + publishes to
+# crates.io. That tag/release is created with the default GITHUB_TOKEN, which
+# GitHub's recursion guard stops from firing other workflows' `on: release
+# published` trigger — so instead of relying on that event, the jobs below
+# call the binary/npm-publish workflows directly (`workflow_call`) in this
+# same run. Each callee keeps its `workflow_dispatch` / `release: published`
+# triggers too, as manual / human-published-release fallbacks.
 jobs:
   release-plz:
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
+    outputs:
+      releases_created: ${{ steps.release-plz.outputs.releases_created }}
+      releases: ${{ steps.release-plz.outputs.releases }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
-      - uses: release-plz/action@v0.5
+      - id: release-plz
+        uses: release-plz/action@v0.5
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  # lemon-cli / lemon-lsp are `publish = false` and track the workspace
+  # version, so they have no tag of their own — lemon-lang's tag (present in
+  # every release batch; the workspace version is bumped for every crate
+  # together) is the canonical one to build binaries from and attach them to,
+  # matching the manual workflow_dispatch instructions in the callees.
+  resolve-lemon-tag:
+    needs: release-plz
+    if: needs.release-plz.outputs.releases_created == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.find.outputs.tag }}
+    steps:
+      - id: find
+        env:
+          RELEASES_JSON: ${{ needs.release-plz.outputs.releases }}
+        run: |
+          set -euo pipefail
+          tag=$(echo "$RELEASES_JSON" | jq -r '[.[] | select(.package_name=="lemon-lang") | .tag] | first // ""')
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  lemon-binaries:
+    needs: resolve-lemon-tag
+    if: needs.resolve-lemon-tag.outputs.tag != ''
+    permissions:
+      contents: write
+    uses: ./.github/workflows/lemon-release.yml
+    with:
+      tag: ${{ needs.resolve-lemon-tag.outputs.tag }}
+
+  lemon-lsp-binaries:
+    needs: resolve-lemon-tag
+    if: needs.resolve-lemon-tag.outputs.tag != ''
+    permissions:
+      contents: write
+    uses: ./.github/workflows/lemon-lsp-release.yml
+    with:
+      tag: ${{ needs.resolve-lemon-tag.outputs.tag }}
+
+  publish-npm:
+    needs: release-plz
+    if: needs.release-plz.outputs.releases_created == 'true'
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/publish-wasm-npm.yml
