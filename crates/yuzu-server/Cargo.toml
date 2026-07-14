@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-readme.workspace = true
+readme = "README.md"
 description = "HTTP backtest server that reads only the series a spec references and runs yuzu-core."
 publish = false
 
