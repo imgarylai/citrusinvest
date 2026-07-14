@@ -8,7 +8,7 @@
 //!
 //! ```text
 //! <out>/prices/{SYM}.csv.gz        adjusted OHLCV                 (#226)
-//! <out>/fundamentals/{SYM}.csv.gz  dense forward-filled factors   (later #228)
+//! <out>/fundamentals/{SYM}.csv.gz  dense forward-filled factors   (#228)
 //! <out>/tracked/universe.csv.gz    symbol,sector,market_cap       (#227)
 //! <out>/panels/{name}.csv.gz       membership / snapshot panels   (later #229–#230)
 //! ```
@@ -32,12 +32,16 @@
 //!   `tracked/universe.csv.gz`. **No delisted feed:** Finnhub has no clean
 //!   `LISTING_STATUS`-style dead-name list, so a Finnhub-only universe is
 //!   survivor-biased — documented, not faked (see `industry` module docs).
+//! - **Fundamentals (#228):** annual `/stock/financials-reported` densified into
+//!   `FUNDAMENTAL_FIELDS` + `report_event`, visible on the real **`filedDate`**
+//!   (period-end fallback when absent) — a truer PIT story than AV's period-end.
 //!
 //! Coverage / accepted gaps: spike
 //! [#208](https://github.com/citrusquant/citrusquant/issues/208) and
 //! [`docs/data-sources.md`](../../../docs/data-sources.md) § Finnhub.
 
 mod config;
+mod fundamentals;
 mod http;
 mod industry;
 mod price;

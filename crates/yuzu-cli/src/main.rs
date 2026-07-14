@@ -678,7 +678,7 @@ enum Cmd {
         from: i32,
         #[arg(long, default_value_t = 20991231)]
         to: i32,
-        /// Also densify statement factors (later phase).
+        /// Also densify annual `/stock/financials-reported` → fundamentals/{SYM}.csv.gz.
         #[arg(long)]
         include_fundamentals: bool,
         /// Also fetch `/stock/profile2` sector/market-cap → tracked/universe.csv.gz.
