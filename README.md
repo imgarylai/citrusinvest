@@ -70,7 +70,7 @@ strategy.lemon`, read the report (Linux / macOS; checksum-verified prebuilt
 binaries from GitHub Releases):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/citrusquant/citrusquant/main/scripts/install.sh | sh
+curl -fsSL https://citrusquant.com/install.sh | sh
 ```
 
 See [`docs/lemon.md`](docs/lemon.md) for the language and the runner

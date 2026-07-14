@@ -33,7 +33,7 @@ that wires the parser to `yuzu-research`'s backtest runner.
 Prebuilt binaries (Linux / macOS; checksum-verified):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/citrusquant/citrusquant/main/scripts/install.sh | sh
+curl -fsSL https://citrusquant.com/install.sh | sh
 ```
 
 Windows: grab `lemon-x86_64-pc-windows-msvc.exe` from the

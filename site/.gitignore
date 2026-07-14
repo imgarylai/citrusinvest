@@ -1,6 +1,8 @@
 # build output
 dist/
 .astro/
+# synced at build from ../scripts/install.sh (scripts/sync-public-assets.mjs)
+public/install.sh
 
 # deps
 node_modules/
