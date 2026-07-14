@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0](https://github.com/citrusquant/citrusquant/compare/pomelo-audit-v0.11.0...pomelo-audit-v0.12.0) - 2026-07-14
+
+### Other
+
+- give each crate its own README
+
 ## [0.11.0](https://github.com/citrusquant/citrusquant/compare/pomelo-audit-v0.10.0...pomelo-audit-v0.11.0) - 2026-07-14
 
 ### Added

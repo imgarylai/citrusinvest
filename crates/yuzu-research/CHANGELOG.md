@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0](https://github.com/citrusquant/citrusquant/compare/yuzu-research-v0.11.0...yuzu-research-v0.12.0) - 2026-07-14
+
+### Added
+
+- load the series a strategy actually references (CLI path) ([#251](https://github.com/citrusquant/citrusquant/pull/251))
+- [**breaking**] scope backtests to an explicit symbols universe ([#250](https://github.com/citrusquant/citrusquant/pull/250))
+
+### Other
+
+- give each crate its own README
+
 ## [0.11.0](https://github.com/citrusquant/citrusquant/compare/yuzu-research-v0.10.0...yuzu-research-v0.11.0) - 2026-07-14
 
 ### Added
