@@ -190,6 +190,37 @@ mod tests {
     }
 
     #[test]
+    fn non_object_payload_errors() {
+        let err = parse_price_payload(&json!([1, 2, 3]), &cfg()).unwrap_err();
+        assert!(err.contains("not a JSON object"), "{err}");
+    }
+
+    #[test]
+    fn unknown_status_errors() {
+        let err = parse_price_payload(&json!({"s": "error"}), &cfg()).unwrap_err();
+        assert!(err.contains("status: error"), "{err}");
+    }
+
+    #[test]
+    fn skips_non_finite_timestamp_and_close() {
+        // First bar has a null (→ NaN) timestamp; second has a null close.
+        // Both are dropped; only the third valid bar survives.
+        let v = json!({
+            "s": "ok",
+            "t": [null, T3, T4],
+            "o": [9.5, 10.1, 11.0],
+            "h": [11.0, 11.5, 12.0],
+            "l": [9.0, 9.8, 10.5],
+            "c": [10.0, null, 11.5],
+            "v": [1000, 1100, 1200]
+        });
+        let out = parse_price_payload(&v, &cfg()).unwrap();
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].day, 20240104);
+        assert_eq!(out[0].adj_close, 11.5);
+    }
+
+    #[test]
     fn maps_adjusted_candles_through() {
         let out = parse_price_payload(&sample_payload(), &cfg()).unwrap();
         assert_eq!(out.len(), 3);

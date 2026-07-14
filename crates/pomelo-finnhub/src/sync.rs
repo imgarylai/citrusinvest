@@ -438,6 +438,87 @@ mod tests {
     }
 
     #[test]
+    fn price_write_failure_recorded() {
+        use pomelo_data::error::DataError;
+        use pomelo_data::{ObjectSink, ObjectSource};
+
+        // A store whose writes always fail; reads are empty.
+        struct FailSink;
+        impl ObjectSource for FailSink {
+            fn get(&self, _key: &str) -> Result<Option<Vec<u8>>, DataError> {
+                Ok(None)
+            }
+        }
+        impl ObjectSink for FailSink {
+            fn put(&self, _key: &str, _bytes: &[u8]) -> Result<(), DataError> {
+                Err(DataError::Io("disk full".into()))
+            }
+        }
+
+        let http = OkHttp {
+            body: candle(&[T2, T3, T4]),
+        };
+        let summary = sync_into(&http, "demo", &["AAPL".into()], &FailSink, &cfg()).unwrap();
+        assert_eq!(summary.symbols_written, 0);
+        assert_eq!(summary.failures.len(), 1);
+        assert!(
+            summary.failures[0].1.contains("disk full"),
+            "{:?}",
+            summary.failures
+        );
+    }
+
+    #[test]
+    fn profile_without_industry_writes_no_row() {
+        let dir = std::env::temp_dir().join("pomelo_fh_profile_no_ind");
+        let _ = std::fs::remove_dir_all(&dir);
+        // Market cap present but no `finnhubIndustry` → no universe row.
+        let http = RouteHttp {
+            routes: vec![
+                ("stock/candle", candle(&[T2, T3, T4])),
+                (
+                    "stock/profile2",
+                    br#"{"marketCapitalization":1000}"#.to_vec(),
+                ),
+            ],
+            default: b"{}".to_vec(),
+        };
+        let mut c = cfg();
+        c.include_industry = true;
+        let summary = sync(&http, "demo", &["AAPL".into()], &dir, &c).unwrap();
+        assert_eq!(summary.symbols_written, 1);
+        assert!(!summary.industry_written);
+    }
+
+    #[test]
+    fn industry_fetch_error_recorded_not_fatal() {
+        let dir = std::env::temp_dir().join("pomelo_fh_ind_err");
+        let _ = std::fs::remove_dir_all(&dir);
+        // Candles succeed; profile2 hard-fails (e.g. plan-gated).
+        struct CandleOkProfileErr(Vec<u8>);
+        impl HttpClient for CandleOkProfileErr {
+            fn get(&self, url: &str) -> Result<Vec<u8>, HttpError> {
+                if url.contains("stock/candle") {
+                    Ok(self.0.clone())
+                } else {
+                    Err(HttpError::Status(403))
+                }
+            }
+        }
+        let http = CandleOkProfileErr(candle(&[T2, T3, T4]));
+        let mut c = cfg();
+        c.include_industry = true;
+        let summary = sync(&http, "demo", &["AAPL".into()], &dir, &c).unwrap();
+        // Price still written; industry failure recorded, batch not aborted.
+        assert_eq!(summary.symbols_written, 1);
+        assert!(!summary.industry_written);
+        assert!(summary
+            .failures
+            .iter()
+            .any(|(s, _)| s.contains("(industry)")));
+    }
+
+    #[test]
     fn resume_fills_missing_industry() {
         let dir = std::env::temp_dir().join("pomelo_fh_resume_ind");
         let _ = std::fs::remove_dir_all(&dir);

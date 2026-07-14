@@ -147,7 +147,111 @@ pub(crate) fn encode_industry(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::SyncConfig;
+    use crate::http::{HttpClient, HttpError};
     use serde_json::json;
+    use std::time::Duration;
+
+    fn no_throttle() -> SyncConfig {
+        SyncConfig {
+            rate_limit_per_min: 0,
+            max_retries: 0,
+            backoff_base: Duration::ZERO,
+            ..SyncConfig::default()
+        }
+    }
+
+    struct OneShot(Result<Vec<u8>, HttpError>);
+    impl HttpClient for OneShot {
+        fn get(&self, _url: &str) -> Result<Vec<u8>, HttpError> {
+            self.0.clone()
+        }
+    }
+
+    #[test]
+    fn str_field_filters_placeholders() {
+        assert_eq!(
+            str_field(&json!("Technology")).as_deref(),
+            Some("Technology")
+        );
+        assert_eq!(str_field(&json!("  Retail ")).as_deref(), Some("Retail"));
+        assert!(str_field(&json!("")).is_none());
+        assert!(str_field(&json!("None")).is_none());
+        assert!(str_field(&json!("-")).is_none());
+        assert!(str_field(&json!(42)).is_none());
+    }
+
+    #[test]
+    fn f64_field_parses_numbers_and_strings() {
+        assert_eq!(f64_field(&json!(2500000.0)), Some(2_500_000.0));
+        assert_eq!(f64_field(&json!("2500000")), Some(2_500_000.0));
+        assert_eq!(f64_field(&json!("  1.5 ")), Some(1.5));
+        assert_eq!(f64_field(&json!("None")), None);
+        assert_eq!(f64_field(&json!("-")), None);
+        assert_eq!(f64_field(&json!("")), None);
+        assert_eq!(f64_field(&json!(true)), None);
+    }
+
+    #[test]
+    fn parse_profile_string_mcap_and_industry_only() {
+        // Market cap as a numeric string still scales millions → absolute.
+        let p =
+            parse_profile(&json!({"finnhubIndustry": "Retail", "marketCapitalization": "1000"}))
+                .unwrap();
+        assert_eq!(p.industry.as_deref(), Some("Retail"));
+        assert_eq!(p.market_cap, Some(1e9));
+
+        // Industry present, market cap absent.
+        let p = parse_profile(&json!({"finnhubIndustry": "Energy"})).unwrap();
+        assert_eq!(p.industry.as_deref(), Some("Energy"));
+        assert!(p.market_cap.is_none());
+    }
+
+    #[test]
+    fn parse_profile_non_object_errors() {
+        let err = parse_profile(&json!([1, 2, 3])).unwrap_err();
+        assert!(err.contains("not a JSON object"), "{err}");
+    }
+
+    #[test]
+    fn fetch_profile_ok_none_and_err() {
+        let cfg = no_throttle();
+        // Populated profile → Some.
+        let http = OneShot(Ok(
+            br#"{"finnhubIndustry":"Technology","marketCapitalization":1000}"#.to_vec(),
+        ));
+        let fetcher = Fetcher::new(&http, &cfg);
+        let got = fetch_profile(&fetcher, "AAPL", "tok").unwrap();
+        assert_eq!(got.unwrap().industry.as_deref(), Some("Technology"));
+
+        // Empty object (dead ticker) → None.
+        let http = OneShot(Ok(b"{}".to_vec()));
+        let fetcher = Fetcher::new(&http, &cfg);
+        assert!(fetch_profile(&fetcher, "DEAD", "tok").unwrap().is_none());
+
+        // Transport/status failure → Err.
+        let http = OneShot(Err(HttpError::Status(403)));
+        let fetcher = Fetcher::new(&http, &cfg);
+        assert!(fetch_profile(&fetcher, "AAPL", "tok").is_err());
+    }
+
+    #[test]
+    fn decode_csv_text_reads_plain_bytes() {
+        // Non-gzip bytes fall through to lossy UTF-8.
+        assert_eq!(
+            decode_csv_text(b"symbol,sector,market_cap\n"),
+            "symbol,sector,market_cap\n"
+        );
+    }
+
+    #[test]
+    fn load_existing_industry_missing_is_empty() {
+        use pomelo_data::LocalSource;
+        let dir = std::env::temp_dir().join("pomelo_fh_industry_missing");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        assert!(load_existing_industry(&LocalSource::new(&dir)).is_empty());
+    }
 
     #[test]
     fn parse_profile_fields_and_mcap_scale() {
