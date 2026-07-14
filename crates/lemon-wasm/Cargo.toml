@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-readme.workspace = true
+readme = "README.md"
 description = "WASM boundary for the lemon DSL: parse .lemon source to and from the JSON Expr tree."
 publish = false
 
