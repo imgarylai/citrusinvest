@@ -19,8 +19,10 @@ The `lemon` command-line tool for the lemon strategy DSL — part of
   ```
 
   Run parameters can live in the file itself as `#!` front-matter (`name`,
-  `universe`, `config`, `price-key`) — precedence is flag > document >
-  environment > default. See the
+  `universe`, `symbols`, `require`, `data-source`, `config`, `price-key`) —
+  precedence is flag > document > environment > default. With `--sync` (and
+  your own `$FMP_API_KEY`), missing symbols are fetched through the file's
+  declared `data-source` before the run. See the
   [lemon reference](https://github.com/citrusquant/citrusquant/blob/main/docs/lemon.md)
   for the full syntax.
 

@@ -999,6 +999,7 @@ version = "0.11.0"
 dependencies = [
  "lemon-lang",
  "pomelo-data",
+ "pomelo-fmp",
  "serde",
  "serde_json",
  "yuzu-core",
