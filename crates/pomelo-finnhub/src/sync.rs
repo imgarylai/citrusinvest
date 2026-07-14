@@ -4,8 +4,12 @@
 //! with resume/append modes.
 //!
 //! Industry (#227): `--include-industry` adds `/stock/profile2` sector/market-cap
-//! → `tracked/universe.csv.gz`. Fundamentals / index / snapshot land in later
-//! epic #210 phases; those config flags are accepted but inert for now.
+//! → `tracked/universe.csv.gz`.
+//!
+//! Fundamentals (#228): `--include-fundamentals` densifies annual
+//! `/stock/financials-reported` (filing-date visibility) → `fundamentals/{SYM}.csv.gz`.
+//! Index / snapshot land in later epic #210 phases; those config flags are
+//! accepted but inert for now.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -14,6 +18,7 @@ use pomelo_data::csv_io::write_series;
 use pomelo_data::{LocalSource, ObjectSink, ObjectSource, PRICES_DIR};
 
 use super::config::{SyncConfig, SyncSummary, WriteMode};
+use super::fundamentals::sync_fundamentals;
 use super::http::{Fetcher, HttpClient};
 use super::industry::{encode_industry, fetch_profile, load_existing_industry, INDUSTRY_KEY};
 use super::price::{parse_price_payload, price_url, read_existing_prices};
@@ -40,8 +45,9 @@ pub fn sync<H: HttpClient>(
 /// `WriteMode::Resume` skips symbols that already have a price file;
 /// `WriteMode::Append` merges the fetched window into the existing file. With
 /// `include_industry`, also builds `tracked/universe.csv.gz` from
-/// `/stock/profile2`. The remaining `include_*` flags are reserved for later
-/// #210 phases and have no effect yet.
+/// `/stock/profile2`; with `include_fundamentals`, densifies annual
+/// `/stock/financials-reported` into `fundamentals/{SYM}.csv.gz`. The remaining
+/// `include_*` flags are reserved for later #210 phases and have no effect yet.
 pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
     http: &H,
     api_key: &str,
@@ -132,6 +138,20 @@ pub fn sync_into<H: HttpClient, S: ObjectSink + ObjectSource>(
                 eprintln!("{layout}: encode failed: {e}");
                 summary.failures.push((layout, e));
                 continue;
+            }
+        }
+
+        if cfg.include_fundamentals {
+            let price_days: Vec<i32> = rows.iter().map(|r| r.day).collect();
+            match sync_fundamentals(&fetcher, store, &layout, &fh, api_key, &price_days) {
+                Ok(true) => summary.fundamentals_written += 1,
+                Ok(false) => eprintln!("{layout}: no annual filings"),
+                Err(e) => {
+                    eprintln!("{layout}: fundamentals skipped: {e}");
+                    summary
+                        .failures
+                        .push((format!("{layout} (fundamentals)"), e));
+                }
             }
         }
 
@@ -229,6 +249,13 @@ mod tests {
     }
 
     const PROFILE2: &str = r#"{"ticker":"AAPL","name":"Apple","finnhubIndustry":"Technology","marketCapitalization":2500000}"#;
+
+    // As-reported filing with a filedDate inside the candle window.
+    const FINANCIALS: &str = r#"{"cik":"1","data":[{"year":2023,"form":"10-K",
+        "endDate":"2023-12-31 00:00:00","filedDate":"2024-01-02 00:00:00",
+        "report":{"ic":[{"concept":"us-gaap_Revenues","value":100},
+            {"concept":"us-gaap_NetIncomeLoss","value":20}],
+        "bs":[{"concept":"us-gaap_StockholdersEquity","value":120}]}}]}"#;
 
     fn cfg() -> SyncConfig {
         SyncConfig {
@@ -466,6 +493,52 @@ mod tests {
             "{:?}",
             summary.failures
         );
+    }
+
+    #[test]
+    fn fundamentals_flag_writes_dense_file() {
+        let dir = std::env::temp_dir().join("pomelo_fh_fund_flag");
+        let _ = std::fs::remove_dir_all(&dir);
+        let http = RouteHttp {
+            routes: vec![
+                ("stock/candle", candle(&[T2, T3, T4])),
+                ("financials-reported", FINANCIALS.as_bytes().to_vec()),
+            ],
+            default: b"{}".to_vec(),
+        };
+        let mut c = cfg();
+        c.include_fundamentals = true;
+        let summary = sync(&http, "demo", &["AAPL".into()], &dir, &c).unwrap();
+        assert_eq!(summary.symbols_written, 1);
+        assert_eq!(summary.fundamentals_written, 1);
+        assert!(dir.join("fundamentals/AAPL.csv.gz").exists());
+    }
+
+    #[test]
+    fn fundamentals_error_recorded_not_fatal() {
+        let dir = std::env::temp_dir().join("pomelo_fh_fund_flag_err");
+        let _ = std::fs::remove_dir_all(&dir);
+        // Candle OK; financials-reported hard-fails.
+        struct CandleOkFinErr(Vec<u8>);
+        impl HttpClient for CandleOkFinErr {
+            fn get(&self, url: &str) -> Result<Vec<u8>, HttpError> {
+                if url.contains("stock/candle") {
+                    Ok(self.0.clone())
+                } else {
+                    Err(HttpError::Status(403))
+                }
+            }
+        }
+        let http = CandleOkFinErr(candle(&[T2, T3, T4]));
+        let mut c = cfg();
+        c.include_fundamentals = true;
+        let summary = sync(&http, "demo", &["AAPL".into()], &dir, &c).unwrap();
+        assert_eq!(summary.symbols_written, 1);
+        assert_eq!(summary.fundamentals_written, 0);
+        assert!(summary
+            .failures
+            .iter()
+            .any(|(s, _)| s.contains("(fundamentals)")));
     }
 
     #[test]

@@ -19,6 +19,17 @@ pub(crate) fn unix_to_i32(secs: i64) -> i32 {
     (y * 10000 + m * 100 + d) as i32
 }
 
+/// Parse a Finnhub date string (`YYYY-MM-DD` with an optional trailing time,
+/// e.g. `"2023-11-03 00:00:00"`) into packed `YYYYMMDD`.
+pub(crate) fn iso_to_i32(s: &str) -> Option<i32> {
+    let date = s.split_whitespace().next()?.trim();
+    let digits: String = date.chars().filter(|c| *c != '-').collect();
+    if digits.len() != 8 {
+        return None;
+    }
+    digits.parse().ok()
+}
+
 /// Days since 1970-01-01 for a proleptic Gregorian civil date.
 fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     let y = if m <= 2 { y - 1 } else { y };
@@ -67,5 +78,15 @@ mod tests {
         for packed in [20000101, 20080229, 20191231, 20200101, 20241231, 20991231] {
             assert_eq!(unix_to_i32(i32_to_unix(packed)), packed, "{packed}");
         }
+    }
+
+    #[test]
+    fn iso_to_i32_parses_date_and_datetime() {
+        assert_eq!(iso_to_i32("2023-11-03"), Some(20231103));
+        assert_eq!(iso_to_i32("2023-11-03 00:00:00"), Some(20231103));
+        assert_eq!(iso_to_i32("  2024-01-02 18:08:27 "), Some(20240102));
+        assert_eq!(iso_to_i32("garbage"), None);
+        assert_eq!(iso_to_i32(""), None);
+        assert_eq!(iso_to_i32("2023-1-3"), None); // not zero-padded → 6 digits
     }
 }
