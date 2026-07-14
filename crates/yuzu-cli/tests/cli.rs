@@ -164,6 +164,91 @@ fn scopes_the_universe_to_an_explicit_symbol_list() {
 }
 
 #[test]
+fn loads_the_series_a_strategy_references() {
+    use pomelo_data::fundamentals::{write_fundamentals, FundamentalRow, FUNDAMENTAL_FIELDS};
+
+    let dir = fixture("refseries");
+    // fundamentals/: AAA cheap (pe 5), BBB expensive (pe 50), all three days.
+    let fdir = dir.join("fundamentals");
+    fs::create_dir_all(&fdir).unwrap();
+    for (sym, pe) in [("AAA", 5.0_f64), ("BBB", 50.0)] {
+        let rows: Vec<FundamentalRow> = (0..3)
+            .map(|i| {
+                let mut values = vec![f64::NAN; FUNDAMENTAL_FIELDS.len()];
+                values[0] = pe; // FUNDAMENTAL_FIELDS[0] == "pe"
+                FundamentalRow {
+                    day: 20240102 + i,
+                    values,
+                    report_event: 0.0,
+                }
+            })
+            .collect();
+        fs::write(
+            fdir.join(format!("{sym}.csv.gz")),
+            write_fundamentals(&rows).unwrap(),
+        )
+        .unwrap();
+    }
+    // tracked/: the industry map for in_sector.
+    let tdir = dir.join("tracked");
+    fs::create_dir_all(&tdir).unwrap();
+    fs::write(
+        tdir.join("universe.csv"),
+        "symbol,sector\nAAA,Tech\nBBB,Energy\n",
+    )
+    .unwrap();
+
+    // A fundamentals strategy now runs on the CLI path: cheapest-by-pe holds
+    // AAA (pe 5) every day, so equity rides AAA's 10→11→12.
+    let spec = r#"{"op":"IsSmallest","of":{"op":"Data","name":"pe"},"n":1}"#;
+    let report = run_single(
+        &dir,
+        spec,
+        20240102,
+        20240104,
+        &Default::default(),
+        "close",
+        None,
+    )
+    .unwrap();
+    for (got, want) in report.equity.iter().zip([1.0, 1.1, 1.2]) {
+        assert!((got - want).abs() < 1e-9, "{:?}", report.equity);
+    }
+
+    // A strategy referencing `high` loads it on demand (previously: unknown
+    // series unless a stop flag happened to force-load OHLC).
+    let spec = r#"{"op":"IsLargest","of":{"op":"Data","name":"high"},"n":1}"#;
+    let report = run_single(
+        &dir,
+        spec,
+        20240102,
+        20240104,
+        &Default::default(),
+        "close",
+        None,
+    )
+    .unwrap();
+    assert_eq!(report.equity.len(), 3);
+
+    // Industry ops see the tracked/ sector map: masking to Tech leaves AAA only.
+    let spec = r#"{"op":"Mask","of":{"op":"Data","name":"close"},
+        "by":{"op":"InSector","of":{"op":"Data","name":"close"},"name":"Tech"}}"#;
+    let report = run_single(
+        &dir,
+        spec,
+        20240102,
+        20240104,
+        &Default::default(),
+        "close",
+        None,
+    )
+    .unwrap();
+    for (got, want) in report.equity.iter().zip([1.0, 1.1, 1.2]) {
+        assert!((got - want).abs() < 1e-9, "{:?}", report.equity);
+    }
+}
+
+#[test]
 fn price_key_selects_the_execution_and_return_series() {
     // One symbol whose OPEN and CLOSE tell different stories: open rises
     // 10→12→14 (+40%), close falls 10→9→8 (−20%). A buy-and-hold's total

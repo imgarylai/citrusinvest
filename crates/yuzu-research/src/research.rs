@@ -6,7 +6,7 @@ use std::path::Path;
 
 use yuzu_core::backtest::BacktestConfig;
 
-use crate::ctx::load_ctx;
+use crate::ctx::{load_ctx, referenced_series};
 
 /// Factor report (#45): evaluate `spec` to a factor panel, form `horizon`-day
 /// forward returns from close, and return rank-IC / quantile diagnostics as
@@ -21,7 +21,15 @@ pub fn run_factor(
     quantiles: usize,
     neutralize_industry: bool,
 ) -> Result<yuzu_core::research::FactorReport, String> {
-    let ctx = load_ctx(root, from, to, &BacktestConfig::default(), "close", None)?;
+    let ctx = load_ctx(
+        root,
+        from,
+        to,
+        &BacktestConfig::default(),
+        "close",
+        None,
+        &referenced_series(&[spec_json]),
+    )?;
     let mut factor = yuzu_core::run_strategy(spec_json, &ctx).map_err(|e| e.to_string())?;
     if neutralize_industry {
         factor = factor.neutralize_industry(&ctx.industry, true);
@@ -42,7 +50,15 @@ pub fn run_event(
     pre: usize,
     post: usize,
 ) -> Result<yuzu_core::research::EventStudy, String> {
-    let ctx = load_ctx(root, from, to, &BacktestConfig::default(), "close", None)?;
+    let ctx = load_ctx(
+        root,
+        from,
+        to,
+        &BacktestConfig::default(),
+        "close",
+        None,
+        &referenced_series(&[spec_json]),
+    )?;
     let events = yuzu_core::run_strategy(spec_json, &ctx).map_err(|e| e.to_string())?;
     let close = ctx.panels.get("close").ok_or("no close panel")?;
     let rets = yuzu_core::research::daily_returns(close);

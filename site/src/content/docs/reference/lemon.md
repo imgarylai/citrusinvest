@@ -553,11 +553,12 @@ close > sma(close, 20) and rsi(close, 14) < 70
 `lemon run strategy.json` runs a [strategy envelope](../reference/strategy-envelope)
 the same way, taking `config` and the `universe` window from the document.
 
-One scope note, shared with `yuzu-cli`: the CLI data loader reads **close**
-(plus **volume** / a **benchmark** symbol when the config needs them) from
-`prices/` — strategies referencing fundamentals (`pe`, …) need `yuzu-server`
-or library code for now
-([#248](https://github.com/citrusquant/citrusquant/issues/248)).
+The runner loads what the strategy references: the `Data` series named in the
+tree (`pe`, `high`, `volume`, …) are resolved against the data layout —
+combined `panels/` files first, then per-symbol prices or `fundamentals/`
+columns — and the `tracked/` industry map feeds the industry ops. A name not
+in the tree still fails at engine evaluation with `unknown series` (the
+classic typo case `lemon lint` catches earlier).
 
 ---
 

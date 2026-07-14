@@ -7,7 +7,7 @@ use std::path::Path;
 use serde::Serialize;
 use yuzu_core::backtest::BacktestConfig;
 
-use crate::ctx::load_ctx;
+use crate::ctx::{load_ctx, referenced_series};
 
 /// Headline metrics of one leg of the lookahead comparison.
 #[derive(Serialize)]
@@ -58,7 +58,15 @@ pub fn run_lookahead(
     if shift_days == 0 {
         return Err("shift_days must be > 0".into());
     }
-    let ctx = load_ctx(root, from, to, cfg, "close", None)?;
+    let ctx = load_ctx(
+        root,
+        from,
+        to,
+        cfg,
+        "close",
+        None,
+        &referenced_series(&[spec_json]),
+    )?;
     let positions = yuzu_core::run_strategy(spec_json, &ctx).map_err(|e| e.to_string())?;
     let prices = ctx.panels.get("close").ok_or("no close panel")?;
     let volume = ctx.panels.get("volume");
@@ -131,7 +139,15 @@ pub fn run_lookahead_profile(
     shifts.sort_unstable();
     shifts.dedup();
 
-    let ctx = load_ctx(root, from, to, cfg, "close", None)?;
+    let ctx = load_ctx(
+        root,
+        from,
+        to,
+        cfg,
+        "close",
+        None,
+        &referenced_series(&[spec_json]),
+    )?;
     let positions = yuzu_core::run_strategy(spec_json, &ctx).map_err(|e| e.to_string())?;
     let prices = ctx.panels.get("close").ok_or("no close panel")?;
     let volume = ctx.panels.get("volume");

@@ -9,7 +9,7 @@ use yuzu_core::backtest::BacktestConfig;
 use yuzu_core::report::Report;
 use yuzu_core::run_backtest;
 
-use crate::ctx::load_ctx;
+use crate::ctx::{load_ctx, referenced_series};
 
 /// Which metric to rank by in a sweep (also the walk-forward selection metric).
 #[derive(Clone, Copy)]
@@ -62,7 +62,15 @@ pub fn run_single(
     price_key: &str,
     symbols: Option<&[String]>,
 ) -> Result<Report, String> {
-    let ctx = load_ctx(root, from, to, cfg, price_key, symbols)?;
+    let ctx = load_ctx(
+        root,
+        from,
+        to,
+        cfg,
+        price_key,
+        symbols,
+        &referenced_series(&[spec_json]),
+    )?;
     run_backtest(spec_json, &ctx, price_key, cfg).map_err(|e| e.to_string())
 }
 
@@ -79,7 +87,16 @@ pub fn run_sweep(
     price_key: &str,
     sort_by: SortKey,
 ) -> Vec<SweepEntry> {
-    let ctx = match load_ctx(root, from, to, cfg, price_key, None) {
+    let specs: Vec<&str> = variants.iter().map(|(_, s)| s.as_str()).collect();
+    let ctx = match load_ctx(
+        root,
+        from,
+        to,
+        cfg,
+        price_key,
+        None,
+        &referenced_series(&specs),
+    ) {
         Ok(v) => v,
         Err(e) => return variants.iter().map(|(n, _)| failed(n, e.clone())).collect(),
     };
