@@ -13,7 +13,8 @@ The `lemon` command-line tool for the lemon strategy DSL — part of
 - `lemon run` — lower a `.lemon` file (or an envelope) and run a native
   backtest over a local
   [data-layout tree](https://github.com/citrusquant/citrusquant/blob/main/docs/data-layout.md),
-  printing the engine's Report JSON. `lemon strategy.lemon` is short for it:
+  printing a human-readable metrics summary (or the full Report JSON with
+  `--json`). `lemon strategy.lemon` is short for it:
 
   ```bash
   lemon run strategy.lemon --data ~/qdata --from 20180101 --fee-ratio 0.001
