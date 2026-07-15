@@ -13,8 +13,11 @@
 //! lemon check [file...]                             (envelopes + .lemon front-matter)
 //! lemon run   [--data <dir>] [--from N] [--to N] [--fee-ratio F]
 //!             [--slippage-ratio F] [--price-key K] [--benchmark SYM]
-//!             [--symbols A,B] [--sync] [--out path] [file]
+//!             [--symbols A,B] [--sync] [--json] [--out path] [file]
 //! ```
+//!
+//! `run` prints a human-readable metrics summary by default; `--json` emits the
+//! full `Report` as JSON to stdout, and `--out path` writes that JSON to a file.
 //!
 //! `run` accepts a `.lemon` file (with optional `#!` front-matter, see
 //! [`frontmatter`]) or a strategy-envelope JSON document; parameter precedence
@@ -346,6 +349,8 @@ struct RunFlags {
     sync: bool,
     /// Report destination; `None` = stdout.
     out: Option<PathBuf>,
+    /// Print the full `Report` JSON to stdout instead of the human summary.
+    json: bool,
 }
 
 fn parse_run_flags(args: Vec<String>) -> Result<RunFlags, String> {
@@ -376,6 +381,7 @@ fn parse_run_flags(args: Vec<String>) -> Result<RunFlags, String> {
                 )
             }
             "--sync" => flags.sync = true,
+            "--json" => flags.json = true,
             "--out" => flags.out = Some(PathBuf::from(value("--out", it.next())?)),
             _ if a.starts_with('-') => return Err(format!("unknown flag `{a}`")),
             _ => {
@@ -602,25 +608,72 @@ fn run_run(args: Vec<String>) -> ExitCode {
             }
         },
     };
-    match run_strategy(&path, &src, &flags, std::env::var("CITRUS_DATA").ok()) {
-        Ok(json) => match &flags.out {
-            Some(out) => {
-                if let Err(e) = std::fs::write(out, format!("{json}\n")) {
-                    eprintln!("lemon: {}: {e}", out.display());
-                    return ExitCode::FAILURE;
-                }
-                ExitCode::SUCCESS
-            }
-            None => {
-                println!("{json}");
-                ExitCode::SUCCESS
-            }
-        },
+    let json = match run_strategy(&path, &src, &flags, std::env::var("CITRUS_DATA").ok()) {
+        Ok(json) => json,
         Err(e) => {
             eprintln!("{e}");
-            ExitCode::FAILURE
+            return ExitCode::FAILURE;
+        }
+    };
+    // `--out` always writes the full JSON report (the machine artifact).
+    if let Some(out) = &flags.out {
+        if let Err(e) = std::fs::write(out, format!("{json}\n")) {
+            eprintln!("lemon: {}: {e}", out.display());
+            return ExitCode::FAILURE;
         }
     }
+    // stdout: the human summary by default, the full JSON under `--json`.
+    if flags.json {
+        println!("{json}");
+    } else {
+        match summarize(&path, &json) {
+            Ok(summary) => println!("{summary}"),
+            Err(e) => {
+                eprintln!("{e}");
+                return ExitCode::FAILURE;
+            }
+        }
+    }
+    ExitCode::SUCCESS
+}
+
+/// Format a compact human summary of a backtest `Report` (parsed back from the
+/// engine's JSON, so `run_strategy` stays JSON-typed). `lemon run` prints this
+/// by default; `--json` / `--out` emit the full report. Lenient: a missing
+/// metric renders as `NaN` rather than failing an otherwise-good run.
+fn summarize(path: &str, report_json: &str) -> Result<String, String> {
+    use std::fmt::Write as _;
+    let v: serde_json::Value =
+        serde_json::from_str(report_json).map_err(|e| format!("lemon: {e}"))?;
+    let empty = Vec::new();
+    let equity = v["equity"].as_array().unwrap_or(&empty);
+    let dates = v["dates"].as_array().unwrap_or(&empty);
+    let final_eq = equity.last().and_then(|x| x.as_f64()).unwrap_or(f64::NAN);
+    let first = dates.first().and_then(|x| x.as_i64());
+    let last = dates.last().and_then(|x| x.as_i64());
+    let met = |k: &str| v["metrics"][k].as_f64().unwrap_or(f64::NAN);
+
+    let window = match (first, last) {
+        (Some(a), Some(b)) => format!(" ({a} → {b})"),
+        _ => String::new(),
+    };
+    let mut s = String::new();
+    let _ = writeln!(s, "Strategy: {path}");
+    let _ = writeln!(s, "Days simulated: {}{window}", equity.len());
+    let _ = writeln!(s, "Final equity (base 1.0): {final_eq:.4}");
+    let _ = writeln!(s);
+    let _ = writeln!(s, "Headline metrics");
+    let _ = writeln!(s, "  total return : {:>8.2}%", met("total_return") * 100.0);
+    let _ = writeln!(s, "  CAGR         : {:>8.2}%", met("cagr") * 100.0);
+    let _ = writeln!(s, "  Sharpe       : {:>8.2}", met("sharpe"));
+    let _ = writeln!(s, "  max drawdown : {:>8.2}%", met("max_drawdown") * 100.0);
+    let _ = writeln!(s, "  win rate     : {:>8.2}%", met("win_rate") * 100.0);
+    let _ = writeln!(s, "  # trades     : {:>8}", met("num_trades") as i64);
+    let _ = write!(
+        s,
+        "\nFull report as JSON: `--json` (stdout) or `--out report.json`"
+    );
+    Ok(s)
 }
 
 /// `lemon strategy.lemon` sugar: a first argument that names a strategy file
@@ -650,7 +703,7 @@ fn main() -> ExitCode {
         Some(f) if is_runnable_file(f) => run_run(args),
         _ => {
             eprintln!(
-                "usage: lemon <strategy.lemon|envelope.json> [run flags]   (short for `lemon run ...`)\n       lemon new [path]\n       lemon fmt [-w] [file...]\n       lemon lint [--series a,b,c] [--series-file path] [file...]\n       lemon check [file...]\n       lemon run [--data <dir>] [--from N] [--to N] [--fee-ratio F] [--slippage-ratio F] [--price-key K] [--benchmark SYM] [--symbols A,B] [--sync] [--out path] [file]\n       lemon --version\n       (no file = read stdin; --data falls back to $CITRUS_DATA)"
+                "usage: lemon <strategy.lemon|envelope.json> [run flags]   (short for `lemon run ...`)\n       lemon new [path]\n       lemon fmt [-w] [file...]\n       lemon lint [--series a,b,c] [--series-file path] [file...]\n       lemon check [file...]\n       lemon run [--data <dir>] [--from N] [--to N] [--fee-ratio F] [--slippage-ratio F] [--price-key K] [--benchmark SYM] [--symbols A,B] [--sync] [--json] [--out path] [file]\n       lemon --version\n       (no file = read stdin; --data falls back to $CITRUS_DATA)"
             );
             ExitCode::FAILURE
         }
@@ -661,9 +714,30 @@ fn main() -> ExitCode {
 mod tests {
     use super::{
         check_source, format_source, is_runnable_file, lint_source, parse_run_flags, run_strategy,
-        RunFlags, STARTER,
+        summarize, RunFlags, STARTER,
     };
     use pomelo_data::csv_io::{write_series, OhlcvRow};
+
+    #[test]
+    fn summarize_renders_headline_metrics() {
+        let json = r#"{
+            "dates": [20180102, 20180103],
+            "equity": [1.0, 1.25],
+            "trades": [],
+            "metrics": { "total_return": 0.25, "cagr": 0.12, "sharpe": 1.5,
+                         "max_drawdown": -0.1, "win_rate": 0.6, "num_trades": 3 }
+        }"#;
+        let s = summarize("m.lemon", json).unwrap();
+        assert!(s.contains("Strategy: m.lemon"), "{s}");
+        assert!(s.contains("Days simulated: 2 (20180102 → 20180103)"), "{s}");
+        assert!(s.contains("Final equity (base 1.0): 1.2500"), "{s}");
+        assert!(s.contains("total return") && s.contains("25.00%"), "{s}");
+        assert!(s.contains("Sharpe") && s.contains("1.50"), "{s}");
+        assert!(s.contains("# trades") && s.contains('3'), "{s}");
+        // A default `--json` flag is off, and a bad report is an error, not a panic.
+        assert!(!RunFlags::default().json);
+        assert!(summarize("x", "not json").is_err());
+    }
 
     #[test]
     fn new_scaffold_checks_clean() {

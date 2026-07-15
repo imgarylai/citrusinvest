@@ -515,11 +515,29 @@ lemon strategy.lemon                  # short for `lemon run strategy.lemon`
 lemon run strategy.lemon --data ~/qdata --from 20180101 --fee-ratio 0.001
 ```
 
-It prints the engine's `Report` JSON (equity curve, trades, metrics — see
-[reading a report](./backtest-engine.md)) to stdout; `--out report.json`
-writes a file instead. The flags mirror `yuzu-cli run`: `--slippage-ratio`,
-`--price-key open|high|low|close`, `--benchmark SPY`. With no file it reads
-stdin, like the other subcommands.
+By default it prints a **human-readable summary** — headline metrics, the day
+count, and final equity:
+
+```text
+Strategy: strategy.lemon
+Days simulated: 1749 (20180101 → 20241231)
+Final equity (base 1.0): 2.4137
+
+Headline metrics
+  total return :   141.37%
+  CAGR         :    13.42%
+  Sharpe       :     0.98
+  max drawdown :   -24.10%
+  win rate     :    54.30%
+  # trades     :      312
+```
+
+Pass **`--json`** to print the full `Report` JSON (equity curve, every trade, the
+complete [metrics block](./backtest-engine.md)) to stdout instead, and
+**`--out report.json`** to write that JSON to a file (the machine artifact — with
+`--out` the summary still prints to stdout unless you also pass `--json`). Other
+flags mirror `yuzu-cli run`: `--slippage-ratio`, `--price-key open|high|low|close`,
+`--benchmark SPY`. With no file it reads stdin, like the other subcommands.
 
 ### `#!` front-matter — a self-contained strategy file
 
