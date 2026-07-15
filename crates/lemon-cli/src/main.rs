@@ -1,11 +1,13 @@
-//! The `lemon` binary: `fmt` (gofmt-style formatter — parses first, so it
-//! doubles as a syntax checker), `lint` (semantic warnings: unknown series,
-//! unused `let` bindings), `check` (validate strategy envelopes), and `run`
-//! (lower a strategy and backtest it over a local data-layout tree). No
-//! arg-parsing dep: the surface is small enough for `std::env::args`.
+//! The `lemon` binary: `new` (scaffold a starter `.lemon`), `fmt` (gofmt-style
+//! formatter — parses first, so it doubles as a syntax checker), `lint`
+//! (semantic warnings: unknown series, unused `let` bindings), `check`
+//! (validate strategy envelopes), and `run` (lower a strategy and backtest it
+//! over a local data-layout tree). No arg-parsing dep: the surface is small
+//! enough for `std::env::args`.
 //!
 //! ```text
 //! lemon <strategy.lemon|envelope.json> [run flags]  (short for `lemon run ...`)
+//! lemon new   [path]                                (starter scaffold; no path = stdout)
 //! lemon fmt   [-w] [file...]                        (no file = read stdin)
 //! lemon lint  [--series a,b,c] [--series-file p] [file...]
 //! lemon check [file...]                             (envelopes + .lemon front-matter)
@@ -224,6 +226,58 @@ fn check_source(path: &str, src: &str) -> Result<(), Vec<String>> {
         Ok(())
     } else {
         Err(errors)
+    }
+}
+
+/// The starter `.lemon` written by `lemon new`. Commented front-matter shows
+/// every option; the active directives + expression are a runnable momentum
+/// example. The `new_scaffold_checks_clean` test asserts this round-trips
+/// through `lemon check`, so the file we hand users always parses.
+const STARTER: &str = "\
+# A lemon strategy is a single file: `#!` front-matter + one expression.
+# Docs: https://citrusquant.com/reference/lemon   ·   run it: lemon strategy.lemon
+#
+# --- front-matter: how to run this strategy -------------------------------
+#! universe: 20180101..20241231
+#! symbols: AAPL, MSFT, NVDA, AMZN, GOOGL, META, JPM, XOM
+#! config: { \"fee_ratio\": 0.001 }
+#
+# Optional — uncomment (drop the leading `# `) to use:
+#   #! index: sp500        point-in-time index universe (needs a panels/in_<index>)
+#   #! data-source: fmp    vendor `lemon strategy.lemon --sync` may fetch from
+#   #! require: close, pe  declare the series so --sync knows what to pull
+#
+# --- the strategy ---------------------------------------------------------
+# Hold the 3 strongest names by 3-month (63-day) momentum.
+is_largest(pct_change(close, 63), 3)
+";
+
+/// `lemon new [path]` — write the starter scaffold to stdout (no path) or to a
+/// file. Refuses to clobber an existing file; the notice goes to stderr so
+/// `lemon new > strategy.lemon` still captures a clean file.
+fn run_new(args: Vec<String>) -> ExitCode {
+    let path = args.into_iter().find(|a| !a.starts_with('-'));
+    match path {
+        None => {
+            print!("{STARTER}");
+            ExitCode::SUCCESS
+        }
+        Some(p) => {
+            if std::path::Path::new(&p).exists() {
+                eprintln!("lemon: {p}: file exists (refusing to overwrite)");
+                return ExitCode::FAILURE;
+            }
+            match std::fs::write(&p, STARTER) {
+                Ok(()) => {
+                    eprintln!("lemon: wrote {p} — edit the front-matter, then `lemon {p} --sync`");
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("lemon: {p}: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
     }
 }
 
@@ -584,6 +638,7 @@ fn version_line() -> String {
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
+        Some("new") => run_new(args[1..].to_vec()),
         Some("fmt") => run_fmt(args[1..].to_vec()),
         Some("lint") => run_lint(args[1..].to_vec()),
         Some("check") => run_check(args[1..].to_vec()),
@@ -595,7 +650,7 @@ fn main() -> ExitCode {
         Some(f) if is_runnable_file(f) => run_run(args),
         _ => {
             eprintln!(
-                "usage: lemon <strategy.lemon|envelope.json> [run flags]   (short for `lemon run ...`)\n       lemon fmt [-w] [file...]\n       lemon lint [--series a,b,c] [--series-file path] [file...]\n       lemon check [file...]\n       lemon run [--data <dir>] [--from N] [--to N] [--fee-ratio F] [--slippage-ratio F] [--price-key K] [--benchmark SYM] [--symbols A,B] [--sync] [--out path] [file]\n       lemon --version\n       (no file = read stdin; --data falls back to $CITRUS_DATA)"
+                "usage: lemon <strategy.lemon|envelope.json> [run flags]   (short for `lemon run ...`)\n       lemon new [path]\n       lemon fmt [-w] [file...]\n       lemon lint [--series a,b,c] [--series-file path] [file...]\n       lemon check [file...]\n       lemon run [--data <dir>] [--from N] [--to N] [--fee-ratio F] [--slippage-ratio F] [--price-key K] [--benchmark SYM] [--symbols A,B] [--sync] [--out path] [file]\n       lemon --version\n       (no file = read stdin; --data falls back to $CITRUS_DATA)"
             );
             ExitCode::FAILURE
         }
@@ -606,9 +661,21 @@ fn main() -> ExitCode {
 mod tests {
     use super::{
         check_source, format_source, is_runnable_file, lint_source, parse_run_flags, run_strategy,
-        RunFlags,
+        RunFlags, STARTER,
     };
     use pomelo_data::csv_io::{write_series, OhlcvRow};
+
+    #[test]
+    fn new_scaffold_checks_clean() {
+        // The file `lemon new` hands users must always parse + validate.
+        assert!(check_source("new.lemon", STARTER).is_ok());
+        // The optional directives are commented (a `#` line, not `#!`), so they
+        // stay documentation and only the three active ones are front-matter.
+        let fm = super::frontmatter::parse(STARTER).unwrap();
+        assert_eq!((fm.from, fm.to), (Some(20180101), Some(20241231)));
+        assert!(fm.symbols.is_some() && fm.config.is_some());
+        assert!(fm.index.is_none() && fm.data_source.is_none() && fm.require.is_none());
+    }
 
     #[test]
     fn checks_valid_and_reports_invalid_envelopes() {

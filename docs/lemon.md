@@ -488,6 +488,22 @@ callers as `lemon::lint(src, known_series)`.
 
 ---
 
+## Scaffolding a new strategy
+
+`lemon new` writes a starter `.lemon` — commented front-matter showing every
+directive, plus a runnable momentum example — so you don't assemble the
+boilerplate by hand:
+
+```sh
+lemon new strategy.lemon   # write the scaffold (refuses to overwrite)
+lemon new                  # or print to stdout: lemon new > strategy.lemon
+```
+
+The scaffold `check`s clean out of the box (`lemon check strategy.lemon`); edit
+the universe / symbols and the expression, then run it.
+
+---
+
 ## Running a strategy
 
 `lemon run` lowers a `.lemon` file and backtests it over a local

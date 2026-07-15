@@ -3,6 +3,8 @@
 The `lemon` command-line tool for the lemon strategy DSL — part of
 [citrusquant](https://github.com/citrusquant/citrusquant).
 
+- `lemon new` — scaffold a starter `.lemon` (commented front-matter + a runnable
+  example) to stdout or a path
 - `lemon fmt` — canonical formatter (parses first, so it doubles as a syntax
   checker)
 - `lemon lint` — semantic warnings: unknown series names, unused `let` bindings
