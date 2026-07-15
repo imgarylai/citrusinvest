@@ -133,6 +133,23 @@ hidden state, Lean a whole C# project. lemon makes it <em>data</em> — which is
 why the same file runs in your terminal, in CI, and in the browser above.{' '}
 <a href="/guides/playground-to-real-data">Run one on your data →</a></p>
 
+## Write it with real tooling
+
+Highlighting, hover, completion, and lint all come from the engine's own lexer
+and parser — one source of truth, so your editor never drifts from the language:
+
+<ul class="lp-file not-content">
+  <li><strong>In this page.</strong> The playground editor above highlights,
+  completes, shows op signatures on hover, and lints as you type — the engine
+  compiled to WASM.</li>
+  <li><strong>In your editor.</strong> The <code>lemon-lsp</code> language server
+  brings the same hover, completion, and diagnostics to any LSP-capable editor.</li>
+  <li><strong>In VS&nbsp;Code.</strong> The
+  <a href="https://github.com/citrusquant/citrusquant/tree/main/editors/vscode">lemon
+  extension</a> wires it up — TextMate highlighting with no server, and the
+  language server auto-downloads.</li>
+</ul>
+
 ## Get it
 
 **Use the tool, or embed the engine.** The `lemon` CLI runs a `.lemon` file
