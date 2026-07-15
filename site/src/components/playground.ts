@@ -29,6 +29,20 @@ interface SampleData {
 
 const BASE: string = (import.meta as { env: { BASE_URL: string } }).env.BASE_URL;
 
+/** The strategy encoded in the URL hash (`#s=<encodeURIComponent(src)>`), or
+ *  null when absent/malformed. Lets a playground run be shared as a link and
+ *  deep-linked from the docs ("open in playground"). */
+function readSharedStrategy(): string | null {
+  if (typeof location === 'undefined') return null;
+  const m = /^#s=([\s\S]+)$/.exec(location.hash);
+  if (!m) return null;
+  try {
+    return decodeURIComponent(m[1]);
+  } catch {
+    return null; // truncated / hand-mangled hash — fall back to the default
+  }
+}
+
 let sample: SampleData | null = null;
 // lemon/yuzu wasm modules. Both are dynamically imported so Vite splits each
 // into its own chunk: lemon loads eagerly on mount (it drives editor
@@ -232,6 +246,30 @@ export function initPlayground(root: HTMLElement): void {
     (value) => renderLocalFile(value),
   );
   renderLocalFile(editor.getValue());
+
+  // Shareable links: a strategy travels in the URL hash. Load one if present
+  // (so a shared/deep link opens with it), and let the Share button write the
+  // current strategy back to the hash + clipboard.
+  const shared = readSharedStrategy();
+  if (shared != null) editor.setValue(shared);
+
+  const shareBtn = root.querySelector<HTMLButtonElement>('[data-pg-share]');
+  if (shareBtn) {
+    shareBtn.addEventListener('click', async () => {
+      const url = `${location.origin}${location.pathname}#s=${encodeURIComponent(editor.getValue())}`;
+      history.replaceState(null, '', url); // reflect it so a refresh keeps the strategy
+      try {
+        await navigator.clipboard.writeText(url);
+        const prev = shareBtn.textContent;
+        shareBtn.textContent = '✓ Link copied';
+        setTimeout(() => {
+          shareBtn.textContent = prev;
+        }, 1400);
+      } catch {
+        /* clipboard blocked (insecure context) — the address bar still updated */
+      }
+    });
+  }
 
   if (localCopyBtn && localFileEl) {
     localCopyBtn.addEventListener('click', async () => {

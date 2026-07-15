@@ -482,6 +482,22 @@ body {
 .pgx-run-row .pg-run {
   margin-top: 0;
 }
+.pgx-share {
+  font-family: var(--sl-font-mono);
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.5rem 0.9rem;
+  border-radius: 0.5rem;
+  border: 1px solid var(--sl-color-gray-4);
+  background: transparent;
+  color: var(--sl-color-gray-1);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pgx-share:hover {
+  border-color: var(--sl-color-accent);
+  color: var(--sl-color-white);
+}
 .pgx-kbd {
   font-family: var(--sl-font-mono);
   font-size: 0.72rem;
