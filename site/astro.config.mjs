@@ -90,6 +90,7 @@ export default defineConfig({
         {
           label: 'Guides',
           items: [
+            { label: 'From playground to real data', slug: 'guides/playground-to-real-data' },
             { label: 'Reading a report', slug: 'guides/reading-a-report' },
             { label: 'Bring your own data', slug: 'guides/bring-your-own-data' },
           ],
