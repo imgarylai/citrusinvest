@@ -74,6 +74,7 @@ export default defineConfig({
           label: 'Start here',
           items: [
             { label: 'Introduction', slug: 'index' },
+            { label: 'How it compares', slug: 'comparison' },
             { label: 'Quickstart', slug: 'start/quickstart' },
             { label: 'Your first strategy', slug: 'start/first-strategy' },
           ],
