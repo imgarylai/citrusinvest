@@ -263,6 +263,7 @@ export function createLemonEditor(
   parent: HTMLElement,
   doc: string,
   onRun: () => void,
+  onChange?: (value: string) => void,
 ): LemonEditor {
   // Mutable holders shared with the plugins; null until the WASM loads.
   let tokenize: Tokenizer | null = null;
@@ -396,6 +397,15 @@ export function createLemonEditor(
         highlighter,
         highlightTheme,
         editorTheme,
+        // Notify on every document change so callers can mirror the live source
+        // (e.g. the "Run this locally" .lemon preview under the landing widget).
+        ...(onChange
+          ? [
+              EditorView.updateListener.of((u) => {
+                if (u.docChanged) onChange(u.state.doc.toString());
+              }),
+            ]
+          : []),
         hoverExt,
         autocompletion({ override: [completionSource] }),
         lintExt,

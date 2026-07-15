@@ -207,11 +207,46 @@ export function initPlayground(root: HTMLElement): void {
   const reportEl = root.querySelector<HTMLElement>('.pg-report');
   let firstDraw = true;
 
+  // "Run this locally" handoff (landing widget only): mirror the live editor
+  // source into a complete front-matter `.lemon` file. The universe defaults to
+  // a static list (matches the server-rendered initial value) and refines to the
+  // sample's real symbols once the data loads.
+  const localFileEl = root.querySelector<HTMLElement>('[data-pg-local-file]');
+  const localCopyBtn = root.querySelector<HTMLButtonElement>('[data-pg-copy]');
+  let localUniverse = ['AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL', 'META', 'JPM', 'XOM'];
+  const renderLocalFile = (src: string): void => {
+    if (!localFileEl) return;
+    const front = [
+      '#! universe: 20180101..20241231',
+      `#! symbols: ${localUniverse.join(', ')}`,
+      '#! config: { "fee_ratio": 0.001 }',
+      '#! data-source: fmp',
+    ].join('\n');
+    localFileEl.textContent = `${front}\n${src}`;
+  };
+
   const editor = createLemonEditor(
     editorEl,
     editorEl.dataset.initial ?? 'is_largest(sma(close, 2), 3)',
     () => run(),
+    (value) => renderLocalFile(value),
   );
+  renderLocalFile(editor.getValue());
+
+  if (localCopyBtn && localFileEl) {
+    localCopyBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(localFileEl.textContent ?? '');
+        const prev = localCopyBtn.textContent;
+        localCopyBtn.textContent = 'Copied';
+        setTimeout(() => {
+          localCopyBtn.textContent = prev;
+        }, 1200);
+      } catch {
+        /* clipboard unavailable (insecure context / denied) — leave the text */
+      }
+    });
+  }
 
   // Load the lemon WASM up front so the editor highlights from the engine's own
   // lexer (tokens()) immediately — independent of running a backtest, and wires
@@ -233,7 +268,14 @@ export function initPlayground(root: HTMLElement): void {
         });
       wire('null');
       loadSample()
-        .then((s) => wire(JSON.stringify(Object.keys(s.panels))))
+        .then((s) => {
+          wire(JSON.stringify(Object.keys(s.panels)));
+          // Reflect the demo's real universe in the "Run this locally" file.
+          if (s.symbols?.length) {
+            localUniverse = s.symbols;
+            renderLocalFile(editor.getValue());
+          }
+        })
         .catch(() => {});
     })
     .catch(() => {});

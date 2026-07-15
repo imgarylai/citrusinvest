@@ -15,6 +15,17 @@ const playgroundUrl = `${import.meta.env.BASE_URL}playground/`;
 const initial = `# Hold whichever names have the highest 2-day average close.
 # Edit this and press Run (or Ctrl/Cmd+Enter).
 is_largest(sma(close, 2), 3)`;
+
+// "Run this locally" handoff: the front-matter that turns the editor's
+// expression into a complete, runnable `.lemon` file. Rendered server-side as
+// the initial value (works without JS); playground.ts keeps the symbols and
+// the strategy body in sync with the live editor + loaded sample universe.
+const localSymbols = 'AAPL, MSFT, NVDA, AMZN, GOOGL, META, JPM, XOM';
+const localFrontMatter = `#! universe: 20180101..20241231
+#! symbols: ${localSymbols}
+#! config: { "fee_ratio": 0.001 }
+#! data-source: fmp`;
+const initialLocalFile = `${localFrontMatter}\n${initial}`;
 ---
 
 <div class="pg-wrap not-content" data-playground data-autorun={autorun ? '' : undefined}>
@@ -33,6 +44,39 @@ is_largest(sma(close, 2), 3)`;
     {!full && <a class="pg-more" href={playgroundUrl}>Full report — drawdowns, calendar returns, every trade →</a>}
   </div>
   {full && <div class="pg-report" hidden></div>}
+  {!full && (
+    <div class="pg-local" data-pg-local>
+      <h3 class="pg-local-title">Run this on your own data</h3>
+      <p class="pg-local-lede">
+        The demo runs on 10 names, 2014–2017. The same strategy is a file you
+        run on <em>your</em> universe — same engine, no browser ceiling.
+      </p>
+      <ol class="pg-local-steps">
+        <li>
+          <span class="pg-local-step">1 · Install the CLI (macOS / Linux)</span>
+          <pre class="pg-local-code"><code>curl -fsSL https://citrusquant.com/install.sh | sh</code></pre>
+        </li>
+        <li>
+          <span class="pg-local-step">
+            2 · Save as <code>strategy.lemon</code>
+            <button type="button" class="pg-local-copy" data-pg-copy>Copy</button>
+          </span>
+          <pre class="pg-local-code"><code data-pg-local-file>{initialLocalFile}</code></pre>
+        </li>
+        <li>
+          <span class="pg-local-step">3 · Run it (bring your own key)</span>
+          <pre class="pg-local-code"><code>export FMP_API_KEY=…
+lemon strategy.lemon --sync</code></pre>
+        </li>
+      </ol>
+      <p class="pg-local-note">
+        The <code>#!</code> lines are front-matter — the window, universe, fee,
+        and the vendor <code>--sync</code> may fetch from; a <code>.lemon</code>
+        file makes no network request on its own.{' '}
+        <a href="/reference/lemon">Front-matter &amp; flags →</a>
+      </p>
+    </div>
+  )}
 </div>
 
 <script>
