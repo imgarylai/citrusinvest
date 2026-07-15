@@ -92,6 +92,38 @@ entry/exit rotation. [The whole spec fits on one page](reference/lemon).
   </div>
 </div>
 
+## A strategy is a file
+
+A complete strategy — *“hold the 30 cheapest names in the S&P 500,
+point-in-time”* — is a single text file, not a class to subclass or a notebook
+whose result depends on cell-execution order:
+
+```text
+#! universe: 20180101..20241231
+#! index: sp500
+#! config: { "fee_ratio": 0.001 }
+#! data-source: fmp
+is_largest(rank(-pe), 30)
+```
+
+<ul class="lp-file not-content">
+  <li><strong>Diffable &amp; reviewable.</strong> It's text — commit it, open a
+  PR on it, paste it into an issue. A strategy change is a line change.</li>
+  <li><strong>Reproducible bit-for-bit.</strong> The file carries its own
+  window, universe, and fees, so a colleague running it on the same data gets
+  the same <code>Report</code> — native or WASM.</li>
+  <li><strong>No surprise I/O.</strong> A <code>.lemon</code> file can't touch
+  the network on its own; data is fetched only when <em>you</em> pass
+  <code>--sync</code> with <em>your</em> key. You share a strategy, never a
+  credential or a side effect.</li>
+</ul>
+
+<p class="lp-file-foot not-content">The alternatives make a strategy
+<em>code</em>: backtrader a ~200-line Python class, vectorbt a notebook with
+hidden state, Lean a whole C# project. lemon makes it <em>data</em> — which is
+why the same file runs in your terminal, in CI, and in the browser above.{' '}
+<a href="/guides/playground-to-real-data">Run one on your data →</a></p>
+
 ## Get it
 
 **Use the tool, or embed the engine.** The `lemon` CLI runs a `.lemon` file

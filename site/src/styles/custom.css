@@ -277,6 +277,39 @@
   color: var(--sl-color-gray-4);
 }
 
+/* --- "a strategy is a file" -------------------------------------------------- */
+
+.lp-file {
+  list-style: none;
+  padding: 0;
+  margin: 1.25rem 0 0;
+}
+.lp-file li {
+  position: relative;
+  padding-left: 1.4rem;
+  margin-bottom: 0.6rem;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  color: var(--sl-color-gray-2);
+}
+.lp-file li::before {
+  content: '+';
+  position: absolute;
+  left: 0;
+  font-family: var(--sl-font-mono);
+  font-weight: 600;
+  color: var(--sl-color-accent);
+}
+.lp-file strong {
+  color: var(--sl-color-white);
+}
+.lp-file-foot {
+  margin-top: 1.1rem;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--sl-color-gray-3);
+}
+
 /* --- playground --------------------------------------------------------------- */
 
 .pg-wrap {
