@@ -64,10 +64,10 @@ playground draws, computed by the same engine. Write it to a file with
 
 Already have a local data tree? Drop `--sync` and point `lemon` at it:
 `lemon momentum.lemon --data ~/qdata` (or set `$CITRUS_DATA`) runs fully
-offline. The complete front-matter keys and run flags — including the named
-point-in-time `#! index: sp500` universe — are in the
-[lemon reference](/reference/lemon); to sync your own data see
-[Bring your own data](/guides/bring-your-own-data).
+offline. For the full walkthrough — including a real point-in-time
+`#! index: sp500` universe — follow
+[From playground to real data](/guides/playground-to-real-data); the complete
+front-matter keys and run flags are in the [lemon reference](/reference/lemon).
 
 ## Option C — use it as a library
 
