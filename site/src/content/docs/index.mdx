@@ -26,6 +26,15 @@ hero:
 import { Tabs, TabItem, LinkCard, CardGrid } from '@astrojs/starlight/components';
 import Playground from '../../components/Playground.astro';
 
+<nav class="lp-topnav not-content" aria-label="Site sections">
+  <a href="/playground">Playground</a>
+  <a href="/start/quickstart">Quickstart</a>
+  <a href="/guides/playground-to-real-data">Guides</a>
+  <a href="/reference/lemon">Reference</a>
+  <a href="/comparison">Compare</a>
+  <a href="/notes">Notes</a>
+</nav>
+
 <Playground autorun />
 
 <p class="lp-provenance not-content">
