@@ -29,9 +29,10 @@ interface SampleData {
 
 const BASE: string = (import.meta as { env: { BASE_URL: string } }).env.BASE_URL;
 
-/** The strategy encoded in the URL hash (`#s=<encodeURIComponent(src)>`), or
- *  null when absent/malformed. Lets a playground run be shared as a link and
- *  deep-linked from the docs ("open in playground"). */
+/** The strategy encoded in the URL hash (`#s=<encoded>`), or null when
+ *  absent/malformed. Lets a playground run be shared as a link and deep-linked
+ *  from the docs ("open in playground"). Decodes with decodeURIComponent, which
+ *  reads both `encodeFragment` output and older encodeURIComponent links. */
 function readSharedStrategy(): string | null {
   if (typeof location === 'undefined') return null;
   const m = /^#s=([\s\S]+)$/.exec(location.hash);
@@ -41,6 +42,26 @@ function readSharedStrategy(): string | null {
   } catch {
     return null; // truncated / hand-mangled hash — fall back to the default
   }
+}
+
+/** Percent-encode only characters unsafe in a URL fragment, leaving RFC-3986
+ *  fragment-safe chars (letters, digits, `- . _ ~ ! $ & ( ) * + , ; = : @ / ?`)
+ *  raw. Shorter than encodeURIComponent — which also escapes `, : @ =` etc.
+ *  that are legal in a fragment — and still human-readable; decodeURIComponent
+ *  reads it straight back. */
+const FRAGMENT_SAFE = /[A-Za-z0-9\-._~!$&()*+,;=:@\/?]/;
+function encodeFragment(src: string): string {
+  let out = '';
+  for (const ch of src) {
+    if (FRAGMENT_SAFE.test(ch)) {
+      out += ch;
+    } else {
+      for (const byte of new TextEncoder().encode(ch)) {
+        out += '%' + byte.toString(16).toUpperCase().padStart(2, '0');
+      }
+    }
+  }
+  return out;
 }
 
 let sample: SampleData | null = null;
@@ -256,7 +277,7 @@ export function initPlayground(root: HTMLElement): void {
   const shareBtn = root.querySelector<HTMLButtonElement>('[data-pg-share]');
   if (shareBtn) {
     shareBtn.addEventListener('click', async () => {
-      const url = `${location.origin}${location.pathname}#s=${encodeURIComponent(editor.getValue())}`;
+      const url = `${location.origin}${location.pathname}#s=${encodeFragment(editor.getValue())}`;
       history.replaceState(null, '', url); // reflect it so a refresh keeps the strategy
       try {
         await navigator.clipboard.writeText(url);
