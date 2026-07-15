@@ -79,3 +79,16 @@ Open the [playground](/playground) and paste any of these into the editor:
 
 New to the syntax? Start with [Your first strategy](/start/first-strategy), or
 browse the [lemon reference](/reference/lemon) for the complete operator set.
+
+## Shareable links
+
+Every run has a link. Hit **🔗 Share** next to *Run* and the playground copies a
+URL with your strategy encoded in it (`/playground#s=…`) — open it and you land
+on the same strategy, already loaded. The strategy lives in the URL *hash*, so
+it's never sent to a server; the link is self-contained.
+
+Docs, issues, and posts can deep-link the same way — for example, open these in
+the playground:
+
+- [Momentum — hold the 3 strongest names](/playground#s=is_largest%28pct_change%28close%2C%2063%29%2C%203%29)
+- [Trend + RSI filter](/playground#s=close%20%3E%20sma%28close%2C%2050%29%20and%20rsi%28close%2C%2014%29%20%3C%2070)
