@@ -112,6 +112,13 @@ export default defineConfig({
             { label: 'API reference (docs.rs)', slug: 'reference/api' },
           ],
         },
+        {
+          label: 'Engineering notes',
+          items: [
+            { label: 'Overview', slug: 'notes' },
+            { label: "The mask that wouldn't let go", slug: 'notes/mask-that-wouldnt-let-go' },
+          ],
+        },
       ],
     }),
   ],
