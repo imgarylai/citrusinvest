@@ -310,12 +310,46 @@
   color: var(--sl-color-gray-3);
 }
 
+/* --- homepage quick-nav ------------------------------------------------------ */
+/* The splash landing has no sidebar, so Starlight shows no mobile hamburger.
+   This gives the homepage its own compact nav to the rest of the site; it wraps
+   to centered rows on narrow screens. Scoped to the landing (docs pages keep
+   their sidebar + hamburger). */
+.lp-topnav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem 1.4rem;
+  margin: 0 0 1.5rem;
+  padding: 0.6rem 0.5rem;
+  border-top: 1px solid var(--sl-color-gray-5);
+  border-bottom: 1px solid var(--sl-color-gray-5);
+}
+.lp-topnav a,
+.lp-topnav a:visited {
+  font-family: var(--sl-font-mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--sl-color-gray-2);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.lp-topnav a:hover {
+  color: var(--sl-color-accent);
+}
+
 /* --- playground --------------------------------------------------------------- */
 
 .pg-wrap {
   display: grid;
   gap: 1rem;
-  grid-template-columns: 1fr;
+  /* minmax(0, …) not 1fr: a bare `1fr` track sizes to its widest child's
+     min-content, so a long unbreakable code line (the installer / `#! symbols:`
+     line in "Run this locally") would blow the column — and the whole widget —
+     past a phone's width. minmax(0, 1fr) lets the track shrink so those blocks
+     scroll inside their own `overflow-x: auto` box instead. */
+  grid-template-columns: minmax(0, 1fr);
   margin-top: 1.5rem;
   /* chart palette — playground.ts and report/charts.ts read these at draw
      time (custom properties inherit into every canvas below) */
@@ -336,6 +370,12 @@
   .pg-wrap {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
+}
+/* Grid items default to min-width:auto (won't shrink below content), which is
+   the other half of the overflow: let every column shrink so its scrollable
+   children (code blocks, the wrapping editor) stay within the track. */
+.pg-wrap > * {
+  min-width: 0;
 }
 .pg-label {
   font-family: var(--sl-font-mono);
@@ -460,6 +500,12 @@
   padding: 0;
   display: grid;
   gap: 0.75rem;
+}
+/* Grid items are min-width:auto by default, so each step would grow to its
+   code block's longest line (the installer URL, the symbols list) and push the
+   page wider than a phone. Let them shrink so `.pg-local-code` scrolls instead. */
+.pg-local-steps > li {
+  min-width: 0;
 }
 .pg-local-step {
   display: flex;
