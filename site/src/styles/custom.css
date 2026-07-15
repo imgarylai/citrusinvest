@@ -344,7 +344,12 @@
 .pg-wrap {
   display: grid;
   gap: 1rem;
-  grid-template-columns: 1fr;
+  /* minmax(0, …) not 1fr: a bare `1fr` track sizes to its widest child's
+     min-content, so a long unbreakable code line (the installer / `#! symbols:`
+     line in "Run this locally") would blow the column — and the whole widget —
+     past a phone's width. minmax(0, 1fr) lets the track shrink so those blocks
+     scroll inside their own `overflow-x: auto` box instead. */
+  grid-template-columns: minmax(0, 1fr);
   margin-top: 1.5rem;
   /* chart palette — playground.ts and report/charts.ts read these at draw
      time (custom properties inherit into every canvas below) */
@@ -365,6 +370,12 @@
   .pg-wrap {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
+}
+/* Grid items default to min-width:auto (won't shrink below content), which is
+   the other half of the overflow: let every column shrink so its scrollable
+   children (code blocks, the wrapping editor) stay within the track. */
+.pg-wrap > * {
+  min-width: 0;
 }
 .pg-label {
   font-family: var(--sl-font-mono);
@@ -489,6 +500,12 @@
   padding: 0;
   display: grid;
   gap: 0.75rem;
+}
+/* Grid items are min-width:auto by default, so each step would grow to its
+   code block's longest line (the installer URL, the symbols list) and push the
+   page wider than a phone. Let them shrink so `.pg-local-code` scrolls instead. */
+.pg-local-steps > li {
+  min-width: 0;
 }
 .pg-local-step {
   display: flex;
